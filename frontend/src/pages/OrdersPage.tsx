@@ -6,6 +6,7 @@ import { OrderFiltersBar } from '../components/orders/OrderFilters'
 import { OrderTable } from '../components/orders/OrderTable'
 import { OrderDetailModal } from '../components/orders/OrderDetailModal'
 import { OrderFormModal } from '../components/orders/OrderFormModal'
+import { BlingSync } from '../components/orders/BlingSync'
 import type { Order, OrderFilters } from '../types'
 
 export function OrdersPage() {
@@ -26,12 +27,15 @@ export function OrdersPage() {
           <h1 className="text-2xl font-bold text-gray-900">Pedidos</h1>
           <p className="text-sm text-gray-500 mt-0.5">Gerencie e rastreie todos os pedidos</p>
         </div>
-        <button className="btn-primary" onClick={() => setShowForm(true)}>
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Novo Pedido
-        </button>
+        <div className="flex items-center gap-3">
+          <BlingSync />
+          <button className="btn-primary" onClick={() => setShowForm(true)}>
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Novo Pedido
+          </button>
+        </div>
       </div>
 
       {/* Summary */}
