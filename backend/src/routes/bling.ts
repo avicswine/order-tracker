@@ -1,8 +1,27 @@
 import { Router, Request, Response } from 'express'
 import axios from 'axios'
 import { prisma } from '../lib/prisma'
+import fs from 'fs'
+import path from 'path'
 
 const router = Router()
+
+const TOKENS_FILE = path.join(__dirname, '../../.bling-tokens.json')
+
+function loadTokens(): Record<string, { access_token: string; refresh_token: string }> {
+  try {
+    if (fs.existsSync(TOKENS_FILE)) {
+      return JSON.parse(fs.readFileSync(TOKENS_FILE, 'utf-8'))
+    }
+  } catch {}
+  return {}
+}
+
+function saveTokens() {
+  try {
+    fs.writeFileSync(TOKENS_FILE, JSON.stringify(tokens, null, 2))
+  } catch {}
+}
 
 const BLING_REDIRECT_URI = process.env.BLING_REDIRECT_URI!
 const BLING_API = 'https://api.bling.com.br/Api/v3'
@@ -31,8 +50,8 @@ const COMPANIES: Record<string, { name: string; cnpj: string; clientId: string; 
   },
 }
 
-// Tokens em memória por empresa
-const tokens: Record<string, { access_token: string; refresh_token: string }> = {}
+// Tokens persistidos em arquivo por empresa
+const tokens: Record<string, { access_token: string; refresh_token: string }> = loadTokens()
 
 // GET /api/bling/status - status de conexão de todas as empresas
 router.get('/status', (_req: Request, res: Response) => {
@@ -93,6 +112,7 @@ router.get('/callback', async (req: Request, res: Response) => {
       access_token: response.data.access_token,
       refresh_token: response.data.refresh_token,
     }
+    saveTokens()
 
     res.redirect(`http://localhost:5173?bling=connected&company=${companyKey}`)
   } catch (err) {
@@ -127,6 +147,7 @@ async function refreshToken(companyKey: string) {
     access_token: response.data.access_token,
     refresh_token: response.data.refresh_token,
   }
+  saveTokens()
 }
 
 // Chamada autenticada ao Bling por empresa
@@ -169,8 +190,11 @@ router.post('/sync', async (_req: Request, res: Response) => {
     let ignorados = 0
 
     try {
-      const nfeData = await blingGet(companyKey, '/nfe?pagina=1&limite=100&situacao=9')
+      // situacao=6 = Autorizada | sem filtro = todas
+      const nfeData = await blingGet(companyKey, '/nfe?pagina=1&limite=100')
+      console.log(`[Bling] ${company.name} resposta:`, JSON.stringify(nfeData).slice(0, 500))
       const nfes: BlingNFe[] = nfeData?.data ?? []
+      console.log(`[Bling] ${company.name}: ${nfes.length} NFs encontradas`)
 
       for (const nf of nfes) {
         const existing = await prisma.order.findFirst({
@@ -213,9 +237,39 @@ router.post('/sync', async (_req: Request, res: Response) => {
   res.json({ message: 'Sincronização concluída', results, totalCriados, totalIgnorados })
 })
 
+// GET /api/bling/debug - testa a API do Bling e retorna resposta bruta
+router.get('/debug', async (_req: Request, res: Response) => {
+  const connectedCompanies = Object.keys(COMPANIES).filter((key) => !!tokens[key])
+  if (connectedCompanies.length === 0) {
+    return res.status(401).json({ error: 'Nenhuma empresa conectada' })
+  }
+
+  const companyKey = connectedCompanies[0]
+  const results: Record<string, unknown> = {}
+
+  try {
+    results['nfe'] = await blingGet(companyKey, '/nfe?pagina=1&limite=10')
+  } catch (err) {
+    results['nfe_error'] = axios.isAxiosError(err)
+      ? { status: err.response?.status, data: err.response?.data }
+      : String(err)
+  }
+
+  try {
+    results['pedidos'] = await blingGet(companyKey, '/pedidos/vendas?pagina=1&limite=10')
+  } catch (err) {
+    results['pedidos_error'] = axios.isAxiosError(err)
+      ? { status: err.response?.status, data: err.response?.data }
+      : String(err)
+  }
+
+  res.json(results)
+})
+
 // POST /api/bling/disconnect/:company - desconecta uma empresa
 router.post('/disconnect/:company', (req: Request, res: Response) => {
   delete tokens[req.params.company]
+  saveTokens()
   res.json({ message: 'Desconectado' })
 })
 
