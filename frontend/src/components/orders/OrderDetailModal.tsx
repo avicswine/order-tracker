@@ -70,7 +70,9 @@ export function OrderDetailModal({ order, onClose }: Props) {
             </div>
             <div>
               <p className="text-xs text-gray-500">Transportadora</p>
-              <p className="font-medium">{data.carrier.name}</p>
+              <p className={`font-medium ${!data.carrier ? 'text-amber-600' : ''}`}>
+                {data.carrier?.name ?? 'A definir'}
+              </p>
             </div>
             <div>
               <p className="text-xs text-gray-500">Data de Envio</p>

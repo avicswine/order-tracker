@@ -61,11 +61,13 @@ export function OrderTable({ orders, isLoading, onViewDetails, meta, onPageChang
                   )}
                 </td>
                 <td className="py-3 pr-4">
-                  <span className={`text-gray-700 ${!order.carrier.active ? 'opacity-60' : ''}`}>
-                    {order.carrier.name}
-                  </span>
-                  {!order.carrier.active && (
-                    <span className="ml-1 text-xs text-gray-400">(inativa)</span>
+                  {order.carrier ? (
+                    <span className={`text-gray-700 ${!order.carrier.active ? 'opacity-60' : ''}`}>
+                      {order.carrier.name}
+                      {!order.carrier.active && <span className="ml-1 text-xs text-gray-400">(inativa)</span>}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-amber-600 font-medium">A definir</span>
                   )}
                 </td>
                 <td className="py-3 pr-4">

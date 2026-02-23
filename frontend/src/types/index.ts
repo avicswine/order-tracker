@@ -24,8 +24,8 @@ export interface Order {
   orderNumber: string
   customerName: string
   customerEmail: string | null
-  carrierId: string
-  carrier: Pick<Carrier, 'id' | 'name' | 'active'>
+  carrierId: string | null
+  carrier: Pick<Carrier, 'id' | 'name' | 'active'> | null
   status: OrderStatus
   shippedAt: string | null
   estimatedDelivery: string | null

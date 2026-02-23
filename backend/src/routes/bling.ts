@@ -203,19 +203,10 @@ router.post('/sync', async (_req: Request, res: Response) => {
 
         if (existing) { ignorados++; continue }
 
-        const transportadoraNome = nf.transportador?.nome ?? ''
-        let carrier = localCarriers.find((c) =>
-          c.name.toLowerCase().includes(transportadoraNome.toLowerCase()) ||
-          transportadoraNome.toLowerCase().includes(c.name.toLowerCase())
-        ) ?? localCarriers[0]
-
-        if (!carrier) { ignorados++; continue }
-
         await prisma.order.create({
           data: {
             orderNumber: `NF-${nf.numero}`,
             customerName: nf.contato?.nome ?? 'Cliente não informado',
-            carrierId: carrier.id,
             nfNumber: String(nf.numero),
             senderCnpj: company.cnpj,
             statusHistory: { create: { status: 'PENDING', note: `Importado do Bling (${company.name})` } },
@@ -235,6 +226,18 @@ router.post('/sync', async (_req: Request, res: Response) => {
   const totalIgnorados = Object.values(results).reduce((s, r) => s + r.ignorados, 0)
 
   res.json({ message: 'Sincronização concluída', results, totalCriados, totalIgnorados })
+})
+
+// GET /api/bling/debug/nfe/:id - detalhes de uma NF específica
+router.get('/debug/nfe/:id', async (req: Request, res: Response) => {
+  const connectedCompanies = Object.keys(COMPANIES).filter((key) => !!tokens[key])
+  if (connectedCompanies.length === 0) return res.status(401).json({ error: 'Não conectado' })
+  try {
+    const data = await blingGet(connectedCompanies[0], `/nfe/${req.params.id}`)
+    res.json(data)
+  } catch (err) {
+    res.status(500).json({ error: String(err) })
+  }
 })
 
 // GET /api/bling/debug - testa a API do Bling e retorna resposta bruta

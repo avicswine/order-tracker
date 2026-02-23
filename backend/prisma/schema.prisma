@@ -25,8 +25,8 @@ model Order {
   orderNumber      String        @unique
   customerName     String
   customerEmail    String?
-  carrierId        String
-  carrier          Carrier       @relation(fields: [carrierId], references: [id])
+  carrierId        String?
+  carrier          Carrier?      @relation(fields: [carrierId], references: [id])
   status           OrderStatus   @default(PENDING)
   shippedAt        DateTime?
   estimatedDelivery DateTime?
