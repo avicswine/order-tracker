@@ -1,0 +1,130 @@
+import type { Order } from '../../types'
+import { StatusBadge } from '../ui/Badge'
+import { formatDate } from '../../lib/utils'
+import { Spinner } from '../ui/Spinner'
+
+interface Props {
+  orders: Order[]
+  isLoading: boolean
+  onViewDetails: (order: Order) => void
+  meta: { total: number; page: number; limit: number; totalPages: number } | undefined
+  onPageChange: (page: number) => void
+}
+
+export function OrderTable({ orders, isLoading, onViewDetails, meta, onPageChange }: Props) {
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Spinner className="h-8 w-8" />
+      </div>
+    )
+  }
+
+  if (orders.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-gray-500">
+        <svg className="h-12 w-12 mb-3 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+            d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+        </svg>
+        <p className="font-medium">Nenhum pedido encontrado</p>
+        <p className="text-sm">Tente ajustar os filtros aplicados</p>
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-gray-200 text-left">
+              <th className="pb-3 pr-4 font-medium text-gray-500">Nº Pedido</th>
+              <th className="pb-3 pr-4 font-medium text-gray-500">NF</th>
+              <th className="pb-3 pr-4 font-medium text-gray-500">Cliente</th>
+              <th className="pb-3 pr-4 font-medium text-gray-500">Transportadora</th>
+              <th className="pb-3 pr-4 font-medium text-gray-500">Status</th>
+              <th className="pb-3 pr-4 font-medium text-gray-500">Envio</th>
+              <th className="pb-3 pr-4 font-medium text-gray-500">Previsão</th>
+              <th className="pb-3 font-medium text-gray-500" />
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {orders.map((order) => (
+              <tr key={order.id} className="hover:bg-gray-50 transition-colors">
+                <td className="py-3 pr-4 font-mono font-medium text-gray-900">{order.orderNumber}</td>
+                <td className="py-3 pr-4 font-mono text-gray-600">{order.nfNumber ?? '—'}</td>
+                <td className="py-3 pr-4">
+                  <p className="font-medium text-gray-900">{order.customerName}</p>
+                  {order.customerEmail && (
+                    <p className="text-xs text-gray-500">{order.customerEmail}</p>
+                  )}
+                </td>
+                <td className="py-3 pr-4">
+                  <span className={`text-gray-700 ${!order.carrier.active ? 'opacity-60' : ''}`}>
+                    {order.carrier.name}
+                  </span>
+                  {!order.carrier.active && (
+                    <span className="ml-1 text-xs text-gray-400">(inativa)</span>
+                  )}
+                </td>
+                <td className="py-3 pr-4">
+                  <StatusBadge status={order.status} />
+                </td>
+                <td className="py-3 pr-4 text-gray-600">{formatDate(order.shippedAt)}</td>
+                <td className="py-3 pr-4 text-gray-600">{formatDate(order.estimatedDelivery)}</td>
+                <td className="py-3 text-right">
+                  <button
+                    onClick={() => onViewDetails(order)}
+                    className="text-blue-600 hover:text-blue-800 font-medium text-xs"
+                  >
+                    Detalhes
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Pagination */}
+      {meta && meta.totalPages > 1 && (
+        <div className="mt-4 flex items-center justify-between border-t pt-4">
+          <p className="text-sm text-gray-500">
+            {(meta.page - 1) * meta.limit + 1}–{Math.min(meta.page * meta.limit, meta.total)} de{' '}
+            {meta.total} pedidos
+          </p>
+          <div className="flex gap-1">
+            <button
+              className="btn-secondary px-2 py-1 text-xs"
+              disabled={meta.page === 1}
+              onClick={() => onPageChange(meta.page - 1)}
+            >
+              ‹ Anterior
+            </button>
+            {Array.from({ length: Math.min(meta.totalPages, 7) }, (_, i) => i + 1).map((p) => (
+              <button
+                key={p}
+                onClick={() => onPageChange(p)}
+                className={`w-8 h-8 rounded text-xs font-medium transition-colors ${
+                  p === meta.page
+                    ? 'bg-blue-600 text-white'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                {p}
+              </button>
+            ))}
+            <button
+              className="btn-secondary px-2 py-1 text-xs"
+              disabled={meta.page === meta.totalPages}
+              onClick={() => onPageChange(meta.page + 1)}
+            >
+              Próximo ›
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
