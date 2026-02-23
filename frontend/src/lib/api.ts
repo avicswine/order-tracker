@@ -1,7 +1,7 @@
 import axios from 'axios'
 import type { Carrier, Order, OrderFilters, OrdersResponse, OrderSummary, OrderStatus } from '../types'
 
-const api = axios.create({ baseURL: '/api' })
+const api = axios.create({ baseURL: import.meta.env.VITE_API_URL || '/api' })
 
 // Carriers
 export const carriersApi = {
