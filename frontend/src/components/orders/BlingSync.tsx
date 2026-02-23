@@ -1,96 +1,124 @@
-import { useState, useEffect } from 'react'
+import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
 
+interface CompanyStatus {
+  key: string
+  name: string
+  cnpj: string
+  connected: boolean
+  configured: boolean
+}
+
+interface SyncResult {
+  totalCriados: number
+  totalIgnorados: number
+  results: Record<string, { criados: number; ignorados: number }>
+}
+
 const blingApi = {
-  status: () => axios.get('/api/bling/status').then((r) => r.data),
-  sync: () => axios.post('/api/bling/sync').then((r) => r.data),
-  disconnect: () => axios.post('/api/bling/disconnect').then((r) => r.data),
+  status: () => axios.get<CompanyStatus[]>('/api/bling/status').then((r) => r.data),
+  sync: () => axios.post<SyncResult>('/api/bling/sync').then((r) => r.data),
+  disconnect: (company: string) => axios.post(`/api/bling/disconnect/${company}`).then((r) => r.data),
 }
 
 export function BlingSync() {
   const qc = useQueryClient()
-  const [syncResult, setSyncResult] = useState<{ criados: number; ignorados: number } | null>(null)
 
-  const { data: status, refetch: refetchStatus } = useQuery({
+  const { data: companies = [], refetch } = useQuery({
     queryKey: ['bling-status'],
     queryFn: blingApi.status,
-    refetchInterval: false,
   })
 
-  // Detectar retorno do OAuth
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     if (params.get('bling') === 'connected') {
-      refetchStatus()
+      refetch()
       window.history.replaceState({}, '', '/')
     }
-  }, [refetchStatus])
+  }, [refetch])
 
   const syncMutation = useMutation({
     mutationFn: blingApi.sync,
-    onSuccess: (data) => {
-      setSyncResult({ criados: data.criados, ignorados: data.ignorados })
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['orders'] })
+      qc.invalidateQueries({ queryKey: ['bling-status'] })
     },
   })
 
   const disconnectMutation = useMutation({
-    mutationFn: blingApi.disconnect,
-    onSuccess: () => {
-      refetchStatus()
-      setSyncResult(null)
-    },
+    mutationFn: (company: string) => blingApi.disconnect(company),
+    onSuccess: () => refetch(),
   })
 
-  const connected = status?.connected
+  const connectedCount = companies.filter((c) => c.connected).length
+  const anyConnected = connectedCount > 0
 
   return (
     <div className="flex items-center gap-3">
-      {connected ? (
-        <>
-          {syncResult && (
-            <span className="text-xs text-gray-500">
-              {syncResult.criados} importados, {syncResult.ignorados} ignorados
-            </span>
-          )}
-          <button
-            className="btn-secondary text-sm"
-            onClick={() => syncMutation.mutate()}
-            disabled={syncMutation.isPending}
-          >
-            {syncMutation.isPending ? (
-              'Importando...'
-            ) : (
-              <>
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                </svg>
-                Importar do Bling
-              </>
-            )}
-          </button>
-          <button
-            className="text-xs text-gray-400 hover:text-red-500"
-            onClick={() => disconnectMutation.mutate()}
-            title="Desconectar Bling"
-          >
-            Desconectar
-          </button>
-        </>
-      ) : (
-        <a
-          href="/api/bling/auth"
-          className="btn-secondary text-sm flex items-center gap-2"
-        >
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-          </svg>
-          Conectar ao Bling
-        </a>
+      {/* Resultado da última sincronização */}
+      {syncMutation.data && (
+        <span className="text-xs text-gray-500">
+          {syncMutation.data.totalCriados} importados, {syncMutation.data.totalIgnorados} ignorados
+        </span>
       )}
+
+      {/* Botão de sincronizar (aparece se ao menos 1 empresa conectada) */}
+      {anyConnected && (
+        <button
+          className="btn-secondary text-sm"
+          onClick={() => syncMutation.mutate()}
+          disabled={syncMutation.isPending}
+        >
+          {syncMutation.isPending ? 'Importando...' : (
+            <>
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+              </svg>
+              Importar do Bling ({connectedCount})
+            </>
+          )}
+        </button>
+      )}
+
+      {/* Status por empresa */}
+      <div className="flex items-center gap-2">
+        {companies.map((company) => (
+          <div key={company.key} className="relative group">
+            {company.connected ? (
+              <div className="flex items-center gap-1 rounded-full bg-green-50 border border-green-200 px-2 py-1">
+                <span className="h-2 w-2 rounded-full bg-green-500" />
+                <span className="text-xs font-medium text-green-700">{company.name}</span>
+                <button
+                  onClick={() => disconnectMutation.mutate(company.key)}
+                  className="ml-1 text-green-400 hover:text-red-500 leading-none"
+                  title="Desconectar"
+                >
+                  ×
+                </button>
+              </div>
+            ) : company.configured ? (
+              <a
+                href={`/api/bling/auth/${company.key}`}
+                className="flex items-center gap-1 rounded-full bg-gray-100 border border-gray-200 px-2 py-1 hover:bg-blue-50 hover:border-blue-200 transition-colors"
+                title={`Conectar ${company.name}`}
+              >
+                <span className="h-2 w-2 rounded-full bg-gray-300" />
+                <span className="text-xs text-gray-500">{company.name}</span>
+              </a>
+            ) : (
+              <div
+                className="flex items-center gap-1 rounded-full bg-gray-50 border border-dashed border-gray-200 px-2 py-1"
+                title="Credenciais não configuradas"
+              >
+                <span className="h-2 w-2 rounded-full bg-gray-200" />
+                <span className="text-xs text-gray-400">{company.name}</span>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
