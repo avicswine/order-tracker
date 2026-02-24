@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express'
 import { body, param, validationResult } from 'express-validator'
 import { prisma } from '../lib/prisma'
+import { TrackingSystem } from '@prisma/client'
 
 const router = Router()
 
@@ -41,6 +42,8 @@ router.post(
       .matches(/^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/)
       .withMessage('CNPJ must be in format XX.XXX.XXX/XXXX-XX'),
     body('phone').trim().notEmpty().withMessage('Phone is required'),
+    body('trackingSystem').optional().isIn(Object.values(TrackingSystem)),
+    body('trackingIdentifier').optional().trim(),
   ],
   async (req: Request, res: Response) => {
     const errors = validationResult(req)
@@ -48,7 +51,13 @@ router.post(
 
     try {
       const carrier = await prisma.carrier.create({
-        data: { name: req.body.name, cnpj: req.body.cnpj, phone: req.body.phone },
+        data: {
+          name: req.body.name,
+          cnpj: req.body.cnpj,
+          phone: req.body.phone,
+          ...(req.body.trackingSystem && { trackingSystem: req.body.trackingSystem }),
+          trackingIdentifier: req.body.trackingIdentifier ?? null,
+        },
       })
       res.status(201).json(carrier)
     } catch (err: unknown) {
@@ -66,12 +75,11 @@ router.put(
   [
     param('id').notEmpty(),
     body('name').optional().trim().notEmpty(),
-    body('cnpj')
-      .optional()
-      .trim()
-      .matches(/^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/),
+    body('cnpj').optional().trim().matches(/^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/),
     body('phone').optional().trim().notEmpty(),
     body('active').optional().isBoolean(),
+    body('trackingSystem').optional().isIn(Object.values(TrackingSystem)),
+    body('trackingIdentifier').optional().trim(),
   ],
   async (req: Request, res: Response) => {
     const errors = validationResult(req)
@@ -85,6 +93,8 @@ router.put(
           ...(req.body.cnpj !== undefined && { cnpj: req.body.cnpj }),
           ...(req.body.phone !== undefined && { phone: req.body.phone }),
           ...(req.body.active !== undefined && { active: req.body.active }),
+          ...(req.body.trackingSystem !== undefined && { trackingSystem: req.body.trackingSystem }),
+          ...(req.body.trackingIdentifier !== undefined && { trackingIdentifier: req.body.trackingIdentifier || null }),
         },
       })
       res.json(carrier)

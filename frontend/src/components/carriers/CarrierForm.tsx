@@ -7,11 +7,15 @@ import { Spinner } from '../ui/Spinner'
 import { formatCNPJ, formatPhone } from '../../lib/utils'
 import type { Carrier } from '../../types'
 
+import type { TrackingSystem } from '../../types'
+
 interface FormData {
   name: string
   cnpj: string
   phone: string
   active: boolean
+  trackingSystem: TrackingSystem
+  trackingIdentifier: string
 }
 
 interface Props {
@@ -33,9 +37,13 @@ export function CarrierFormModal({ open, onClose, carrier }: Props) {
         cnpj: carrier?.cnpj ?? '',
         phone: carrier?.phone ?? '',
         active: carrier?.active ?? true,
+        trackingSystem: carrier?.trackingSystem ?? 'NONE',
+        trackingIdentifier: carrier?.trackingIdentifier ?? '',
       })
     }
   }, [open, carrier, reset])
+
+  const trackingSystem = watch('trackingSystem')
 
   const mutation = useMutation({
     mutationFn: (data: FormData) =>
@@ -91,6 +99,39 @@ export function CarrierFormModal({ open, onClose, carrier }: Props) {
           />
           {errors.phone && <p className="mt-1 text-xs text-red-500">{errors.phone.message}</p>}
         </div>
+
+        {/* Sistema de rastreamento */}
+        <div>
+          <label className="label">Sistema de rastreamento</label>
+          <select className="input" {...register('trackingSystem')}>
+            <option value="NONE">Não configurado</option>
+            <option value="SSW">SSW (ssw.inf.br)</option>
+            <option value="SENIOR">Senior TCK</option>
+          </select>
+        </div>
+
+        {trackingSystem === 'SSW' && (
+          <div>
+            <label className="label">Código da empresa no SSW (sigla_emp)</label>
+            <input
+              className="input"
+              placeholder="Ex: BAU, MNG..."
+              {...register('trackingIdentifier')}
+            />
+            <p className="mt-1 text-xs text-gray-400">Deixe em branco para buscar em toda a rede SSW</p>
+          </div>
+        )}
+
+        {trackingSystem === 'SENIOR' && (
+          <div>
+            <label className="label">Tenant do Senior TCK</label>
+            <input
+              className="input"
+              placeholder="Ex: trdtransportes"
+              {...register('trackingIdentifier')}
+            />
+          </div>
+        )}
 
         {isEdit && (
           <div className="flex items-center gap-3">

@@ -8,35 +8,39 @@ datasource db {
 }
 
 model Carrier {
-  id        String   @id @default(cuid())
-  name      String
-  cnpj      String   @unique
-  phone     String
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  orders    Order[]
+  id                 String         @id @default(cuid())
+  name               String
+  cnpj               String         @unique
+  phone              String
+  active             Boolean        @default(true)
+  trackingSystem     TrackingSystem @default(NONE)
+  trackingIdentifier String?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  orders             Order[]
 
   @@map("carriers")
 }
 
 model Order {
-  id               String        @id @default(cuid())
-  orderNumber      String        @unique
-  customerName     String
-  customerEmail    String?
-  carrierId        String?
-  carrier          Carrier?      @relation(fields: [carrierId], references: [id])
-  status           OrderStatus   @default(PENDING)
-  shippedAt        DateTime?
+  id                String        @id @default(cuid())
+  orderNumber       String        @unique
+  customerName      String
+  customerEmail     String?
+  carrierId         String?
+  carrier           Carrier?      @relation(fields: [carrierId], references: [id])
+  status            OrderStatus   @default(PENDING)
+  shippedAt         DateTime?
   estimatedDelivery DateTime?
-  deliveredAt      DateTime?
-  notes            String?
-  nfNumber         String?
-  senderCnpj       String?
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
-  statusHistory    StatusHistory[]
+  deliveredAt       DateTime?
+  notes             String?
+  nfNumber          String?
+  senderCnpj        String?
+  lastTracking      String?
+  lastTrackingAt    DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  statusHistory     StatusHistory[]
 
   @@map("orders")
 }
@@ -57,4 +61,10 @@ enum OrderStatus {
   IN_TRANSIT
   DELIVERED
   CANCELLED
+}
+
+enum TrackingSystem {
+  SSW
+  SENIOR
+  NONE
 }

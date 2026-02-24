@@ -1,4 +1,5 @@
 export type OrderStatus = 'PENDING' | 'IN_TRANSIT' | 'DELIVERED' | 'CANCELLED'
+export type TrackingSystem = 'SSW' | 'SENIOR' | 'NONE'
 
 export interface Carrier {
   id: string
@@ -6,6 +7,8 @@ export interface Carrier {
   cnpj: string
   phone: string
   active: boolean
+  trackingSystem: TrackingSystem
+  trackingIdentifier: string | null
   createdAt: string
   updatedAt: string
   _count?: { orders: number }
@@ -33,6 +36,8 @@ export interface Order {
   notes: string | null
   nfNumber: string | null
   senderCnpj: string | null
+  lastTracking: string | null
+  lastTrackingAt: string | null
   createdAt: string
   updatedAt: string
   statusHistory?: StatusHistory[]
