@@ -1,6 +1,6 @@
 import type { Order } from '../../types'
 import { StatusBadge } from '../ui/Badge'
-import { formatDate, isOccurrenceEvent } from '../../lib/utils'
+import { formatDate, isOccurrenceEvent, SENDER_COMPANIES } from '../../lib/utils'
 import { Spinner } from '../ui/Spinner'
 
 interface Props {
@@ -42,8 +42,8 @@ export function OrderTable({ orders, isLoading, onViewDetails, meta, onPageChang
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-200 text-left">
-              <th className="pb-3 pr-4 font-medium text-gray-500">Nº Pedido</th>
               <th className="pb-3 pr-4 font-medium text-gray-500">NF</th>
+              <th className="pb-3 pr-4 font-medium text-gray-500">Empresa</th>
               <th className="pb-3 pr-4 font-medium text-gray-500">Cliente</th>
               <th className="pb-3 pr-4 font-medium text-gray-500">Transportadora</th>
               <th className="pb-3 pr-4 font-medium text-gray-500">Status</th>
@@ -55,8 +55,14 @@ export function OrderTable({ orders, isLoading, onViewDetails, meta, onPageChang
           <tbody className="divide-y divide-gray-100">
             {orders.map((order) => (
               <tr key={order.id} className="hover:bg-gray-50 transition-colors">
-                <td className="py-3 pr-4 font-mono font-medium text-gray-900">{order.orderNumber}</td>
-                <td className="py-3 pr-4 font-mono text-gray-600">{order.nfNumber ?? '—'}</td>
+                <td className="py-3 pr-4 font-mono font-medium text-gray-900">{order.nfNumber ?? '—'}</td>
+                <td className="py-3 pr-4">
+                  {order.senderCnpj ? (
+                    <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-gray-100 text-gray-700">
+                      {SENDER_COMPANIES.find((c) => c.cnpj === order.senderCnpj)?.name ?? order.senderCnpj}
+                    </span>
+                  ) : '—'}
+                </td>
                 <td className="py-3 pr-4">
                   <p className="font-medium text-gray-900">{order.customerName}</p>
                   {order.customerEmail && (

@@ -29,21 +29,24 @@ const BLING_AUTH_URL = 'https://www.bling.com.br/Api/v3/oauth/authorize'
 const BLING_TOKEN_URL = 'https://www.bling.com.br/Api/v3/oauth/token'
 
 // Configuração das 3 empresas
-const COMPANIES: Record<string, { name: string; cnpj: string; clientId: string; clientSecret: string }> = {
+const COMPANIES: Record<string, { name: string; code: string; cnpj: string; clientId: string; clientSecret: string }> = {
   avic: {
     name: 'Avic',
+    code: 'AVIC',
     cnpj: '47.715.256/0001-49',
     clientId: process.env.BLING_AVIC_CLIENT_ID!,
     clientSecret: process.env.BLING_AVIC_CLIENT_SECRET!,
   },
   agrogranja: {
     name: 'Agrogranja',
+    code: 'AGRO',
     cnpj: '54.695.386/0001-22',
     clientId: process.env.BLING_AGROGRANJA_CLIENT_ID!,
     clientSecret: process.env.BLING_AGROGRANJA_CLIENT_SECRET!,
   },
   equipage: {
     name: 'Equipage',
+    code: 'EQUI',
     cnpj: '56.633.474/0001-25',
     clientId: process.env.BLING_EQUIPAGE_CLIENT_ID!,
     clientSecret: process.env.BLING_EQUIPAGE_CLIENT_SECRET!,
@@ -257,8 +260,9 @@ router.post('/sync', async (_req: Request, res: Response) => {
       console.log(`[Bling] ${company.name}: ${nfes.length} NFs encontradas`)
 
       for (const nf of nfes) {
+        // Deduplicação por nfNumber + empresa (senderCnpj) para evitar conflito entre empresas
         const existing = await prisma.order.findFirst({
-          where: { nfNumber: String(nf.numero) },
+          where: { nfNumber: String(nf.numero), senderCnpj: company.cnpj },
         })
 
         if (existing) { ignorados++; continue }
@@ -270,7 +274,7 @@ router.post('/sync', async (_req: Request, res: Response) => {
 
         await prisma.order.create({
           data: {
-            orderNumber: `NF-${nf.numero}`,
+            orderNumber: `${company.code}-NF-${nf.numero}`,
             customerName: nf.contato?.nome ?? 'Cliente não informado',
             customerEmail: nf.contato?.email ?? null,
             nfNumber: String(nf.numero),
