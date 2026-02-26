@@ -2,7 +2,7 @@ module.exports = {
   apps: [
     {
       name: 'order-tracker',
-      script: 'node_modules\\.bin\\tsx.cmd',
+      script: 'C:\\Users\\User\\AppData\\Roaming\\npm\\tsx.cmd',
       args: 'src/server.ts',
       cwd: './backend',
       env: {
