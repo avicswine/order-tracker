@@ -61,7 +61,8 @@ function mapStatus(text: string): OrderStatus | null {
     t.includes('EM TRANSITO') || t.includes('TRANSFERENCIA') || t.includes('COLETADO') ||
     t.includes('COLETA REALIZADA') || t.includes('EXPEDIDO') || t.includes('EM DISTRIBUICAO') ||
     t.includes('CHEGADA EM UNIDADE') || t.includes('CHEGADA NA UNIDADE') || t.includes('EM SEPARACAO') ||
-    t.includes('RECEBIDO') || t.includes('AGUARDANDO')
+    t.includes('RECEBIDO') || t.includes('AGUARDANDO') ||
+    t.includes('TRANSBORDO') || t.includes('MANIFESTADO') || t.includes('CONHECIMENTO EMITIDO')
   ) return OrderStatus.IN_TRANSIT
   return null
 }
@@ -133,6 +134,15 @@ export async function trackSSW(
 }
 
 // --- Senior TCK ---
+// A API Senior tem dois formatos de resposta dependendo da configuração do tenant:
+//
+// Formato A (simples): listaTracking = [ { data, situacao, descricao, ... }, ... ]
+//   previsão fica na raiz: data.previsaoEntrega / data.dtPrevEntrega
+//
+// Formato B (aninhado, ex: TRD): listaTracking = [ { tracking: { dataPrevisaoEntrega, situacao }, listaTrackingFase: [...] } ]
+//   previsão fica em: listaTracking[0].tracking.dataPrevisaoEntrega (ISO)
+//   eventos ficam em: listaTrackingFase[N] = { sequencia, executada, dataExecucao, observacao, fase: { descricao } }
+
 export async function trackSenior(
   senderCnpj: string,
   nfNumber: string,
@@ -154,39 +164,84 @@ export async function trackSenior(
     }
   )
 
-  const data = response.data as Record<string, unknown> & { listaTracking?: unknown[]; trackings?: unknown[]; totalRegistros?: number }
+  const data = response.data as Record<string, unknown>
+  const rawList = (data.listaTracking ?? data.trackings ?? []) as Record<string, unknown>[]
 
-  // Senior retorna: { listaTracking: [...], totalRegistros: N }
-  const list = (data.listaTracking ?? data.trackings ?? []) as Record<string, unknown>[]
+  if (!Array.isArray(rawList) || rawList.length === 0) {
+    return { status: null, lastEvent: null }
+  }
+
+  // Detecta formato aninhado (Formato B): primeiro item tem sub-objeto "tracking" + "listaTrackingFase"
+  const firstItem = rawList[0]
+  if (firstItem.tracking !== undefined && Array.isArray(firstItem.listaTrackingFase)) {
+    // --- Formato B (TRD e similares) ---
+    const tracking = firstItem.tracking as Record<string, unknown>
+    const fases = (firstItem.listaTrackingFase as Record<string, unknown>[])
+      .filter((f) => f.executada !== false)
+      .sort((a, b) => ((a.sequencia as number) ?? 0) - ((b.sequencia as number) ?? 0))
+
+    const firstFase = fases[0]
+    const lastFase = fases[fases.length - 1]
+
+    // Data de envio = primeira fase executada
+    const shippedAt = firstFase?.dataExecucao ? new Date(firstFase.dataExecucao as string) : null
+
+    // Previsão de entrega = campo ISO no objeto tracking
+    const prevRaw = tracking.dataPrevisaoEntrega as string | undefined
+    const estimatedDelivery = prevRaw ? new Date(prevRaw) : null
+
+    // Evento mais recente: preferência para observacao (texto real) sobre fase.descricao (nome técnico)
+    const lastFaseFase = lastFase?.fase as Record<string, unknown> | undefined
+    const lastEvent =
+      (lastFase?.observacao as string | undefined) ||
+      (lastFaseFase?.descricao as string | undefined) ||
+      (tracking.situacao as Record<string, unknown> | undefined)?.descricao as string | undefined ||
+      null
+
+    const hasOccurrence = fases.some((f) => {
+      const obs = (f.observacao as string) ?? ''
+      const desc = ((f.fase as Record<string, unknown> | undefined)?.descricao as string) ?? ''
+      return detectOccurrence(obs || desc)
+    })
+
+    return {
+      status: lastEvent ? mapStatus(lastEvent) : null,
+      lastEvent,
+      shippedAt,
+      estimatedDelivery: isNaN(estimatedDelivery?.getTime() ?? NaN) ? null : estimatedDelivery,
+      hasOccurrence: hasOccurrence || undefined,
+    }
+  }
+
+  // --- Formato A (simples) ---
+  const list = rawList
 
   let lastEvent: string | null = null
   let shippedAt: Date | null = null
   let estimatedDelivery: Date | null = null
   let hasOccurrence = false
 
-  if (Array.isArray(list) && list.length > 0) {
-    // Primeiro item = evento mais antigo (coleta/envio)
-    const first = list[0]
-    const firstDateStr = (first.data ?? first.dataOcorrencia ?? first.datahora) as string | undefined
-    const firstHora = (first.hora ?? '') as string
-    shippedAt = parseBrDate(firstDateStr ? `${firstDateStr} ${firstHora}`.trim() : null)
+  // Primeiro item = evento mais antigo (coleta/envio)
+  const first = list[0]
+  const firstDateStr = (first.data ?? first.dataOcorrencia ?? first.datahora) as string | undefined
+  const firstHora = (first.hora ?? '') as string
+  shippedAt = parseBrDate(firstDateStr ? `${firstDateStr} ${firstHora}`.trim() : null)
 
-    // Último item = evento mais recente
-    const last = list[list.length - 1]
-    lastEvent =
-      (last.situacao as string) ??
-      (last.descricao as string) ??
-      (last.fase as string) ??
-      (last.status as string) ??
-      null
+  // Último item = evento mais recente
+  const last = list[list.length - 1]
+  lastEvent =
+    (last.situacao as string | undefined) ??
+    (last.descricao as string | undefined) ??
+    (last.fase as string | undefined) ??
+    (last.status as string | undefined) ??
+    null
 
-    // Previsão de entrega: campo explícito na resposta
-    const prevRaw = (data.previsaoEntrega ?? data.dtPrevEntrega ?? data.previsao) as string | undefined
-    estimatedDelivery = parseBrDate(prevRaw)
+  // Previsão de entrega: campo explícito na raiz da resposta
+  const prevRaw = (data.previsaoEntrega ?? data.dtPrevEntrega ?? data.previsao) as string | undefined
+  estimatedDelivery = parseBrDate(prevRaw)
 
-    // Intercorrências: qualquer evento com texto de problema
-    hasOccurrence = list.some((item) => detectOccurrence((item.situacao ?? item.descricao ?? '') as string))
-  }
+  // Intercorrências
+  hasOccurrence = list.some((item) => detectOccurrence((item.situacao ?? item.descricao ?? '') as string))
 
   return {
     status: lastEvent ? mapStatus(lastEvent) : null,
