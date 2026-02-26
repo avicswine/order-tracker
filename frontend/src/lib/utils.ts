@@ -47,9 +47,9 @@ export function formatCNPJ(value: string) {
 }
 
 export const SENDER_COMPANIES = [
-  { cnpj: '47.715.256/0001-49', name: 'Avic',       color: 'bg-blue-600 text-white' },
-  { cnpj: '54.695.386/0001-22', name: 'Agrogranja', color: 'bg-red-600 text-white' },
-  { cnpj: '56.633.474/0001-25', name: 'Equipage',   color: 'bg-green-600 text-white' },
+  { cnpj: '47.715.256/0001-49', name: 'AVICSWINE', color: 'bg-blue-600 text-white' },
+  { cnpj: '54.695.386/0001-22', name: 'AGROGRANJA', color: 'bg-red-600 text-white' },
+  { cnpj: '56.633.474/0001-25', name: 'EQUIPAGE', color: 'bg-green-600 text-white' },
 ]
 
 const OCCURRENCE_KEYWORDS = [
@@ -62,7 +62,7 @@ const OCCURRENCE_KEYWORDS = [
 export function isOccurrenceEvent(text: string | null | undefined): boolean {
   if (!text) return false
   const t = text.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-  if (t.includes('SEM OCORRENCIA')) return false
+  if (t.includes('SEM OCORRENCIA') || t.includes('OCORRENCIA DE ENTREGA')) return false
   return OCCURRENCE_KEYWORDS.some((kw) =>
     t.includes(kw.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''))
   )

@@ -47,14 +47,14 @@ function detectOccurrence(text: string): boolean {
     t.includes('RECUSADO') ||
     t.includes('SUSTADO') ||
     t.includes('IMPEDIMENTO') ||
-    (t.includes('OCORRENCIA') && !t.includes('SEM OCORRENCIA'))
+    (t.includes('OCORRENCIA') && !t.includes('SEM OCORRENCIA') && !t.includes('OCORRENCIA DE ENTREGA'))
   )
 }
 
 // Mapeia texto de ocorrência para nosso enum de status
 function mapStatus(text: string): OrderStatus | null {
   const t = text.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-  if (t.includes('ENTREGUE') || t.includes('ENTREGA REALIZADA') || t.includes('ENTREGA EFETUADA')) return OrderStatus.DELIVERED
+  if (t.includes('ENTREGUE') || t.includes('ENTREGA REALIZADA') || t.includes('ENTREGA EFETUADA') || t.includes('OCORRENCIA DE ENTREGA')) return OrderStatus.DELIVERED
   if (t.includes('DEVOLV') || t.includes('RETORNO') || t.includes('CANCELAD')) return OrderStatus.CANCELLED
   if (
     t.includes('SAIU PARA ENTREGA') || t.includes('EM ROTA') || t.includes('SAIDA PARA ENTREGA') ||

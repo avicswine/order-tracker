@@ -16,8 +16,12 @@ export const carriersApi = {
 
 // Orders
 export const ordersApi = {
-  list: (filters?: OrderFilters) =>
-    api.get<OrdersResponse>('/orders', { params: filters }).then((r) => r.data),
+  list: (filters?: OrderFilters) => {
+    const params = filters
+      ? Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== '' && v !== undefined && v !== null && v !== false))
+      : undefined
+    return api.get<OrdersResponse>('/orders', { params }).then((r) => r.data)
+  },
   summary: () => api.get<OrderSummary>('/orders/summary').then((r) => r.data),
   get: (id: string) => api.get<Order>(`/orders/${id}`).then((r) => r.data),
   create: (data: Partial<Order>) => api.post<Order>('/orders', data).then((r) => r.data),

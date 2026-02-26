@@ -5,8 +5,7 @@ import { OrderStatus, TrackingSystem } from '@prisma/client'
 
 const router = Router()
 
-// POST /api/tracking/sync — atualiza status de todos os pedidos IN_TRANSIT
-router.post('/sync', async (_req: Request, res: Response) => {
+export async function runTrackingSync(): Promise<{ atualizados: number; erros: number; total: number }> {
   const orders = await prisma.order.findMany({
     where: {
       status: { in: [OrderStatus.PENDING, OrderStatus.IN_TRANSIT] },
@@ -17,9 +16,7 @@ router.post('/sync', async (_req: Request, res: Response) => {
     include: { carrier: true },
   })
 
-  if (orders.length === 0) {
-    return res.json({ message: 'Nenhum pedido para rastrear.', atualizados: 0, erros: 0 })
-  }
+  if (orders.length === 0) return { atualizados: 0, erros: 0, total: 0 }
 
   let atualizados = 0
   let erros = 0
@@ -68,17 +65,9 @@ router.post('/sync', async (_req: Request, res: Response) => {
         lastTrackingAt: new Date(),
       }
 
-      // Data de envio: atualiza apenas se ainda não definida (não sobrescreve dado manual)
-      if (result.shippedAt && !order.shippedAt) {
-        updates.shippedAt = result.shippedAt
-      }
+      if (result.shippedAt && !order.shippedAt) updates.shippedAt = result.shippedAt
+      if (result.estimatedDelivery) updates.estimatedDelivery = result.estimatedDelivery
 
-      // Previsão de entrega: apenas dado real retornado pelo carrier
-      if (result.estimatedDelivery) {
-        updates.estimatedDelivery = result.estimatedDelivery
-      }
-
-      // Atualiza status somente se houve mudança e temos um status mapeado
       if (novoStatus && novoStatus !== order.status) {
         updates.status = novoStatus
         if (novoStatus === OrderStatus.DELIVERED) updates.deliveredAt = new Date()
@@ -100,8 +89,6 @@ router.post('/sync', async (_req: Request, res: Response) => {
       }
 
       atualizados++
-
-      // Pausa entre requisições para não sobrecarregar as APIs
       await new Promise((r) => setTimeout(r, 500))
     } catch (err) {
       console.error(`[Tracking] Erro ao rastrear ${order.orderNumber}:`, err)
@@ -109,7 +96,13 @@ router.post('/sync', async (_req: Request, res: Response) => {
     }
   }
 
-  res.json({ message: 'Rastreamento concluído', atualizados, erros, total: orders.length })
+  return { atualizados, erros, total: orders.length }
+}
+
+// POST /api/tracking/sync — disparo manual
+router.post('/sync', async (_req: Request, res: Response) => {
+  const result = await runTrackingSync()
+  res.json({ message: 'Rastreamento concluído', ...result })
 })
 
 // POST /api/tracking/backfill — busca datas de envio/previsão para pedidos sem essas informações
