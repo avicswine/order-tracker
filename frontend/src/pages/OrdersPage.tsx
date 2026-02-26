@@ -10,7 +10,7 @@ import { BlingSync } from '../components/orders/BlingSync'
 import type { Order, OrderFilters } from '../types'
 
 export function OrdersPage() {
-  const [filters, setFilters] = useState<OrderFilters>({ page: 1 })
+  const [filters, setFilters] = useState<OrderFilters>({ page: 1, sortBy: 'shippedAt', sortOrder: 'desc' })
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [showForm, setShowForm] = useState(false)
 
