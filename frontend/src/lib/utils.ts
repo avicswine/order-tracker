@@ -56,11 +56,13 @@ const OCCURRENCE_KEYWORDS = [
   'TENTATIVA DE ENTREGA', 'DESTINATÁRIO AUSENTE', 'ENDEREÇO NÃO ENCONTRADO',
   'ENDERECO NAO ENCONTRADO', 'ENDEREÇO INCORRETO', 'ESTABELECIMENTO FECHADO',
   'AVARIA', 'EXTRAVIO', 'RETIDO', 'RECUSADO', 'SUSTADO', 'IMPEDIMENTO',
+  'OCORRENCIA',
 ]
 
 export function isOccurrenceEvent(text: string | null | undefined): boolean {
   if (!text) return false
   const t = text.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  if (t.includes('SEM OCORRENCIA')) return false
   return OCCURRENCE_KEYWORDS.some((kw) =>
     t.includes(kw.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''))
   )

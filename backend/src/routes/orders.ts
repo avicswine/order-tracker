@@ -56,7 +56,9 @@ router.get(
     }
 
     if (String(req.query.delayed) === 'true') {
-      where.estimatedDelivery = { lt: new Date() }
+      const todayStart = new Date()
+      todayStart.setHours(0, 0, 0, 0)
+      where.estimatedDelivery = { lt: todayStart }
       if (!where.status) {
         where.status = { in: [OrderStatus.PENDING, OrderStatus.IN_TRANSIT] }
       }
@@ -102,9 +104,11 @@ router.get('/summary', async (_req: Request, res: Response) => {
     )
 
     const total = await prisma.order.count()
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
     const delayed = await prisma.order.count({
       where: {
-        estimatedDelivery: { lt: new Date() },
+        estimatedDelivery: { lt: today },
         status: { in: [OrderStatus.PENDING, OrderStatus.IN_TRANSIT] },
       },
     })
@@ -138,7 +142,7 @@ router.post(
     body('orderNumber').trim().notEmpty().withMessage('Order number is required'),
     body('customerName').trim().notEmpty().withMessage('Customer name is required'),
     body('customerEmail').optional().isEmail(),
-    body('carrierId').notEmpty().withMessage('Carrier is required'),
+    body('carrierId').optional().notEmpty(),
     body('shippedAt').optional().isISO8601(),
     body('estimatedDelivery').optional().isISO8601(),
     body('notes').optional().trim(),

@@ -247,8 +247,11 @@ router.post('/sync', async (_req: Request, res: Response) => {
     let ignorados = 0
 
     try {
-      // situacao=6 = Autorizada | sem filtro = todas
-      const nfeData = await blingGet(companyKey, '/nfe?pagina=1&limite=100')
+      // Importa apenas NFs dos últimos 90 dias
+      const dataInicio = new Date()
+      dataInicio.setDate(dataInicio.getDate() - 90)
+      const dataInicioStr = dataInicio.toISOString().slice(0, 10)
+      const nfeData = await blingGet(companyKey, `/nfe?pagina=1&limite=100&dataEmissaoInicial=${dataInicioStr}`)
       console.log(`[Bling] ${company.name} resposta:`, JSON.stringify(nfeData).slice(0, 500))
       const nfes: BlingNFe[] = nfeData?.data ?? []
       console.log(`[Bling] ${company.name}: ${nfes.length} NFs encontradas`)
@@ -269,8 +272,10 @@ router.post('/sync', async (_req: Request, res: Response) => {
           data: {
             orderNumber: `NF-${nf.numero}`,
             customerName: nf.contato?.nome ?? 'Cliente não informado',
+            customerEmail: nf.contato?.email ?? null,
             nfNumber: String(nf.numero),
             senderCnpj: company.cnpj,
+            recipientCnpj: nf.destinatario?.numeroDocumento?.replace(/\D/g, '') ?? null,
             carrierId,
             statusHistory: { create: { status: 'PENDING', note: `Importado do Bling (${company.name})` } },
           },
@@ -367,10 +372,14 @@ router.post('/enrich', async (_req: Request, res: Response) => {
   const nfMap: Record<string, { blingId: number; companyKey: string }> = {}
   const nfNumbersNeeded = new Set(ordersWithoutCarrier.map((o) => String(o.nfNumber).replace(/^0+/, '')))
 
+  const enrichDataInicio = new Date()
+  enrichDataInicio.setDate(enrichDataInicio.getDate() - 90)
+  const enrichDataInicioStr = enrichDataInicio.toISOString().slice(0, 10)
+
   for (const companyKey of connectedCompanies) {
     let pagina = 1
     while (true) {
-      const data = await blingGet(companyKey, `/nfe?pagina=${pagina}&limite=100`)
+      const data = await blingGet(companyKey, `/nfe?pagina=${pagina}&limite=100&dataEmissaoInicial=${enrichDataInicioStr}`)
       const nfes: BlingNFe[] = data?.data ?? []
       if (nfes.length === 0) break
 
@@ -419,7 +428,8 @@ router.post('/disconnect/:company', (req: Request, res: Response) => {
 interface BlingNFe {
   id: number
   numero: number
-  contato?: { nome?: string }
+  contato?: { nome?: string; email?: string }
+  destinatario?: { numeroDocumento?: string; nome?: string }
   transportador?: { nome?: string; cpfCnpj?: string }
 }
 

@@ -475,8 +475,8 @@ async function trackExpressoSaoMiguel(
 
 const ATUAL_LOGIN_URL = 'https://cliente.atualcargas.com.br/api/cadastro/login'
 const ATUAL_LIST_URL  = 'https://cliente.atualcargas.com.br/api/rastreamento/senha/lista-encomendas'
-const ATUAL_DOCUMENT  = '47715256000149'
-const ATUAL_PASSWORD  = '925196'
+const ATUAL_DOCUMENT  = process.env.ATUAL_CARGAS_DOCUMENT ?? '47715256000149'
+const ATUAL_PASSWORD  = process.env.ATUAL_CARGAS_PASSWORD ?? '925196'
 
 let atualSessionCookie: string | null = null
 let atualSessionExpires = 0

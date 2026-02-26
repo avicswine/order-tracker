@@ -43,6 +43,9 @@ model Order {
   updatedAt         DateTime      @updatedAt
   statusHistory     StatusHistory[]
 
+  @@index([status])
+  @@index([nfNumber])
+  @@index([estimatedDelivery, status])
   @@map("orders")
 }
 

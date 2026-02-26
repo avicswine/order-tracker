@@ -12,6 +12,9 @@ interface Props {
 }
 
 export function OrderTable({ orders, isLoading, onViewDetails, meta, onPageChange }: Props) {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -83,13 +86,13 @@ export function OrderTable({ orders, isLoading, onViewDetails, meta, onPageChang
                   {order.estimatedDelivery ? (
                     <span className={
                       order.status !== 'DELIVERED' && order.status !== 'CANCELLED' &&
-                      new Date(order.estimatedDelivery) < new Date()
+                      new Date(order.estimatedDelivery) < today
                         ? 'text-orange-600 font-medium'
                         : 'text-gray-600'
                     }>
                       {formatDate(order.estimatedDelivery)}
                       {order.status !== 'DELIVERED' && order.status !== 'CANCELLED' &&
-                       new Date(order.estimatedDelivery) < new Date() && (
+                       new Date(order.estimatedDelivery) < today && (
                         <span className="ml-1 text-xs bg-orange-100 text-orange-700 px-1 py-0.5 rounded">
                           atrasado
                         </span>

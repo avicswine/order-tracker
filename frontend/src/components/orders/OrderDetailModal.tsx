@@ -62,6 +62,11 @@ export function OrderDetailModal({ order, onClose }: Props) {
             </div>
           </div>
 
+          {(() => {
+            const today = new Date()
+            today.setHours(0, 0, 0, 0)
+            const isDelayed = !!(data.estimatedDelivery && data.status !== 'DELIVERED' && data.status !== 'CANCELLED' && new Date(data.estimatedDelivery) < today)
+            return (
           <div className="grid grid-cols-2 gap-4 rounded-lg bg-gray-50 p-4">
             <div>
               <p className="text-xs text-gray-500">Cliente</p>
@@ -80,15 +85,9 @@ export function OrderDetailModal({ order, onClose }: Props) {
             </div>
             <div>
               <p className="text-xs text-gray-500">Previsão de Entrega</p>
-              <p className={`font-medium ${
-                data.estimatedDelivery && data.status !== 'DELIVERED' && data.status !== 'CANCELLED' &&
-                new Date(data.estimatedDelivery) < new Date()
-                  ? 'text-orange-600'
-                  : ''
-              }`}>
+              <p className={`font-medium ${isDelayed ? 'text-orange-600' : ''}`}>
                 {formatDate(data.estimatedDelivery)}
-                {data.estimatedDelivery && data.status !== 'DELIVERED' && data.status !== 'CANCELLED' &&
-                 new Date(data.estimatedDelivery) < new Date() && (
+                {isDelayed && (
                   <span className="ml-2 text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded">atrasado</span>
                 )}
               </p>
@@ -114,6 +113,12 @@ export function OrderDetailModal({ order, onClose }: Props) {
                 <p className="text-xs text-gray-500">{data.senderCnpj}</p>
               </div>
             )}
+            {data.recipientCnpj && (
+              <div>
+                <p className="text-xs text-gray-500">CNPJ do Destinatário</p>
+                <p className="font-medium font-mono">{data.recipientCnpj}</p>
+              </div>
+            )}
             {data.notes && (
               <div className="col-span-2">
                 <p className="text-xs text-gray-500">Observações</p>
@@ -121,6 +126,8 @@ export function OrderDetailModal({ order, onClose }: Props) {
               </div>
             )}
           </div>
+            )
+          })()}
 
           {/* Último rastreio do carrier */}
           {data.lastTracking && (
