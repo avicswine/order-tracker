@@ -67,4 +67,6 @@ export interface OrderFilters {
   senderCnpj?: string
   delayed?: boolean
   page?: number
+  sortBy?: 'shippedAt' | 'estimatedDelivery'
+  sortOrder?: 'asc' | 'desc'
 }

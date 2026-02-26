@@ -18,6 +18,8 @@ router.get(
     query('page').optional().isInt({ min: 1 }).toInt(),
     query('limit').optional().isInt({ min: 1, max: 100 }).toInt(),
     query('delayed').optional().isBoolean().toBoolean(),
+    query('sortBy').optional().isIn(['shippedAt', 'estimatedDelivery']),
+    query('sortOrder').optional().isIn(['asc', 'desc']),
   ],
   async (req: Request, res: Response) => {
     const errors = validationResult(req)
@@ -65,12 +67,16 @@ router.get(
     }
 
     try {
+      const sortBy = req.query.sortBy as 'shippedAt' | 'estimatedDelivery' | undefined
+      const sortOrder = (req.query.sortOrder as 'asc' | 'desc') || 'asc'
+      const orderBy = sortBy ? { [sortBy]: sortOrder } : { createdAt: 'desc' as const }
+
       const [orders, total] = await Promise.all([
         prisma.order.findMany({
           where,
           skip,
           take: limit,
-          orderBy: { createdAt: 'desc' },
+          orderBy,
           include: { carrier: { select: { id: true, name: true, active: true } } },
         }),
         prisma.order.count({ where }),

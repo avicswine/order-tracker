@@ -50,6 +50,9 @@ export function OrdersPage() {
           onViewDetails={setSelectedOrder}
           meta={data?.meta}
           onPageChange={(page) => setFilters((f) => ({ ...f, page }))}
+          sortBy={filters.sortBy}
+          sortOrder={filters.sortOrder}
+          onSortChange={(sortBy, sortOrder) => setFilters((f) => ({ ...f, sortBy, sortOrder, page: 1 }))}
         />
       </div>
 

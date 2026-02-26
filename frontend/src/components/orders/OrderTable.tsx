@@ -9,11 +9,27 @@ interface Props {
   onViewDetails: (order: Order) => void
   meta: { total: number; page: number; limit: number; totalPages: number } | undefined
   onPageChange: (page: number) => void
+  sortBy?: 'shippedAt' | 'estimatedDelivery'
+  sortOrder?: 'asc' | 'desc'
+  onSortChange: (sortBy: 'shippedAt' | 'estimatedDelivery', sortOrder: 'asc' | 'desc') => void
 }
 
-export function OrderTable({ orders, isLoading, onViewDetails, meta, onPageChange }: Props) {
+export function OrderTable({ orders, isLoading, onViewDetails, meta, onPageChange, sortBy, sortOrder, onSortChange }: Props) {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
+
+  function handleSort(col: 'shippedAt' | 'estimatedDelivery') {
+    if (sortBy === col) {
+      onSortChange(col, sortOrder === 'asc' ? 'desc' : 'asc')
+    } else {
+      onSortChange(col, 'asc')
+    }
+  }
+
+  function SortIcon({ col }: { col: 'shippedAt' | 'estimatedDelivery' }) {
+    if (sortBy !== col) return <span className="ml-1 text-gray-300">↕</span>
+    return <span className="ml-1 text-blue-500">{sortOrder === 'asc' ? '↑' : '↓'}</span>
+  }
 
   if (isLoading) {
     return (
@@ -47,8 +63,16 @@ export function OrderTable({ orders, isLoading, onViewDetails, meta, onPageChang
               <th className="pb-3 pr-4 font-medium text-gray-500">Cliente</th>
               <th className="pb-3 pr-4 font-medium text-gray-500">Transportadora</th>
               <th className="pb-3 pr-4 font-medium text-gray-500">Status</th>
-              <th className="pb-3 pr-4 font-medium text-gray-500">Envio</th>
-              <th className="pb-3 pr-4 font-medium text-gray-500">Previsão</th>
+              <th className="pb-3 pr-4 font-medium text-gray-500">
+                <button onClick={() => handleSort('shippedAt')} className="flex items-center hover:text-gray-800 transition-colors">
+                  Envio<SortIcon col="shippedAt" />
+                </button>
+              </th>
+              <th className="pb-3 pr-4 font-medium text-gray-500">
+                <button onClick={() => handleSort('estimatedDelivery')} className="flex items-center hover:text-gray-800 transition-colors">
+                  Previsão<SortIcon col="estimatedDelivery" />
+                </button>
+              </th>
               <th className="pb-3 font-medium text-gray-500" />
             </tr>
           </thead>
