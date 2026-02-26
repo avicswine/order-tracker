@@ -39,7 +39,10 @@ export function OrdersPage() {
       </div>
 
       {/* Summary */}
-      <SummaryCards />
+      <SummaryCards
+        filters={filters}
+        onFilter={(partial) => setFilters((f) => ({ ...f, ...partial, page: 1 }))}
+      />
 
       {/* Table */}
       <div className="card p-6 space-y-4">
