@@ -527,6 +527,8 @@ interface AtualEncomenda {
   dataPrevisaoEntrega?: string
   dtPrevEntrega?: string
   previsaoEntrega?: string
+  emissao?: string          // data de emissão/envio (dd/MM/yy)
+  emissaoParseIso?: string  // mesmo campo em formato ISO
 }
 
 function atualProcessList(list: AtualEncomenda[], nfBusca: string): TrackingResult {
@@ -541,12 +543,14 @@ function atualProcessList(list: AtualEncomenda[], nfBusca: string): TrackingResu
   if (!found) return { status: null, lastEvent: `Não localizado (NF ${nfBusca})` }
 
   const lastEvent = [found.tituloOcorrencia, found.situacao].filter(Boolean).join(' — ') || found.situacao || null
+  const shippedAt = parseBrDate(found.emissaoParseIso ?? found.emissao)
   const estimatedDelivery = parseBrDate(found.dataPrevisaoEntrega ?? found.dtPrevEntrega ?? found.previsaoEntrega)
   const hasOccurrence = detectOccurrence(found.tituloOcorrencia ?? found.situacao ?? '') || undefined
 
   return {
     status: atualMapStatus(found.situacao ?? '', found.tituloOcorrencia ?? ''),
     lastEvent,
+    shippedAt,
     estimatedDelivery,
     hasOccurrence,
   }
@@ -567,6 +571,8 @@ interface RodonavesResponse {
   Events?: RodonavesEvent[]
   FiscalDocumentNumber?: string
   BillOfLadingId?: number
+  EmissionDate?: string       // data de emissão/coleta (ISO com timezone)
+  ExpectedDeliveryDays?: number  // prazo em dias corridos a partir da emissão
 }
 
 function rodonavesMapStatus(eventCode: string, description: string): OrderStatus | null {
@@ -618,9 +624,16 @@ export async function trackRodonaves(
   // Evento mais antigo = coleta/envio
   const oldest = events[events.length - 1]
 
-  // Previsão de entrega pode vir em campos extras da resposta
-  const prevRaw = (data.DataPrevistaEntrega ?? data.EstimatedDeliveryDate ?? data.dtPrevEntrega) as string | undefined
-  const estimatedDelivery = parseBrDate(prevRaw)
+  // Rodonaves não retorna data absoluta de previsão — calcula a partir da emissão + prazo em dias
+  let estimatedDelivery: Date | null = null
+  if (data.EmissionDate && data.ExpectedDeliveryDays) {
+    const base = new Date(data.EmissionDate)
+    if (!isNaN(base.getTime())) {
+      const d = new Date(base)
+      d.setDate(d.getDate() + data.ExpectedDeliveryDays)
+      estimatedDelivery = d
+    }
+  }
 
   const hasOccurrence = events.some((e) => detectOccurrence(e.Description)) || undefined
 
