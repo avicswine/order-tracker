@@ -47,9 +47,9 @@ export function formatCNPJ(value: string) {
 }
 
 export const SENDER_COMPANIES = [
-  { cnpj: '47.715.256/0001-49', name: 'Avic' },
-  { cnpj: '54.695.386/0001-22', name: 'Agrogranja' },
-  { cnpj: '56.633.474/0001-25', name: 'Equipage' },
+  { cnpj: '47.715.256/0001-49', name: 'Avic',       color: 'bg-blue-600 text-white' },
+  { cnpj: '54.695.386/0001-22', name: 'Agrogranja', color: 'bg-red-600 text-white' },
+  { cnpj: '56.633.474/0001-25', name: 'Equipage',   color: 'bg-green-600 text-white' },
 ]
 
 const OCCURRENCE_KEYWORDS = [

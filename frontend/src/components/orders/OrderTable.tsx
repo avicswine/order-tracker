@@ -57,11 +57,14 @@ export function OrderTable({ orders, isLoading, onViewDetails, meta, onPageChang
               <tr key={order.id} className="hover:bg-gray-50 transition-colors">
                 <td className="py-3 pr-4 font-mono font-medium text-gray-900">{order.nfNumber ?? '—'}</td>
                 <td className="py-3 pr-4">
-                  {order.senderCnpj ? (
-                    <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-gray-100 text-gray-700">
-                      {SENDER_COMPANIES.find((c) => c.cnpj === order.senderCnpj)?.name ?? order.senderCnpj}
-                    </span>
-                  ) : '—'}
+                  {order.senderCnpj ? (() => {
+                    const company = SENDER_COMPANIES.find((c) => c.cnpj === order.senderCnpj)
+                    return (
+                      <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${company?.color ?? 'bg-gray-100 text-gray-700'}`}>
+                        {company?.name ?? order.senderCnpj}
+                      </span>
+                    )
+                  })() : '—'}
                 </td>
                 <td className="py-3 pr-4">
                   <p className="font-medium text-gray-900">{order.customerName}</p>

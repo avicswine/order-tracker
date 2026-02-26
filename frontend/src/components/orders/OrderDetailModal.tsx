@@ -104,15 +104,18 @@ export function OrderDetailModal({ order, onClose }: Props) {
                 <p className="font-medium font-mono">{data.nfNumber}</p>
               </div>
             )}
-            {data.senderCnpj && (
-              <div>
-                <p className="text-xs text-gray-500">Empresa Remetente</p>
-                <p className="font-medium">
-                  {SENDER_COMPANIES.find((c) => c.cnpj === data.senderCnpj)?.name ?? data.senderCnpj}
-                </p>
-                <p className="text-xs text-gray-500">{data.senderCnpj}</p>
-              </div>
-            )}
+            {data.senderCnpj && (() => {
+              const company = SENDER_COMPANIES.find((c) => c.cnpj === data.senderCnpj)
+              return (
+                <div>
+                  <p className="text-xs text-gray-500">Empresa Remetente</p>
+                  <span className={`inline-block text-xs font-medium px-2 py-0.5 rounded ${company?.color ?? 'bg-gray-100 text-gray-700'}`}>
+                    {company?.name ?? data.senderCnpj}
+                  </span>
+                  <p className="text-xs text-gray-400 mt-0.5">{data.senderCnpj}</p>
+                </div>
+              )
+            })()}
             {data.recipientCnpj && (
               <div>
                 <p className="text-xs text-gray-500">CNPJ do Destinatário</p>
