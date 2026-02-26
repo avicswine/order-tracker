@@ -68,6 +68,8 @@ function mapStatus(text: string): OrderStatus | null {
 }
 
 // --- SSW ---
+// O HTML mostra apenas eventos mas o CSV (link "Download em CSV") expõe
+// "Previsao de Entrega" e "Data Entrega" — colunas não visíveis no HTML.
 export async function trackSSW(
   senderCnpj: string,
   nfNumber: string,
@@ -87,7 +89,6 @@ export async function trackSSW(
   const $ = cheerio.load(response.data as string)
 
   // Estrutura SSW: tabela com 3 colunas — "N Fiscal | Unidade/Data | Situação"
-  // Coluna 1 = Unidade/Data (ex: "BAURU / 01/01/2024 10:00"), coluna 2 = Situação
   let lastEvent: string | null = null
   let shippedAt: Date | null = null
   let estimatedDelivery: Date | null = null
@@ -109,20 +110,45 @@ export async function trackSSW(
       const dateStr = col1Text.match(/(\d{2}\/\d{2}\/\d{2,4}(?:\s+\d{2}:\d{2})?)/)?.[1]
       const eventDate = parseBrDate(dateStr)
 
-      // Primeiro evento com data = data de envio/coleta
       if (eventDate && !shippedAt) shippedAt = eventDate
-
-      // Busca previsão de entrega: SSW às vezes coloca na situação ou col1 com keyword
-      const situacaoNorm = situacao.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-      if (situacaoNorm.includes('PREVISAO') || situacaoNorm.includes('PREVISTA')) {
-        if (eventDate) estimatedDelivery = eventDate
-      }
-
       if (detectOccurrence(situacao)) hasOccurrence = true
-
       lastEvent = situacao
     }
   })
+
+  // Busca previsão de entrega via CSV — contém colunas "Previsao de Entrega" e "Data Entrega"
+  // que não aparecem no HTML. O link de download está no HTML como "Download em CSV".
+  const csvHref = $('a').filter((_i, el) => $(el).text().toLowerCase().includes('csv')).attr('href')
+  if (csvHref) {
+    try {
+      const csvUrl = csvHref.startsWith('http') ? csvHref : `https://ssw.inf.br${csvHref}`
+      const csvRes = await axios.get(csvUrl, { timeout: 10000, responseType: 'text' })
+      const csvText = csvRes.data as string
+
+      // CSV com separador ';', primeira linha = cabeçalho
+      const lines = csvText.split('\n').map(l => l.trim()).filter(l => l.length > 0)
+      if (lines.length >= 2) {
+        const headers = lines[0].split(';').map(h => h.trim().toLowerCase()
+          .normalize('NFD').replace(/[\u0300-\u036f]/g, ''))
+        const idxPrev = headers.findIndex(h => h.includes('previsao') && h.includes('entrega'))
+        const idxEntrega = headers.findIndex(h => h === 'data entrega' || (h.includes('data') && h.includes('entrega') && !h.includes('previsao')))
+
+        // Agrega todas as linhas de dados (pode haver múltiplos eventos)
+        for (let i = 1; i < lines.length; i++) {
+          const cols = lines[i].split(';')
+          if (idxPrev >= 0 && cols[idxPrev]?.trim()) {
+            estimatedDelivery = parseBrDate(cols[idxPrev].trim())
+          }
+          // Data de entrega real (quando DELIVERED) — sobrescreve shippedAt se for mais precisa
+          if (idxEntrega >= 0 && cols[idxEntrega]?.trim() && !shippedAt) {
+            shippedAt = parseBrDate(cols[idxEntrega].trim())
+          }
+        }
+      }
+    } catch {
+      // falha silenciosa — já temos o evento do HTML
+    }
+  }
 
   return {
     status: lastEvent ? mapStatus(lastEvent) : null,

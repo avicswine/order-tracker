@@ -73,7 +73,7 @@ router.post('/sync', async (_req: Request, res: Response) => {
         updates.shippedAt = result.shippedAt
       }
 
-      // Previsão de entrega: sempre atualiza com dado do carrier (mais preciso)
+      // Previsão de entrega: apenas dado real retornado pelo carrier
       if (result.estimatedDelivery) {
         updates.estimatedDelivery = result.estimatedDelivery
       }
