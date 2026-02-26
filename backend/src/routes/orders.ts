@@ -69,7 +69,9 @@ router.get(
     try {
       const sortBy = req.query.sortBy as 'shippedAt' | 'estimatedDelivery' | undefined
       const sortOrder = (req.query.sortOrder as 'asc' | 'desc') || 'asc'
-      const orderBy = sortBy ? { [sortBy]: sortOrder } : { createdAt: 'desc' as const }
+      const orderBy = sortBy
+        ? { [sortBy]: { sort: sortOrder, nulls: 'last' as const } }
+        : { createdAt: 'desc' as const }
 
       const [orders, total] = await Promise.all([
         prisma.order.findMany({
