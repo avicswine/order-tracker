@@ -1,5 +1,5 @@
 export type OrderStatus = 'PENDING' | 'IN_TRANSIT' | 'DELIVERED' | 'CANCELLED'
-export type TrackingSystem = 'SSW' | 'SENIOR' | 'NONE'
+export type TrackingSystem = 'SSW' | 'SENIOR' | 'PUPPETEER' | 'SAO_MIGUEL' | 'ATUAL_CARGAS' | 'RODONAVES' | 'BRASPRESS' | 'NONE'
 
 export interface Carrier {
   id: string
@@ -36,6 +36,7 @@ export interface Order {
   notes: string | null
   nfNumber: string | null
   senderCnpj: string | null
+  recipientCnpj: string | null
   lastTracking: string | null
   lastTrackingAt: string | null
   createdAt: string
@@ -53,6 +54,7 @@ export interface OrderSummary {
   IN_TRANSIT: number
   DELIVERED: number
   CANCELLED: number
+  DELAYED: number
   TOTAL: number
 }
 
@@ -63,5 +65,6 @@ export interface OrderFilters {
   search?: string
   nfNumber?: string
   senderCnpj?: string
+  delayed?: boolean
   page?: number
 }

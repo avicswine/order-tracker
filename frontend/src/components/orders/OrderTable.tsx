@@ -1,6 +1,6 @@
 import type { Order } from '../../types'
 import { StatusBadge } from '../ui/Badge'
-import { formatDate } from '../../lib/utils'
+import { formatDate, isOccurrenceEvent } from '../../lib/utils'
 import { Spinner } from '../ui/Spinner'
 
 interface Props {
@@ -71,10 +71,34 @@ export function OrderTable({ orders, isLoading, onViewDetails, meta, onPageChang
                   )}
                 </td>
                 <td className="py-3 pr-4">
-                  <StatusBadge status={order.status} />
+                  <div className="flex items-center gap-1.5">
+                    <StatusBadge status={order.status} />
+                    {isOccurrenceEvent(order.lastTracking) && (
+                      <span title={order.lastTracking ?? ''} className="text-orange-500 cursor-help" aria-label="Intercorrência">⚠️</span>
+                    )}
+                  </div>
                 </td>
                 <td className="py-3 pr-4 text-gray-600">{formatDate(order.shippedAt)}</td>
-                <td className="py-3 pr-4 text-gray-600">{formatDate(order.estimatedDelivery)}</td>
+                <td className="py-3 pr-4">
+                  {order.estimatedDelivery ? (
+                    <span className={
+                      order.status !== 'DELIVERED' && order.status !== 'CANCELLED' &&
+                      new Date(order.estimatedDelivery) < new Date()
+                        ? 'text-orange-600 font-medium'
+                        : 'text-gray-600'
+                    }>
+                      {formatDate(order.estimatedDelivery)}
+                      {order.status !== 'DELIVERED' && order.status !== 'CANCELLED' &&
+                       new Date(order.estimatedDelivery) < new Date() && (
+                        <span className="ml-1 text-xs bg-orange-100 text-orange-700 px-1 py-0.5 rounded">
+                          atrasado
+                        </span>
+                      )}
+                    </span>
+                  ) : (
+                    <span className="text-gray-600">—</span>
+                  )}
+                </td>
                 <td className="py-3 text-right">
                   <button
                     onClick={() => onViewDetails(order)}

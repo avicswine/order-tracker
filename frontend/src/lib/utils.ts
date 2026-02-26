@@ -52,6 +52,20 @@ export const SENDER_COMPANIES = [
   { cnpj: '56.633.474/0001-25', name: 'Equipage' },
 ]
 
+const OCCURRENCE_KEYWORDS = [
+  'TENTATIVA DE ENTREGA', 'DESTINATÁRIO AUSENTE', 'ENDEREÇO NÃO ENCONTRADO',
+  'ENDERECO NAO ENCONTRADO', 'ENDEREÇO INCORRETO', 'ESTABELECIMENTO FECHADO',
+  'AVARIA', 'EXTRAVIO', 'RETIDO', 'RECUSADO', 'SUSTADO', 'IMPEDIMENTO',
+]
+
+export function isOccurrenceEvent(text: string | null | undefined): boolean {
+  if (!text) return false
+  const t = text.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  return OCCURRENCE_KEYWORDS.some((kw) =>
+    t.includes(kw.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''))
+  )
+}
+
 export function formatPhone(value: string) {
   return value
     .replace(/\D/g, '')

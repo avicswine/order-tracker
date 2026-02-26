@@ -107,6 +107,11 @@ export function CarrierFormModal({ open, onClose, carrier }: Props) {
             <option value="NONE">Não configurado</option>
             <option value="SSW">SSW (ssw.inf.br)</option>
             <option value="SENIOR">Senior TCK</option>
+            <option value="SAO_MIGUEL">Expresso São Miguel (API)</option>
+            <option value="ATUAL_CARGAS">Atual Cargas (Portal)</option>
+            <option value="RODONAVES">Rodonaves (API)</option>
+            <option value="BRASPRESS">Braspress (API)</option>
+            <option value="PUPPETEER">Portal Web (automação)</option>
           </select>
         </div>
 
@@ -130,6 +135,36 @@ export function CarrierFormModal({ open, onClose, carrier }: Props) {
               placeholder="Ex: trdtransportes"
               {...register('trackingIdentifier')}
             />
+          </div>
+        )}
+
+        {trackingSystem === 'SAO_MIGUEL' && (
+          <div>
+            <label className="label">CNPJ usado na consulta</label>
+            <select className="input" {...register('trackingIdentifier')}>
+              <option value="remetente">Remetente (CNPJ da empresa)</option>
+              <option value="destinatario">Destinatário (CNPJ do cliente)</option>
+            </select>
+          </div>
+        )}
+
+        {trackingSystem === 'BRASPRESS' && (
+          <div>
+            <label className="label">CNPJ usado na consulta</label>
+            <select className="input" {...register('trackingIdentifier')}>
+              <option value="remetente">Remetente (CNPJ da empresa)</option>
+              <option value="destinatario">Destinatário (CNPJ do cliente)</option>
+            </select>
+          </div>
+        )}
+
+        {trackingSystem === 'PUPPETEER' && (
+          <div>
+            <label className="label">Portal da transportadora</label>
+            <select className="input" {...register('trackingIdentifier')}>
+              <option value="">Selecione o portal...</option>
+              <option value="EXPRESSO_SAO_MIGUEL">Expresso São Miguel</option>
+            </select>
           </div>
         )}
 

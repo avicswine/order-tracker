@@ -17,6 +17,7 @@ router.get(
     query('senderCnpj').optional().trim(),
     query('page').optional().isInt({ min: 1 }).toInt(),
     query('limit').optional().isInt({ min: 1, max: 100 }).toInt(),
+    query('delayed').optional().isBoolean().toBoolean(),
   ],
   async (req: Request, res: Response) => {
     const errors = validationResult(req)
@@ -52,6 +53,13 @@ router.get(
 
     if (req.query.senderCnpj) {
       where.senderCnpj = req.query.senderCnpj as string
+    }
+
+    if (String(req.query.delayed) === 'true') {
+      where.estimatedDelivery = { lt: new Date() }
+      if (!where.status) {
+        where.status = { in: [OrderStatus.PENDING, OrderStatus.IN_TRANSIT] }
+      }
     }
 
     try {
@@ -94,7 +102,13 @@ router.get('/summary', async (_req: Request, res: Response) => {
     )
 
     const total = await prisma.order.count()
-    res.json({ ...summary, TOTAL: total })
+    const delayed = await prisma.order.count({
+      where: {
+        estimatedDelivery: { lt: new Date() },
+        status: { in: [OrderStatus.PENDING, OrderStatus.IN_TRANSIT] },
+      },
+    })
+    res.json({ ...summary, TOTAL: total, DELAYED: delayed })
   } catch {
     res.status(500).json({ error: 'Failed to fetch summary' })
   }
@@ -130,6 +144,7 @@ router.post(
     body('notes').optional().trim(),
     body('nfNumber').optional().trim(),
     body('senderCnpj').optional().trim(),
+    body('recipientCnpj').optional().trim(),
   ],
   async (req: Request, res: Response) => {
     const errors = validationResult(req)
@@ -149,6 +164,7 @@ router.post(
           notes: req.body.notes,
           nfNumber: req.body.nfNumber,
           senderCnpj: req.body.senderCnpj,
+          recipientCnpj: req.body.recipientCnpj,
           statusHistory: { create: { status: OrderStatus.PENDING, note: 'Order created' } },
         },
         include: { carrier: true, statusHistory: true },
@@ -213,6 +229,7 @@ router.put(
     body('notes').optional().trim(),
     body('nfNumber').optional().trim(),
     body('senderCnpj').optional().trim(),
+    body('recipientCnpj').optional().trim(),
   ],
   async (req: Request, res: Response) => {
     const errors = validationResult(req)
@@ -236,6 +253,7 @@ router.put(
           ...(req.body.notes !== undefined && { notes: req.body.notes }),
           ...(req.body.nfNumber !== undefined && { nfNumber: req.body.nfNumber }),
           ...(req.body.senderCnpj !== undefined && { senderCnpj: req.body.senderCnpj }),
+          ...(req.body.recipientCnpj !== undefined && { recipientCnpj: req.body.recipientCnpj }),
         },
         include: { carrier: true },
       })

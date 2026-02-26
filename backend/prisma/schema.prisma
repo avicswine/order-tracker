@@ -36,6 +36,7 @@ model Order {
   notes             String?
   nfNumber          String?
   senderCnpj        String?
+  recipientCnpj     String?
   lastTracking      String?
   lastTrackingAt    DateTime?
   createdAt         DateTime      @default(now())
@@ -66,5 +67,10 @@ enum OrderStatus {
 enum TrackingSystem {
   SSW
   SENIOR
+  PUPPETEER
+  SAO_MIGUEL
+  ATUAL_CARGAS
+  RODONAVES
+  BRASPRESS
   NONE
 }

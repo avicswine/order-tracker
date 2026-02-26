@@ -4,7 +4,7 @@ import { ordersApi } from '../../lib/api'
 import { Modal } from '../ui/Modal'
 import { StatusBadge } from '../ui/Badge'
 import { Spinner } from '../ui/Spinner'
-import { formatDate, formatDateTime, STATUS_LABELS, SENDER_COMPANIES } from '../../lib/utils'
+import { formatDate, formatDateTime, STATUS_LABELS, SENDER_COMPANIES, isOccurrenceEvent } from '../../lib/utils'
 import type { Order, OrderStatus } from '../../types'
 
 const STATUS_ORDER: OrderStatus[] = ['PENDING', 'IN_TRANSIT', 'DELIVERED', 'CANCELLED']
@@ -80,7 +80,18 @@ export function OrderDetailModal({ order, onClose }: Props) {
             </div>
             <div>
               <p className="text-xs text-gray-500">Previsão de Entrega</p>
-              <p className="font-medium">{formatDate(data.estimatedDelivery)}</p>
+              <p className={`font-medium ${
+                data.estimatedDelivery && data.status !== 'DELIVERED' && data.status !== 'CANCELLED' &&
+                new Date(data.estimatedDelivery) < new Date()
+                  ? 'text-orange-600'
+                  : ''
+              }`}>
+                {formatDate(data.estimatedDelivery)}
+                {data.estimatedDelivery && data.status !== 'DELIVERED' && data.status !== 'CANCELLED' &&
+                 new Date(data.estimatedDelivery) < new Date() && (
+                  <span className="ml-2 text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded">atrasado</span>
+                )}
+              </p>
             </div>
             {data.deliveredAt && (
               <div>
@@ -110,6 +121,21 @@ export function OrderDetailModal({ order, onClose }: Props) {
               </div>
             )}
           </div>
+
+          {/* Último rastreio do carrier */}
+          {data.lastTracking && (
+            <div className={`rounded-lg p-3 ${isOccurrenceEvent(data.lastTracking) ? 'bg-orange-50 border border-orange-200' : 'bg-blue-50 border border-blue-100'}`}>
+              <p className={`text-xs font-semibold uppercase tracking-wide mb-1 ${isOccurrenceEvent(data.lastTracking) ? 'text-orange-600' : 'text-blue-600'}`}>
+                {isOccurrenceEvent(data.lastTracking) ? '⚠️ Intercorrência' : 'Último Rastreio'}
+              </p>
+              <p className={`text-sm font-medium ${isOccurrenceEvent(data.lastTracking) ? 'text-orange-800' : 'text-blue-800'}`}>
+                {data.lastTracking}
+              </p>
+              {data.lastTrackingAt && (
+                <p className="text-xs text-gray-500 mt-0.5">{formatDateTime(data.lastTrackingAt)}</p>
+              )}
+            </div>
+          )}
 
           {/* Status history */}
           <div>
