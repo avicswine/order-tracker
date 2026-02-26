@@ -17,6 +17,7 @@ interface FormData {
   notes: string
   nfNumber: string
   senderCnpj: string
+  recipientCnpj: string
 }
 
 interface Props {
@@ -49,6 +50,7 @@ export function OrderFormModal({ open, onClose, order }: Props) {
         notes: order?.notes ?? '',
         nfNumber: order?.nfNumber ?? '',
         senderCnpj: order?.senderCnpj ?? '',
+        recipientCnpj: order?.recipientCnpj ?? '',
       })
     }
   }, [open, order, reset])
@@ -143,6 +145,15 @@ export function OrderFormModal({ open, onClose, order }: Props) {
                 <option key={c.cnpj} value={c.cnpj}>{c.name}</option>
               ))}
             </select>
+          </div>
+
+          <div>
+            <label className="label">CNPJ do Destinatário</label>
+            <input
+              className="input"
+              placeholder="00.000.000/0000-00"
+              {...register('recipientCnpj')}
+            />
           </div>
         </div>
 
