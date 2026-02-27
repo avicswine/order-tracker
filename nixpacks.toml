@@ -1,2 +1,2 @@
 [phases.setup]
-nixPkgs = ["chromium", "nss", "freetype", "harfbuzz"]
+nixPkgs = ["nodejs_20", "chromium", "nss", "freetype", "harfbuzz"]
