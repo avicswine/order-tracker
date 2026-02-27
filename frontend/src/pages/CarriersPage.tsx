@@ -3,9 +3,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { carriersApi } from '../lib/api'
 import { CarrierFormModal } from '../components/carriers/CarrierForm'
 import { Spinner } from '../components/ui/Spinner'
+import { useAuth } from '../contexts/AuthContext'
 import type { Carrier } from '../types'
 
 export function CarriersPage() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'ADMIN'
   const qc = useQueryClient()
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Carrier | null>(null)
@@ -43,12 +46,14 @@ export function CarriersPage() {
           <h1 className="text-2xl font-bold text-gray-900">Transportadoras</h1>
           <p className="text-sm text-gray-500 mt-0.5">Cadastre e gerencie suas transportadoras</p>
         </div>
-        <button className="btn-primary" onClick={() => setFormOpen(true)}>
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Nova Transportadora
-        </button>
+        {isAdmin && (
+          <button className="btn-primary" onClick={() => setFormOpen(true)}>
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Nova Transportadora
+          </button>
+        )}
       </div>
 
       {/* Table */}
@@ -74,7 +79,7 @@ export function CarriersPage() {
                 <th className="px-6 py-3 text-left font-medium text-gray-500">Telefone</th>
                 <th className="px-6 py-3 text-left font-medium text-gray-500">Pedidos</th>
                 <th className="px-6 py-3 text-left font-medium text-gray-500">Status</th>
-                <th className="px-6 py-3" />
+                {isAdmin && <th className="px-6 py-3" />}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -96,22 +101,24 @@ export function CarriersPage() {
                       {carrier.active ? 'Ativa' : 'Inativa'}
                     </span>
                   </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        onClick={() => handleEdit(carrier)}
-                        className="text-blue-600 hover:text-blue-800 text-xs font-medium"
-                      >
-                        Editar
-                      </button>
-                      <button
-                        onClick={() => setDeleteTarget(carrier)}
-                        className="text-red-500 hover:text-red-700 text-xs font-medium"
-                      >
-                        Excluir
-                      </button>
-                    </div>
-                  </td>
+                  {isAdmin && (
+                    <td className="px-6 py-4">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => handleEdit(carrier)}
+                          className="text-blue-600 hover:text-blue-800 text-xs font-medium"
+                        >
+                          Editar
+                        </button>
+                        <button
+                          onClick={() => setDeleteTarget(carrier)}
+                          className="text-red-500 hover:text-red-700 text-xs font-medium"
+                        >
+                          Excluir
+                        </button>
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

@@ -6,6 +6,8 @@ import carriersRouter from './routes/carriers'
 import ordersRouter from './routes/orders'
 import blingRouter from './routes/bling'
 import trackingRouter, { runTrackingSync } from './routes/tracking'
+import authRouter from './routes/auth'
+import { requireAuth } from './middleware/auth'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -21,10 +23,11 @@ if (isProd) {
 
 app.use(express.json())
 
-app.use('/api/carriers', carriersRouter)
-app.use('/api/orders', ordersRouter)
-app.use('/api/bling', blingRouter)
-app.use('/api/tracking', trackingRouter)
+app.use('/api/auth', authRouter)
+app.use('/api/carriers', requireAuth, carriersRouter)
+app.use('/api/orders', requireAuth, ordersRouter)
+app.use('/api/bling', requireAuth, blingRouter)
+app.use('/api/tracking', requireAuth, trackingRouter)
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })

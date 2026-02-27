@@ -1,0 +1,6 @@
+{
+  "scripts": {
+    "build": "cd frontend && npm install && npm run build && cd ../backend && npm install && npx prisma generate && npm run build",
+    "start": "cd backend && npx prisma migrate deploy && node dist/server.js"
+  }
+}

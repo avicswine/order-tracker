@@ -53,8 +53,19 @@ router.get(
           const delayed = c.orders.filter(
             (o) =>
               o.estimatedDelivery &&
-              new Date(o.estimatedDelivery) < now &&
-              (o.status === OrderStatus.PENDING || o.status === OrderStatus.IN_TRANSIT)
+              (
+                // Ainda em aberto e já passou a previsão
+                (new Date(o.estimatedDelivery) < now &&
+                  (o.status === OrderStatus.PENDING || o.status === OrderStatus.IN_TRANSIT)) ||
+                // Entregue, mas depois da data prevista (compara só a data, ignora hora)
+                (o.status === OrderStatus.DELIVERED &&
+                  o.deliveredAt !== null &&
+                  (() => {
+                    const d = new Date(o.deliveredAt!); d.setHours(0, 0, 0, 0)
+                    const e = new Date(o.estimatedDelivery!); e.setHours(0, 0, 0, 0)
+                    return d > e
+                  })())
+              )
           ).length
           const totalNfValue = c.orders.reduce((sum, o) => sum + (o.nfValue ?? 0), 0)
 

@@ -1,4 +1,5 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
+import { useAuth } from '../../contexts/AuthContext'
 
 const navItems = [
   {
@@ -34,6 +35,14 @@ const navItems = [
 ]
 
 export function Sidebar() {
+  const { user, logout } = useAuth()
+  const navigate = useNavigate()
+
+  function handleLogout() {
+    logout()
+    navigate('/login')
+  }
+
   return (
     <aside className="fixed inset-y-0 left-0 z-40 w-60 bg-gray-900 flex flex-col">
       {/* Logo */}
@@ -72,8 +81,23 @@ export function Sidebar() {
         ))}
       </nav>
 
-      <div className="px-6 py-4 border-t border-gray-800">
-        <p className="text-xs text-gray-500">v1.0.0</p>
+      <div className="px-4 py-4 border-t border-gray-800 space-y-3">
+        {user && (
+          <div className="px-2">
+            <p className="text-xs font-medium text-white truncate">{user.name}</p>
+            <p className="text-xs text-gray-500">{user.role === 'ADMIN' ? 'Administrador' : 'Visualizador'}</p>
+          </div>
+        )}
+        <button
+          onClick={handleLogout}
+          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-gray-400 hover:bg-gray-800 hover:text-white transition-colors"
+        >
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+          </svg>
+          Sair
+        </button>
       </div>
     </aside>
   )

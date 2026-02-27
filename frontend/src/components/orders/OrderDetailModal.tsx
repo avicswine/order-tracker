@@ -5,6 +5,7 @@ import { Modal } from '../ui/Modal'
 import { StatusBadge } from '../ui/Badge'
 import { Spinner } from '../ui/Spinner'
 import { formatDate, formatDateTime, STATUS_LABELS, SENDER_COMPANIES, isOccurrenceEvent } from '../../lib/utils'
+import { useAuth } from '../../contexts/AuthContext'
 import type { Order, OrderStatus, TrackingEvent } from '../../types'
 
 const STATUS_ORDER: OrderStatus[] = ['PENDING', 'IN_TRANSIT', 'DELIVERED', 'CANCELLED']
@@ -15,6 +16,8 @@ interface Props {
 }
 
 export function OrderDetailModal({ order, onClose }: Props) {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'ADMIN'
   const qc = useQueryClient()
   const [newStatus, setNewStatus] = useState<OrderStatus | ''>('')
   const [note, setNote] = useState('')
@@ -201,7 +204,7 @@ export function OrderDetailModal({ order, onClose }: Props) {
           </div>
 
           {/* Update status */}
-          {data.status !== 'DELIVERED' && data.status !== 'CANCELLED' && (
+          {isAdmin && data.status !== 'DELIVERED' && data.status !== 'CANCELLED' && (
             <div className="rounded-lg border border-dashed border-gray-300 p-4 space-y-3">
               <h3 className="text-sm font-semibold text-gray-700">Atualizar Status</h3>
               <div className="flex gap-3">

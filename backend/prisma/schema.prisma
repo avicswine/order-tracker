@@ -64,6 +64,24 @@ model StatusHistory {
   @@map("status_history")
 }
 
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      UserRole @default(VIEWER)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN
+  VIEWER
+}
+
 enum OrderStatus {
   PENDING
   IN_TRANSIT

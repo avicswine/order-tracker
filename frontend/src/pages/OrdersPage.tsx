@@ -7,9 +7,12 @@ import { OrderTable } from '../components/orders/OrderTable'
 import { OrderDetailModal } from '../components/orders/OrderDetailModal'
 import { OrderFormModal } from '../components/orders/OrderFormModal'
 import { BlingSync } from '../components/orders/BlingSync'
+import { useAuth } from '../contexts/AuthContext'
 import type { Order, OrderFilters } from '../types'
 
 export function OrdersPage() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'ADMIN'
   const [filters, setFilters] = useState<OrderFilters>({ page: 1, sortBy: 'shippedAt', sortOrder: 'desc' })
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [showForm, setShowForm] = useState(false)
@@ -28,13 +31,15 @@ export function OrdersPage() {
           <p className="text-sm text-gray-500 mt-0.5">Gerencie e rastreie todos os pedidos</p>
         </div>
         <div className="flex items-center gap-3">
-          <BlingSync />
-          <button className="btn-primary" onClick={() => setShowForm(true)}>
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Novo Pedido
-          </button>
+          {isAdmin && <BlingSync />}
+          {isAdmin && (
+            <button className="btn-primary" onClick={() => setShowForm(true)}>
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Novo Pedido
+            </button>
+          )}
         </div>
       </div>
 

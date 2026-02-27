@@ -1,3 +1,12 @@
+export type UserRole = 'ADMIN' | 'VIEWER'
+
+export interface AuthUser {
+  id: string
+  name: string
+  email: string
+  role: UserRole
+}
+
 export type OrderStatus = 'PENDING' | 'IN_TRANSIT' | 'DELIVERED' | 'CANCELLED'
 export type TrackingSystem = 'SSW' | 'SENIOR' | 'PUPPETEER' | 'SAO_MIGUEL' | 'ATUAL_CARGAS' | 'RODONAVES' | 'BRASPRESS' | 'NONE'
 
