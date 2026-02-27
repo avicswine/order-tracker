@@ -1,11 +1,13 @@
 import axios from 'axios'
-import type { Carrier, Order, OrderFilters, OrdersResponse, OrderSummary, OrderStatus } from '../types'
+import type { Carrier, CarrierRanking, Order, OrderFilters, OrdersResponse, OrderSummary, OrderStatus } from '../types'
 
 const api = axios.create({ baseURL: import.meta.env.VITE_API_URL || '/api' })
 
 // Carriers
 export const carriersApi = {
   list: () => api.get<Carrier[]>('/carriers').then((r) => r.data),
+  ranking: (params?: { startDate?: string; endDate?: string }) =>
+    api.get<CarrierRanking[]>('/carriers/ranking', { params }).then((r) => r.data),
   get: (id: string) => api.get<Carrier>(`/carriers/${id}`).then((r) => r.data),
   create: (data: Omit<Carrier, 'id' | 'createdAt' | 'updatedAt' | '_count'>) =>
     api.post<Carrier>('/carriers', data).then((r) => r.data),

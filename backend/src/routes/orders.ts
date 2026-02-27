@@ -17,6 +17,7 @@ router.get(
     query('senderCnpj').optional().trim(),
     query('page').optional().isInt({ min: 1 }).toInt(),
     query('limit').optional().isInt({ min: 1, max: 100 }).toInt(),
+    query('carrierId').optional().trim(),
     query('delayed').optional().isBoolean().toBoolean(),
     query('sortBy').optional().isIn(['shippedAt', 'estimatedDelivery']),
     query('sortOrder').optional().isIn(['asc', 'desc']),
@@ -55,6 +56,10 @@ router.get(
 
     if (req.query.senderCnpj) {
       where.senderCnpj = req.query.senderCnpj as string
+    }
+
+    if (req.query.carrierId) {
+      where.carrierId = req.query.carrierId as string
     }
 
     if (String(req.query.delayed) === 'true') {

@@ -1,9 +1,99 @@
 import { Router, Request, Response } from 'express'
-import { body, param, validationResult } from 'express-validator'
+import { body, param, query, validationResult } from 'express-validator'
 import { prisma } from '../lib/prisma'
-import { TrackingSystem } from '@prisma/client'
+import { TrackingSystem, OrderStatus } from '@prisma/client'
 
 const router = Router()
+
+// GET /carriers/ranking
+router.get(
+  '/ranking',
+  [
+    query('startDate').optional().isISO8601(),
+    query('endDate').optional().isISO8601(),
+  ],
+  async (req: Request, res: Response) => {
+    const errors = validationResult(req)
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() })
+
+    const dateFilter: Record<string, unknown> = {}
+    if (req.query.startDate || req.query.endDate) {
+      dateFilter.nfIssuedAt = {
+        ...(req.query.startDate && { gte: new Date(req.query.startDate as string) }),
+        ...(req.query.endDate && { lte: new Date(req.query.endDate as string) }),
+      }
+    }
+
+    try {
+      const carriers = await prisma.carrier.findMany({
+        where: { active: true },
+        orderBy: { name: 'asc' },
+        include: {
+          orders: {
+            where: dateFilter,
+            select: {
+              status: true,
+              estimatedDelivery: true,
+              shippedAt: true,
+              deliveredAt: true,
+              nfValue: true,
+            },
+          },
+        },
+      })
+
+      const now = new Date()
+
+      const ranking = carriers
+        .filter((c) => c.orders.length > 0)
+        .map((c) => {
+          const total = c.orders.length
+          const delivered = c.orders.filter((o) => o.status === OrderStatus.DELIVERED).length
+          const cancelled = c.orders.filter((o) => o.status === OrderStatus.CANCELLED).length
+          const delayed = c.orders.filter(
+            (o) =>
+              o.estimatedDelivery &&
+              new Date(o.estimatedDelivery) < now &&
+              (o.status === OrderStatus.PENDING || o.status === OrderStatus.IN_TRANSIT)
+          ).length
+          const totalNfValue = c.orders.reduce((sum, o) => sum + (o.nfValue ?? 0), 0)
+
+          // Tempo médio de entrega (dias entre shippedAt e deliveredAt)
+          const deliveredWithDates = c.orders.filter(
+            (o) => o.status === OrderStatus.DELIVERED && o.shippedAt && o.deliveredAt
+          )
+          const avgDeliveryDays =
+            deliveredWithDates.length > 0
+              ? deliveredWithDates.reduce((sum, o) => {
+                  const days = (new Date(o.deliveredAt!).getTime() - new Date(o.shippedAt!).getTime()) / 86400000
+                  return sum + days
+                }, 0) / deliveredWithDates.length
+              : null
+
+          return {
+            carrierId: c.id,
+            carrierName: c.name,
+            trackingSystem: c.trackingSystem,
+            total,
+            delivered,
+            cancelled,
+            delayed,
+            inTransit: c.orders.filter((o) => o.status === OrderStatus.IN_TRANSIT).length,
+            pending: c.orders.filter((o) => o.status === OrderStatus.PENDING).length,
+            deliveryRate: total > 0 ? delivered / total : 0,
+            delayRate: total > 0 ? delayed / total : 0,
+            totalNfValue,
+            avgDeliveryDays: avgDeliveryDays !== null ? Math.round(avgDeliveryDays * 10) / 10 : null,
+          }
+        })
+        .sort((a, b) => b.total - a.total)
+
+      res.json(ranking)
+    } catch {
+      res.status(500).json({ error: 'Failed to fetch ranking' })
+    }
+  }
+)
 
 // GET /carriers
 router.get('/', async (_req: Request, res: Response) => {

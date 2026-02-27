@@ -5,7 +5,7 @@ import { Modal } from '../ui/Modal'
 import { StatusBadge } from '../ui/Badge'
 import { Spinner } from '../ui/Spinner'
 import { formatDate, formatDateTime, STATUS_LABELS, SENDER_COMPANIES, isOccurrenceEvent } from '../../lib/utils'
-import type { Order, OrderStatus } from '../../types'
+import type { Order, OrderStatus, TrackingEvent } from '../../types'
 
 const STATUS_ORDER: OrderStatus[] = ['PENDING', 'IN_TRANSIT', 'DELIVERED', 'CANCELLED']
 
@@ -132,8 +132,37 @@ export function OrderDetailModal({ order, onClose }: Props) {
             )
           })()}
 
-          {/* Último rastreio do carrier */}
-          {data.lastTracking && (
+          {/* Rastreamento completo */}
+          {data.trackingEvents && data.trackingEvents.length > 0 ? (
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900 mb-3">Rastreamento</h3>
+              <div className="space-y-0 max-h-64 overflow-y-auto">
+                {(data.trackingEvents as TrackingEvent[]).map((event, idx) => {
+                  const isFirst = idx === 0
+                  const isLast = idx === (data.trackingEvents as TrackingEvent[]).length - 1
+                  const isOccurrence = isOccurrenceEvent(event.description)
+                  const isDelivery = event.description.toUpperCase().includes('ENTREGUE') || event.description.toUpperCase().includes('ENTREGA REALIZADA') || event.description.toUpperCase().includes('ENTREGA EFETUADA')
+                  const dotColor = isOccurrence ? 'bg-orange-400' : isDelivery ? 'bg-green-500' : isFirst ? 'bg-blue-500' : 'bg-gray-300'
+                  return (
+                    <div key={idx} className="flex gap-3">
+                      <div className="flex flex-col items-center">
+                        <div className={`h-2.5 w-2.5 rounded-full mt-1 flex-shrink-0 ${dotColor}`} />
+                        {!isLast && <div className="w-px flex-1 bg-gray-200 mt-1 mb-0" />}
+                      </div>
+                      <div className={`pb-3 ${isFirst ? '' : 'opacity-75'}`}>
+                        <p className={`text-sm font-medium ${isOccurrence ? 'text-orange-700' : isDelivery ? 'text-green-700' : 'text-gray-800'}`}>
+                          {event.description}
+                        </p>
+                        {event.date && (
+                          <p className="text-xs text-gray-400 mt-0.5">{formatDateTime(event.date)}</p>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ) : data.lastTracking ? (
             <div className={`rounded-lg p-3 ${isOccurrenceEvent(data.lastTracking) ? 'bg-orange-50 border border-orange-200' : 'bg-blue-50 border border-blue-100'}`}>
               <p className={`text-xs font-semibold uppercase tracking-wide mb-1 ${isOccurrenceEvent(data.lastTracking) ? 'text-orange-600' : 'text-blue-600'}`}>
                 {isOccurrenceEvent(data.lastTracking) ? '⚠️ Intercorrência' : 'Último Rastreio'}
@@ -145,7 +174,7 @@ export function OrderDetailModal({ order, onClose }: Props) {
                 <p className="text-xs text-gray-500 mt-0.5">{formatDateTime(data.lastTrackingAt)}</p>
               )}
             </div>
-          )}
+          ) : null}
 
           {/* Status history */}
           <div>

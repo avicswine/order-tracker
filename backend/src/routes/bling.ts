@@ -265,7 +265,15 @@ router.post('/sync', async (_req: Request, res: Response) => {
           where: { nfNumber: String(nf.numero), senderCnpj: company.cnpj },
         })
 
-        if (existing) { ignorados++; continue }
+        if (existing) {
+          // Preenche customerPhone se ainda não está salvo
+          const phone = nf.contato?.telefone?.replace(/\D/g, '') || null
+          if (phone && !existing.customerPhone) {
+            await prisma.order.update({ where: { id: existing.id }, data: { customerPhone: phone } })
+          }
+          ignorados++
+          continue
+        }
 
         const carrierId = await resolveCarrier(companyKey, nf.id, nf.numero)
 
@@ -277,7 +285,10 @@ router.post('/sync', async (_req: Request, res: Response) => {
             orderNumber: `${company.code}-NF-${nf.numero}`,
             customerName: nf.contato?.nome ?? 'Cliente não informado',
             customerEmail: nf.contato?.email ?? null,
+            customerPhone: nf.contato?.telefone?.replace(/\D/g, '') || null,
             nfNumber: String(nf.numero),
+            nfValue: nf.valor ?? null,
+            nfIssuedAt: nf.dataEmissao ? new Date(nf.dataEmissao) : null,
             senderCnpj: company.cnpj,
             recipientCnpj: nf.destinatario?.numeroDocumento?.replace(/\D/g, '') ?? null,
             carrierId,
@@ -422,6 +433,99 @@ router.post('/enrich', async (_req: Request, res: Response) => {
   res.json({ message: 'Enriquecimento concluído', atualizados, semDados })
 })
 
+// POST /api/bling/backfill-nf-values - preenche nfValue e nfIssuedAt nos pedidos existentes
+// O valorNota não está na listagem — busca via /nfe/:id para cada pedido
+// nfIssuedAt vem da listagem (dataEmissao) — salvo no mapa para evitar chamadas extras
+router.post('/backfill-nf-values', async (_req: Request, res: Response) => {
+  const connectedCompanies = Object.keys(COMPANIES).filter((key) => !!tokens[key])
+  if (connectedCompanies.length === 0) {
+    return res.status(401).json({ error: 'Nenhuma empresa conectada ao Bling.' })
+  }
+
+  const ordersToFill = await prisma.order.findMany({
+    where: { OR: [{ nfValue: null }, { nfIssuedAt: null }], nfNumber: { not: null } },
+    select: { id: true, nfNumber: true, senderCnpj: true },
+  })
+
+  if (ordersToFill.length === 0) {
+    return res.json({ message: 'Todos os pedidos já têm valor e data de emissão preenchidos.', atualizados: 0 })
+  }
+
+  console.log(`[BackfillValues] ${ordersToFill.length} pedidos para preencher`)
+
+  // Monta mapa nfNum|companyCnpj → { blingId, dataEmissao } paginando listagem
+  const nfIdMap: Record<string, { blingId: number; companyKey: string; dataEmissao?: string }> = {}
+  const nfNumbersNeeded = new Set(ordersToFill.map((o) => String(parseInt(o.nfNumber!, 10))))
+
+  const dataInicio = new Date()
+  dataInicio.setDate(dataInicio.getDate() - 365)
+  const dataInicioStr = dataInicio.toISOString().slice(0, 10)
+
+  for (const companyKey of connectedCompanies) {
+    const company = COMPANIES[companyKey]
+    let pagina = 1
+
+    while (true) {
+      try {
+        const data = await blingGet(companyKey, `/nfe?pagina=${pagina}&limite=100&dataEmissaoInicial=${dataInicioStr}`)
+        const nfes: BlingNFe[] = (data as Record<string, unknown>)?.data as BlingNFe[] ?? []
+        if (nfes.length === 0) break
+
+        for (const nf of nfes) {
+          const numSemZero = String(parseInt(String(nf.numero), 10))
+          if (nfNumbersNeeded.has(numSemZero)) {
+            nfIdMap[`${numSemZero}|${company.cnpj}`] = { blingId: nf.id, companyKey, dataEmissao: nf.dataEmissao }
+          }
+        }
+
+        if (nfes.length < 100) break
+        pagina++
+        await new Promise((r) => setTimeout(r, 300))
+      } catch (err) {
+        console.error(`[BackfillValues] Erro ao listar NFs de ${companyKey}:`, err)
+        break
+      }
+    }
+    console.log(`[BackfillValues] ${company.name}: ${pagina} páginas escaneadas`)
+  }
+
+  console.log(`[BackfillValues] ${Object.keys(nfIdMap).length} NFs encontradas no Bling`)
+
+  let atualizados = 0
+  let semDados = 0
+
+  for (const order of ordersToFill) {
+    const nfNum = String(parseInt(order.nfNumber!, 10))
+    const entry = nfIdMap[`${nfNum}|${order.senderCnpj}`]
+
+    if (!entry) { semDados++; continue }
+
+    try {
+      const detail = await blingGet(entry.companyKey, `/nfe/${entry.blingId}`)
+      const detailData = (detail as Record<string, unknown>)?.data as Record<string, unknown> | undefined
+      const valorNota = detailData?.valorNota as number | undefined
+      const dataEmissaoRaw = entry.dataEmissao ?? detailData?.dataEmissao as string | undefined
+
+      const updates: Record<string, unknown> = {}
+      if (valorNota != null) updates.nfValue = valorNota
+      if (dataEmissaoRaw) updates.nfIssuedAt = new Date(dataEmissaoRaw)
+
+      if (Object.keys(updates).length === 0) { semDados++; continue }
+
+      await prisma.order.update({ where: { id: order.id }, data: updates })
+      console.log(`[BackfillValues] NF ${order.nfNumber}: R$ ${valorNota ?? '-'} | emissão: ${dataEmissaoRaw ?? '-'}`)
+      atualizados++
+      await new Promise((r) => setTimeout(r, 500))
+    } catch (err) {
+      console.error(`[BackfillValues] Erro ao buscar detalhe NF ${order.nfNumber}:`, err)
+      semDados++
+    }
+  }
+
+  console.log(`[BackfillValues] Concluído: ${atualizados} atualizados, ${semDados} sem dados`)
+  res.json({ message: 'Backfill concluído', atualizados, semDados, total: ordersToFill.length })
+})
+
 // POST /api/bling/disconnect/:company - desconecta uma empresa
 router.post('/disconnect/:company', (req: Request, res: Response) => {
   delete tokens[req.params.company]
@@ -432,7 +536,9 @@ router.post('/disconnect/:company', (req: Request, res: Response) => {
 interface BlingNFe {
   id: number
   numero: number
-  contato?: { nome?: string; email?: string }
+  valor?: number
+  dataEmissao?: string
+  contato?: { nome?: string; email?: string; telefone?: string }
   destinatario?: { numeroDocumento?: string; nome?: string }
   transportador?: { nome?: string; cpfCnpj?: string }
 }

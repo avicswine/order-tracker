@@ -1,5 +1,7 @@
+import { useQuery } from '@tanstack/react-query'
 import type { OrderFilters, OrderStatus } from '../../types'
 import { STATUS_LABELS, SENDER_COMPANIES } from '../../lib/utils'
+import { carriersApi } from '../../lib/api'
 
 const STATUS_OPTIONS: { value: OrderStatus | ''; label: string }[] = [
   { value: '', label: 'Todos os status' },
@@ -15,6 +17,8 @@ interface Props {
 }
 
 export function OrderFiltersBar({ filters, onChange }: Props) {
+  const { data: carriers } = useQuery({ queryKey: ['carriers'], queryFn: carriersApi.list })
+
   return (
     <div className="flex flex-wrap gap-3 items-end">
       {/* Search */}
@@ -83,6 +87,21 @@ export function OrderFiltersBar({ filters, onChange }: Props) {
         </select>
       </div>
 
+      {/* Transportadora */}
+      <div className="w-44">
+        <label className="label">Transportadora</label>
+        <select
+          className="input"
+          value={filters.carrierId ?? ''}
+          onChange={(e) => onChange({ ...filters, carrierId: e.target.value, page: 1 })}
+        >
+          <option value="">Todas</option>
+          {carriers?.map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
+      </div>
+
       {/* Nº da NF */}
       <div className="w-36">
         <label className="label">Nº da NF</label>
@@ -109,7 +128,7 @@ export function OrderFiltersBar({ filters, onChange }: Props) {
       </div>
 
       {/* Clear */}
-      {(filters.search || filters.status || filters.startDate || filters.endDate || filters.senderCnpj || filters.nfNumber || filters.delayed) && (
+      {(filters.search || filters.status || filters.startDate || filters.endDate || filters.senderCnpj || filters.carrierId || filters.nfNumber || filters.delayed) && (
         <button
           className="btn-secondary"
           onClick={() => onChange({ page: 1 })}

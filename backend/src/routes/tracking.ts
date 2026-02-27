@@ -65,6 +65,25 @@ export async function runTrackingSync(): Promise<{ atualizados: number; erros: n
         lastTrackingAt: new Date(),
       }
 
+      if (result.events) {
+        // Carrier retorna histórico completo — substitui
+        updates.trackingEvents = result.events.map((e) => ({
+          date: e.date?.toISOString() ?? null,
+          description: e.description,
+        }))
+      } else if (lastEvent) {
+        // Carrier retorna apenas evento atual (ex: Atual Cargas) — acumula
+        type StoredEvent = { date: string | null; description: string }
+        const existing = Array.isArray(order.trackingEvents)
+          ? (order.trackingEvents as StoredEvent[])
+          : []
+        // Adiciona apenas se diferente do evento mais recente já armazenado
+        const mostRecent = existing[0]?.description
+        if (lastEvent !== mostRecent) {
+          updates.trackingEvents = [{ date: new Date().toISOString(), description: lastEvent }, ...existing]
+        }
+      }
+
       if (result.shippedAt && !order.shippedAt) updates.shippedAt = result.shippedAt
       if (result.estimatedDelivery) updates.estimatedDelivery = result.estimatedDelivery
 

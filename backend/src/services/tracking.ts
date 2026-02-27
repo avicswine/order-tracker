@@ -5,12 +5,18 @@ import { createWorker } from 'tesseract.js'
 import { createCipheriv, createHash, randomBytes } from 'crypto'
 import { OrderStatus } from '@prisma/client'
 
+export interface TrackingEvent {
+  date?: Date | null
+  description: string
+}
+
 export interface TrackingResult {
   status: OrderStatus | null
   lastEvent: string | null
   shippedAt?: Date | null         // data de coleta / envio (do carrier)
   estimatedDelivery?: Date | null // previsão de entrega (do carrier)
   hasOccurrence?: boolean         // intercorrência ativa (problema na entrega)
+  events?: TrackingEvent[]        // histórico completo de eventos
   raw?: unknown
 }
 
@@ -94,6 +100,7 @@ export async function trackSSW(
   let estimatedDelivery: Date | null = null
   let hasOccurrence = false
   const SKIP = ['situação', 'download', 'remetente', 'voltar', 'n fiscal', 'csv']
+  const allEvents: TrackingEvent[] = []
 
   $('table tr').each((_i, row) => {
     const cells = $(row).find('td')
@@ -113,6 +120,7 @@ export async function trackSSW(
       if (eventDate && !shippedAt) shippedAt = eventDate
       if (detectOccurrence(situacao)) hasOccurrence = true
       lastEvent = situacao
+      allEvents.push({ date: eventDate, description: situacao })
     }
   })
 
@@ -156,6 +164,7 @@ export async function trackSSW(
     shippedAt,
     estimatedDelivery,
     hasOccurrence: hasOccurrence || undefined,
+    events: allEvents.length > 0 ? [...allEvents].reverse() : undefined, // mais recente primeiro
   }
 }
 
@@ -230,12 +239,24 @@ export async function trackSenior(
       return detectOccurrence(obs || desc)
     })
 
+    const events: TrackingEvent[] = fases
+      .map((f) => ({
+        date: f.dataExecucao ? new Date(f.dataExecucao as string) : null,
+        description:
+          (f.observacao as string | undefined) ||
+          ((f.fase as Record<string, unknown> | undefined)?.descricao as string | undefined) ||
+          '',
+      }))
+      .filter((e) => e.description)
+      .reverse() // mais recente primeiro
+
     return {
       status: lastEvent ? mapStatus(lastEvent) : null,
       lastEvent,
       shippedAt,
       estimatedDelivery: isNaN(estimatedDelivery?.getTime() ?? NaN) ? null : estimatedDelivery,
       hasOccurrence: hasOccurrence || undefined,
+      events: events.length > 0 ? events : undefined,
     }
   }
 
@@ -269,12 +290,25 @@ export async function trackSenior(
   // Intercorrências
   hasOccurrence = list.some((item) => detectOccurrence((item.situacao ?? item.descricao ?? '') as string))
 
+  const events: TrackingEvent[] = list
+    .map((item) => {
+      const dateStr = (item.data ?? item.dataOcorrencia ?? item.datahora) as string | undefined
+      const hora = (item.hora ?? '') as string
+      return {
+        date: parseBrDate(dateStr ? `${dateStr} ${hora}`.trim() : null),
+        description: ((item.situacao ?? item.descricao ?? item.fase ?? item.status ?? '') as string),
+      }
+    })
+    .filter((e) => e.description)
+    .reverse() // mais recente primeiro (list é mais antigo primeiro)
+
   return {
     status: lastEvent ? mapStatus(lastEvent) : null,
     lastEvent,
     shippedAt,
     estimatedDelivery,
     hasOccurrence: hasOccurrence || undefined,
+    events: events.length > 0 ? events : undefined,
   }
 }
 
@@ -583,8 +617,14 @@ function atualProcessList(list: AtualEncomenda[], nfBusca: string): TrackingResu
 }
 
 // --- Rodonaves ---
+// O site usa dois sistemas: RODO (endpoint v3/package) com fallback para BRUDAM (v3/brudam).
+// O endpoint antigo /bin/tracking foi descontinuado e retorna HTTP 500.
 
-const RODONAVES_TRACKING_URL = 'https://rodonaves.com.br/bin/tracking'
+const RODO_HEADERS = {
+  'Accept': 'application/json',
+  'Referer': 'https://www.rodonaves.com.br/rastreio-de-mercadoria',
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+}
 
 interface RodonavesEvent {
   Date: string
@@ -597,18 +637,30 @@ interface RodonavesResponse {
   Events?: RodonavesEvent[]
   FiscalDocumentNumber?: string
   BillOfLadingId?: number
-  EmissionDate?: string       // data de emissão/coleta (ISO com timezone)
-  ExpectedDeliveryDays?: number  // prazo em dias corridos a partir da emissão
+  EmissionDate?: string
+  ExpectedDeliveryDays?: number
+}
+
+// Resposta do sistema Brudam (dados de frete terceirizado)
+interface BrudamDado {
+  data_ocorrencia?: string  // "DD/MM/YYYY HH:mm"
+  ocorrencia?: string
+  situacao?: string
+}
+interface BrudamItem {
+  dados?: BrudamDado[]
+  razao_destinatario?: string
+}
+interface BrudamResponse {
+  success?: boolean
+  data?: BrudamItem[]
 }
 
 function rodonavesMapStatus(eventCode: string, description: string): OrderStatus | null {
   const code = String(eventCode).trim()
-  // EventCode 6 = entrega finalizada
   if (code === '6') return OrderStatus.DELIVERED
-  // EventCode 7+ podem ser devoluções
   const desc = description.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   if (desc.includes('DEVOLV') || desc.includes('RETORNO') || desc.includes('RECUSAD') || desc.includes('CANCELAD')) return OrderStatus.CANCELLED
-  // Qualquer evento ativo = em trânsito
   if (['0', '1', '1.1', '2', '3', '4', '5'].includes(code)) return OrderStatus.IN_TRANSIT
   return null
 }
@@ -618,57 +670,76 @@ export async function trackRodonaves(
   nfNumber: string
 ): Promise<TrackingResult> {
   const cnpj = senderCnpj.replace(/\D/g, '')
-  const nf = String(parseInt(nfNumber, 10)) // remove zeros à esquerda
+  const nf = String(parseInt(nfNumber, 10))
 
-  const url = new URL(RODONAVES_TRACKING_URL)
-  url.searchParams.set('TaxIdRegistration', cnpj)
-  url.searchParams.set('InvoiceNumber', nf)
-  url.searchParams.set('response', 'bypass')
+  // 1. Tenta sistema RODO (endpoint v3)
+  try {
+    const rodoUrl = `https://www.rodonaves.com.br/bin/rodonaves/trackingv3/package?TaxIdRegistration=${cnpj}&InvoiceNumber=${nf}`
+    const rodoRes = await fetch(rodoUrl, { headers: RODO_HEADERS, signal: AbortSignal.timeout(15000) })
 
-  const res = await fetch(url.toString(), {
-    headers: {
-      'Accept': 'application/json',
-      'Referer': 'https://rodonaves.com.br/rastreio-de-mercadoria',
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-    },
-    signal: AbortSignal.timeout(15000),
-  })
+    if (rodoRes.ok) {
+      const data = await rodoRes.json() as RodonavesResponse & Record<string, unknown>
 
-  if (!res.ok) {
-    return { status: null, lastEvent: `Erro: HTTP ${res.status}` }
+      if (data.Events && data.Events.length > 0) {
+        const sortedEvents = [...data.Events].sort((a, b) => new Date(b.Date).getTime() - new Date(a.Date).getTime())
+        const last = sortedEvents[0]
+        const oldest = sortedEvents[sortedEvents.length - 1]
+
+        let estimatedDelivery: Date | null = null
+        if (data.EmissionDate && data.ExpectedDeliveryDays) {
+          const base = new Date(data.EmissionDate)
+          if (!isNaN(base.getTime())) {
+            const d = new Date(base)
+            d.setDate(d.getDate() + data.ExpectedDeliveryDays)
+            estimatedDelivery = d
+          }
+        }
+
+        const hasOccurrence = sortedEvents.some((e) => detectOccurrence(e.Description)) || undefined
+        const events: TrackingEvent[] = sortedEvents.map((e) => ({ date: e.Date ? new Date(e.Date) : null, description: e.Description }))
+
+        return {
+          status: rodonavesMapStatus(last.EventCode, last.Description),
+          lastEvent: last.Description,
+          shippedAt: oldest.Date ? new Date(oldest.Date) : null,
+          estimatedDelivery,
+          hasOccurrence,
+          events: events.length > 0 ? events : undefined,
+        }
+      }
+    }
+  } catch {
+    // cai para BRUDAM
   }
 
-  const data = await res.json() as RodonavesResponse & Record<string, unknown>
+  // 2. Fallback: sistema BRUDAM
+  const brudamUrl = `https://www.rodonaves.com.br/bin/rodonaves/trackingv3/brudam?documento=${cnpj}&numero=${nf}&prefixo=cnpjnf`
+  const brudamRes = await fetch(brudamUrl, { headers: RODO_HEADERS, signal: AbortSignal.timeout(15000) })
 
-  if (!data.Events || data.Events.length === 0) {
+  if (!brudamRes.ok) {
+    return { status: null, lastEvent: `Erro: HTTP ${brudamRes.status}` }
+  }
+
+  const brudam = await brudamRes.json() as BrudamResponse
+
+  if (!brudam.success || !brudam.data || brudam.data.length === 0 || !brudam.data[0].dados?.length) {
     return { status: null, lastEvent: `Não localizado (NF ${nf})` }
   }
 
-  // Ordena: mais recente primeiro
-  const events = [...data.Events].sort((a, b) => new Date(b.Date).getTime() - new Date(a.Date).getTime())
-  const last = events[0]
-  // Evento mais antigo = coleta/envio
-  const oldest = events[events.length - 1]
+  const dados = brudam.data[0].dados!
+  const lastDado = dados[dados.length - 1]
+  const lastEvent = lastDado.ocorrencia ?? lastDado.situacao ?? null
 
-  // Rodonaves não retorna data absoluta de previsão — calcula a partir da emissão + prazo em dias
-  let estimatedDelivery: Date | null = null
-  if (data.EmissionDate && data.ExpectedDeliveryDays) {
-    const base = new Date(data.EmissionDate)
-    if (!isNaN(base.getTime())) {
-      const d = new Date(base)
-      d.setDate(d.getDate() + data.ExpectedDeliveryDays)
-      estimatedDelivery = d
-    }
-  }
-
-  const hasOccurrence = events.some((e) => detectOccurrence(e.Description)) || undefined
+  const events: TrackingEvent[] = dados.map((d) => ({
+    date: parseBrDate(d.data_ocorrencia),
+    description: d.ocorrencia ?? d.situacao ?? '',
+  })).filter((e) => e.description).reverse() // mais recente primeiro
 
   return {
-    status: rodonavesMapStatus(last.EventCode, last.Description),
-    lastEvent: last.Description,
-    shippedAt: oldest.Date ? new Date(oldest.Date) : null,
-    estimatedDelivery,
-    hasOccurrence,
+    status: lastEvent ? mapStatus(lastEvent) : null,
+    lastEvent,
+    shippedAt: parseBrDate(dados[0]?.data_ocorrencia),
+    events: events.length > 0 ? events : undefined,
   }
 }
 
@@ -784,12 +855,21 @@ export async function trackSaoMiguel(
   const lastEvent = lastTrack.title ?? null
   const hasOccurrence = cte.tracks.some((t) => detectOccurrence(t.title ?? '')) || undefined
 
+  const events: TrackingEvent[] = cte.tracks
+    .map((t) => ({
+      date: t.date ? parseBrDate(`${t.date}${t.hour ? ' ' + t.hour : ''}`.trim()) : null,
+      description: t.title ?? '',
+    }))
+    .filter((e) => e.description)
+  // cte.tracks já vem mais recente primeiro
+
   return {
     status: smMapStatus(lastTrack.control, lastTrack.title),
     lastEvent,
     shippedAt,
     estimatedDelivery,
     hasOccurrence,
+    events: events.length > 0 ? events : undefined,
     raw: data,
   }
 }
@@ -855,9 +935,18 @@ export async function trackBraspress(
   const last = trackings[trackings.length - 1]
   const descricao = last.descricao ?? last.ocorrencia ?? null
 
+  const events: TrackingEvent[] = trackings
+    .map((t) => ({
+      date: parseBrDate(t.dataOcorrencia),
+      description: t.descricao ?? t.ocorrencia ?? '',
+    }))
+    .filter((e) => e.description)
+    .reverse() // mais recente primeiro
+
   return {
     status: descricao ? mapStatus(descricao) : null,
     lastEvent: descricao,
+    events: events.length > 0 ? events : undefined,
     raw: data,
   }
 }
