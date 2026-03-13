@@ -319,7 +319,7 @@ export async function runBlingSync() {
               nfValue: nf.valor ?? null,
               nfIssuedAt: nf.dataEmissao ? new Date(nf.dataEmissao) : null,
               senderCnpj: company.cnpj,
-              recipientCnpj: nf.contato?.numeroDocumento?.replace(/\D/g, '') ?? null,
+              recipientCnpj: nf.destinatario?.numeroDocumento?.replace(/\D/g, '') ?? null,
               carrierId,
               statusHistory: { create: { status: 'PENDING', note: `Importado do Bling (${company.name})` } },
             },
@@ -606,7 +606,7 @@ router.post('/backfill-recipient-cnpj', async (_req: Request, res: Response) => 
         if (nfes.length === 0) break
         for (const nf of nfes) {
           const numSemZero = String(parseInt(String(nf.numero), 10))
-          const docRaw = nf.contato?.numeroDocumento?.replace(/\D/g, '')
+          const docRaw = nf.destinatario?.numeroDocumento?.replace(/\D/g, '')
           if (nfNumbersNeeded.has(numSemZero) && docRaw) {
             cnpjMap[`${numSemZero}|${company.cnpj}`] = docRaw
           }

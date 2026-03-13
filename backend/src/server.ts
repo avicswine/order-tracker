@@ -7,7 +7,6 @@ import ordersRouter from './routes/orders'
 import trackingRouter, { runTrackingSync } from './routes/tracking'
 import blingRouter, { runBlingSync } from './routes/bling'
 import authRouter from './routes/auth'
-import publicRouter from './routes/public'
 import { requireAuth } from './middleware/auth'
 
 const app = express()
@@ -25,7 +24,6 @@ if (isProd) {
 app.use(express.json())
 
 app.use('/api/auth', authRouter)
-app.use('/api/public', publicRouter)
 app.use('/api/carriers', requireAuth, carriersRouter)
 app.use('/api/orders', requireAuth, ordersRouter)
 app.use('/api/bling', requireAuth, blingRouter)
