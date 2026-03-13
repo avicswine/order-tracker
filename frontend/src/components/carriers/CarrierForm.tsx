@@ -182,6 +182,13 @@ export function CarrierFormModal({ open, onClose, carrier }: Props) {
           </div>
         )}
 
+        {!isEdit && trackingSystem === 'NONE' && (
+          <div className="flex items-start gap-2 rounded-lg border border-yellow-300 bg-yellow-50 px-3 py-2.5 text-sm text-yellow-800">
+            <span className="mt-0.5 flex-shrink-0">⚠️</span>
+            <span>Sistema de rastreamento não configurado. Deseja selecionar um sistema antes de cadastrar?</span>
+          </div>
+        )}
+
         {mutation.isError && (
           <p className="text-sm text-red-600">
             Erro ao salvar. Verifique o CNPJ e tente novamente.

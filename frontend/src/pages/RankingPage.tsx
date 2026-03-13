@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
 import { carriersApi } from '../lib/api'
-import type { CarrierRanking } from '../types'
+import type { CarrierRanking, DelayedOrderInfo } from '../types'
 
-type SortKey = 'total' | 'delayed' | 'delayRate' | 'deliveryRate' | 'totalNfValue' | 'avgDeliveryDays'
+type SortKey = 'total' | 'delayed' | 'delayRate' | 'deliveryRate' | 'totalNfValue' | 'avgDeliveryDays' | 'occurrences' | 'occurrenceRate'
 
 function pct(value: number) {
   return `${(value * 100).toFixed(1)}%`
@@ -44,6 +45,129 @@ function SortButton({ label, sortKey, current, onSort }: {
   )
 }
 
+function fmtDate(iso: string | null | undefined) {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleDateString('pt-BR')
+}
+
+function buildOrderTrackingUrl(
+  trackingSystem: string,
+  trackingIdentifier: string | null,
+  senderCnpj: string | null,
+  nfNumber: string | null
+): string | null {
+  const cnpj = senderCnpj?.replace(/\D/g, '') ?? ''
+  const nf = nfNumber ? String(parseInt(nfNumber, 10)) : ''
+  switch (trackingSystem) {
+    case 'SSW':
+      return `https://ssw.inf.br/2/resultSSW?cnpj=${cnpj}&NR=${nf}`
+    case 'SAO_MIGUEL':
+    case 'PUPPETEER':
+      return 'https://portaldocliente.expressosaomiguel.com.br/rastrear-mercadoria'
+    case 'RODONAVES':
+      return `https://www.rodonaves.com.br/rastreio-de-mercadoria?taxIdRegistration=${cnpj}&invoiceNumber=${nf}`
+    case 'BRASPRESS':
+      return `https://blue.braspress.com/site/w/tracking/find?cpfCnpj=${cnpj}&pedidoNf=${nf}`
+    case 'SENIOR':
+      return trackingIdentifier ? `https://${trackingIdentifier}.senior.com.br/rastreamento` : null
+    default:
+      return null
+  }
+}
+
+function DelayedCell({ count, orders, trackingSystem, trackingIdentifier }: { count: number; orders: DelayedOrderInfo[]; trackingSystem: string; trackingIdentifier: string | null }) {
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const triggerRef = useRef<HTMLDivElement>(null)
+
+  function show() {
+    if (timer.current) clearTimeout(timer.current)
+    if (triggerRef.current) {
+      const r = triggerRef.current.getBoundingClientRect()
+      setPos({ top: r.top + window.scrollY, left: r.left + r.width / 2 + window.scrollX })
+    }
+  }
+
+  function hide() {
+    timer.current = setTimeout(() => setPos(null), 150)
+  }
+
+  // fecha ao rolar a página
+  useEffect(() => {
+    if (!pos) return
+    const onScroll = () => setPos(null)
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [pos])
+
+  if (count === 0) return <span className="font-medium text-green-600">0</span>
+
+  const tooltip = pos && createPortal(
+    <div
+      className="fixed z-[9999]"
+      style={{ top: pos.top, left: pos.left, transform: 'translateX(-50%)' }}
+      onMouseEnter={() => { if (timer.current) clearTimeout(timer.current) }}
+      onMouseLeave={hide}
+    >
+      {/* seta */}
+      <div className="flex justify-center">
+        <div className="w-0 h-0 border-l-[6px] border-r-[6px] border-b-[6px] border-l-transparent border-r-transparent border-b-gray-900" />
+      </div>
+      <div className="bg-gray-900 text-white rounded-lg shadow-xl text-xs overflow-hidden" style={{ minWidth: '440px' }}>
+        <div className="px-4 py-2 border-b border-gray-700 font-semibold text-gray-300">
+          {orders.length} pedido{orders.length !== 1 ? 's' : ''} atrasado{orders.length !== 1 ? 's' : ''}
+        </div>
+        <div className="max-h-72 overflow-y-auto divide-y divide-gray-700">
+          {orders.map((o, i) => (
+            <div key={i} className="px-4 py-2.5">
+              <div className="flex items-center justify-between gap-4">
+                <span className="font-mono font-semibold text-white whitespace-nowrap">{o.nfNumber ?? '—'}</span>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <span className="bg-red-600 text-white font-bold px-2 py-0.5 rounded whitespace-nowrap">
+                    +{o.daysDelayed}d atraso
+                  </span>
+                  {(() => {
+                    const url = buildOrderTrackingUrl(trackingSystem, trackingIdentifier, o.senderCnpj, o.nfNumber)
+                    return url ? (
+                      <a
+                        href={url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-2 py-0.5 rounded whitespace-nowrap transition-colors"
+                      >
+                        RASTREIO
+                      </a>
+                    ) : null
+                  })()}
+                </div>
+              </div>
+              <p className="text-gray-200 mt-1">{o.customerName}</p>
+              <div className="flex gap-4 mt-1 text-gray-400">
+                <span className="whitespace-nowrap">Envio: {fmtDate(o.shippedAt)}</span>
+                <span className="whitespace-nowrap">Previsão: {fmtDate(o.estimatedDelivery)}</span>
+                {o.deliveredAt && (
+                  <span className="whitespace-nowrap">Entregue: {fmtDate(o.deliveredAt)}</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+
+  return (
+    <>
+      <div ref={triggerRef} className="inline-block" onMouseEnter={show} onMouseLeave={hide}>
+        <span className="font-medium cursor-default text-red-600">{count}</span>
+      </div>
+      {tooltip}
+    </>
+  )
+}
+
 function toDateStr(date: Date) {
   return date.toISOString().slice(0, 10)
 }
@@ -56,12 +180,12 @@ function lastDays(days: number) {
 }
 
 export function RankingPage() {
-  const [startDate, setStartDate] = useState('')
-  const [endDate, setEndDate] = useState('')
-  const [activePreset, setActivePreset] = useState<30 | 60 | null>(null)
+  const [startDate, setStartDate] = useState(() => lastDays(20).startDate)
+  const [endDate, setEndDate] = useState(() => lastDays(20).endDate)
+  const [activePreset, setActivePreset] = useState<number | null>(20)
   const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'total', dir: 'desc' })
 
-  function applyPreset(days: 30 | 60) {
+  function applyPreset(days: number) {
     const { startDate: s, endDate: e } = lastDays(days)
     setStartDate(s)
     setEndDate(e)
@@ -114,30 +238,21 @@ export function RankingPage() {
         </div>
 
         {/* Filtro de período */}
-        <div className="flex items-end gap-3 flex-wrap">
-          <div className="flex items-end gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {[10, 20, 30, 60, 90].map((days) => (
             <button
-              className={`px-3 py-2 text-sm font-medium rounded-lg border transition-colors ${activePreset === 30 ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400 hover:text-blue-600'}`}
-              onClick={() => applyPreset(30)}
+              key={days}
+              onClick={() => activePreset === days ? clearFilters() : applyPreset(days)}
+              className={`px-3 py-2 text-sm font-medium rounded-lg border transition-colors ${
+                activePreset === days
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400 hover:text-blue-600'
+              }`}
             >
-              Últimos 30 dias
+              {days} dias
             </button>
-            <button
-              className={`px-3 py-2 text-sm font-medium rounded-lg border transition-colors ${activePreset === 60 ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400 hover:text-blue-600'}`}
-              onClick={() => applyPreset(60)}
-            >
-              Últimos 60 dias
-            </button>
-          </div>
-          <div>
-            <label className="label">Data inicial</label>
-            <input type="date" className="input w-40" value={startDate} onChange={(e) => { setStartDate(e.target.value); setActivePreset(null) }} />
-          </div>
-          <div>
-            <label className="label">Data final</label>
-            <input type="date" className="input w-40" value={endDate} onChange={(e) => { setEndDate(e.target.value); setActivePreset(null) }} />
-          </div>
-          {(startDate || endDate) && (
+          ))}
+          {activePreset && (
             <button className="btn-secondary" onClick={clearFilters}>
               Limpar
             </button>
@@ -192,7 +307,10 @@ export function RankingPage() {
                   <SortButton label="Taxa atraso" sortKey="delayRate" current={sort} onSort={handleSort} />
                 </th>
                 <th className="px-4 py-3 text-right">
-                  <SortButton label="Prazo médio" sortKey="avgDeliveryDays" current={sort} onSort={handleSort} />
+                  <SortButton label="Média atraso" sortKey="avgDeliveryDays" current={sort} onSort={handleSort} />
+                </th>
+                <th className="px-4 py-3 text-right">
+                  <SortButton label="Ocorrências" sortKey="occurrences" current={sort} onSort={handleSort} />
                 </th>
                 <th className="px-4 py-3 text-right">
                   <SortButton label="Valor NFs" sortKey="totalNfValue" current={sort} onSort={handleSort} />
@@ -202,12 +320,12 @@ export function RankingPage() {
             <tbody className="divide-y divide-gray-100">
               {isLoading && (
                 <tr>
-                  <td colSpan={8} className="text-center py-12 text-gray-400">Carregando...</td>
+                  <td colSpan={9} className="text-center py-12 text-gray-400">Carregando...</td>
                 </tr>
               )}
               {!isLoading && sorted.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="text-center py-12 text-gray-400">Nenhum dado encontrado</td>
+                  <td colSpan={9} className="text-center py-12 text-gray-400">Nenhum dado encontrado</td>
                 </tr>
               )}
               {sorted.map((row: CarrierRanking, idx) => (
@@ -226,15 +344,23 @@ export function RankingPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <span className={`font-medium ${row.delayed === 0 ? 'text-green-600' : row.delayRate >= 0.3 ? 'text-red-600' : 'text-orange-500'}`}>
-                      {row.delayed}
-                    </span>
+                    <DelayedCell count={row.delayed} orders={row.delayedOrders ?? []} trackingSystem={row.trackingSystem} trackingIdentifier={row.trackingIdentifier} />
                   </td>
                   <td className="px-4 py-3">
                     <DelayBar rate={row.delayRate} />
                   </td>
                   <td className="px-4 py-3 text-right text-gray-700">
-                    {row.avgDeliveryDays !== null ? `${row.avgDeliveryDays}d` : '—'}
+                    {row.avgDeliveryDays !== null ? `+${row.avgDeliveryDays}d` : '—'}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    {row.occurrences > 0 ? (
+                      <span className="font-medium text-orange-600">
+                        {row.occurrences}
+                        <span className="ml-1 text-xs text-gray-400">({pct(row.occurrenceRate)})</span>
+                      </span>
+                    ) : (
+                      <span className="text-green-600 font-medium">0</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-right text-gray-700">
                     {row.totalNfValue > 0 ? formatBRL(row.totalNfValue) : '—'}

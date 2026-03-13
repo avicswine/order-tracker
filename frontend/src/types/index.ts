@@ -43,7 +43,7 @@ export interface Order {
   customerEmail: string | null
   customerPhone: string | null
   carrierId: string | null
-  carrier: Pick<Carrier, 'id' | 'name' | 'active'> | null
+  carrier: Pick<Carrier, 'id' | 'name' | 'active' | 'trackingSystem' | 'trackingIdentifier'> | null
   status: OrderStatus
   shippedAt: string | null
   estimatedDelivery: string | null
@@ -55,6 +55,7 @@ export interface Order {
   lastTracking: string | null
   lastTrackingAt: string | null
   trackingEvents?: TrackingEvent[]
+  hasOccurrence: boolean
   createdAt: string
   updatedAt: string
   statusHistory?: StatusHistory[]
@@ -74,26 +75,41 @@ export interface OrderSummary {
   TOTAL: number
 }
 
+export interface DelayedOrderInfo {
+  nfNumber: string | null
+  customerName: string
+  shippedAt: string | null
+  deliveredAt: string | null
+  estimatedDelivery: string | null
+  daysDelayed: number
+  senderCnpj: string | null
+}
+
 export interface CarrierRanking {
   carrierId: string
   carrierName: string
   trackingSystem: TrackingSystem
+  trackingIdentifier: string | null
   total: number
   delivered: number
   cancelled: number
   delayed: number
+  delayedOrders: DelayedOrderInfo[]
   inTransit: number
   pending: number
   deliveryRate: number
   delayRate: number
   totalNfValue: number
   avgDeliveryDays: number | null
+  occurrences: number
+  occurrenceRate: number
 }
 
 export interface OrderFilters {
   status?: OrderStatus | ''
   startDate?: string
   endDate?: string
+  shippedStartDate?: string
   search?: string
   nfNumber?: string
   senderCnpj?: string

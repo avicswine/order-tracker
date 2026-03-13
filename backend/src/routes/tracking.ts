@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express'
 import { prisma } from '../lib/prisma'
 import { trackSSW, trackSenior, trackWithPuppeteer, trackSaoMiguel, trackAtualCargas, trackRodonaves, trackBraspress } from '../services/tracking'
-import { OrderStatus, TrackingSystem } from '@prisma/client'
+import { OrderStatus, TrackingSystem, Prisma } from '@prisma/client'
 
 const router = Router()
 
@@ -55,14 +55,34 @@ export async function runTrackingSync(): Promise<{ atualizados: number; erros: n
         continue
       }
 
-      const novoStatus = result.status
-      const lastEvent = result.lastEvent
+      let novoStatus = result.status
+      let lastEvent = result.lastEvent
+
+      // Se a API retornou IN_TRANSIT mas há um evento de entrega no histórico,
+      // prevalece DELIVERED — evita regressão por eventos pós-entrega da transportadora.
+      if (novoStatus === OrderStatus.IN_TRANSIT && result.events && result.events.length > 0) {
+        const deliveredEvent = result.events.find((e) => {
+          const t = e.description.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+          return (
+            t.includes('ENTREGUE') ||
+            t.includes('ENTREGA REALIZADA') ||
+            t.includes('ENTREGA EFETUADA') ||
+            t.includes('OCORRENCIA DE ENTREGA')
+          )
+        })
+        if (deliveredEvent) {
+          novoStatus = OrderStatus.DELIVERED
+          lastEvent = deliveredEvent.description
+          console.log(`[Tracking] ${order.orderNumber}: evento pós-entrega detectado — revertendo para DELIVERED (evento: "${deliveredEvent.description}" em ${deliveredEvent.date?.toLocaleDateString('pt-BR') ?? '?'})`)
+        }
+      }
 
       console.log(`[Tracking] ${order.orderNumber} (${carrier.name}): "${lastEvent}" → ${novoStatus ?? 'sem mapeamento'}${result.hasOccurrence ? ' ⚠️ INTERCORRÊNCIA' : ''}${result.shippedAt ? ` | Envio: ${result.shippedAt.toLocaleDateString('pt-BR')}` : ''}${result.estimatedDelivery ? ` | Prev: ${result.estimatedDelivery.toLocaleDateString('pt-BR')}` : ''}`)
 
       const updates: Record<string, unknown> = {
         lastTracking: lastEvent,
         lastTrackingAt: new Date(),
+        hasOccurrence: result.hasOccurrence ?? false,
       }
 
       if (result.events) {
@@ -89,7 +109,17 @@ export async function runTrackingSync(): Promise<{ atualizados: number; erros: n
 
       if (novoStatus && novoStatus !== order.status) {
         updates.status = novoStatus
-        if (novoStatus === OrderStatus.DELIVERED) updates.deliveredAt = new Date()
+        if (novoStatus === OrderStatus.DELIVERED) {
+          // Busca o evento de entrega no histórico (pode não ser o events[0] se houve evento pós-entrega)
+          const deliveredEvent = result.events?.find((e) => {
+            const t = e.description.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            return t.includes('ENTREGUE') || t.includes('ENTREGA REALIZADA') || t.includes('ENTREGA EFETUADA') || t.includes('OCORRENCIA DE ENTREGA')
+          })
+          const eventDate = deliveredEvent?.date ?? result.events?.[0]?.date
+          updates.deliveredAt = (eventDate instanceof Date && !isNaN(eventDate.getTime()))
+            ? eventDate
+            : new Date()
+        }
 
         await prisma.order.update({
           where: { id: order.id },
@@ -187,6 +217,114 @@ router.post('/backfill', async (_req: Request, res: Response) => {
   }
 
   res.json({ message: 'Backfill concluído', atualizados, erros, total: orders.length })
+})
+
+// POST /api/tracking/backfill-occurrence — preenche hasOccurrence com base em trackingEvents existente
+router.post('/backfill-occurrence', async (_req: Request, res: Response) => {
+  const orders = await prisma.order.findMany({
+    where: { NOT: { trackingEvents: { equals: Prisma.JsonNull } } },
+    select: { id: true, orderNumber: true, trackingEvents: true },
+  })
+
+  const OCCURRENCE_KEYWORDS = [
+    'TENTATIVA DE ENTREGA', 'DESTINATARIO AUSENTE', 'ENDERECO NAO ENCONTRADO',
+    'ENDERECO INCORRETO', 'ESTABELECIMENTO FECHADO', 'AVARIA', 'EXTRAVIO',
+    'RETIDO', 'RECUSADO', 'DEVOLUCAO', 'SINISTRO', 'EXTRAVIO',
+  ]
+
+  function hasOccurrenceInEvents(events: unknown): boolean {
+    if (!Array.isArray(events)) return false
+    return events.some((e) => {
+      const desc = ((e as { description?: string }).description ?? '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      return OCCURRENCE_KEYWORDS.some((kw) => desc.includes(kw))
+    })
+  }
+
+  let atualizados = 0
+  for (const order of orders) {
+    const value = hasOccurrenceInEvents(order.trackingEvents)
+    await prisma.order.update({ where: { id: order.id }, data: { hasOccurrence: value } })
+    if (value) {
+      console.log(`[BackfillOccurrence] ${order.orderNumber}: intercorrência detectada`)
+      atualizados++
+    }
+  }
+
+  res.json({ message: 'Backfill de intercorrências concluído', comOcorrencia: atualizados, total: orders.length })
+})
+
+// POST /api/tracking/backfill-sm-delivery — corrige deliveredAt dos pedidos SAO_MIGUEL usando dateandhourdelivery da API
+router.post('/backfill-sm-delivery', async (_req: Request, res: Response) => {
+  const orders = await prisma.order.findMany({
+    where: {
+      status: OrderStatus.DELIVERED,
+      carrier: { trackingSystem: TrackingSystem.SAO_MIGUEL },
+      nfNumber: { not: null },
+      senderCnpj: { not: null },
+    },
+    include: { carrier: true },
+  })
+
+  if (orders.length === 0) return res.json({ message: 'Nenhum pedido SAO_MIGUEL entregue encontrado.', atualizados: 0 })
+
+  let atualizados = 0
+  let semDado = 0
+  let erros = 0
+
+  for (const order of orders) {
+    const cnpj = order.senderCnpj!
+    const nf = order.nfNumber!
+    const recipientCnpj = order.recipientCnpj
+    const tipo = order.carrier?.trackingIdentifier ?? null
+
+    try {
+      const result = await trackSaoMiguel(cnpj, nf, recipientCnpj, tipo)
+
+      if (!result.raw || !Array.isArray(result.raw) || result.raw.length === 0) {
+        semDado++
+        continue
+      }
+
+      const cte = result.raw[0] as Record<string, unknown>
+      const rawDelivery = cte.dateandhourdelivery as string | undefined
+      if (!rawDelivery) { semDado++; continue }
+
+      // parseBrDate espera dd/MM/yyyy HH:mm
+      const parts = rawDelivery.match(/^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})/)
+      if (!parts) { semDado++; continue }
+      const correctDate = new Date(
+        parseInt(parts[3]), parseInt(parts[2]) - 1, parseInt(parts[1]),
+        parseInt(parts[4]), parseInt(parts[5])
+      )
+      // Converter de BRT (UTC-3) para UTC
+      correctDate.setTime(correctDate.getTime() + 3 * 60 * 60 * 1000)
+
+      const currentDeliveredAt = order.deliveredAt
+      // Só atualiza se a diferença for > 1 minuto
+      if (currentDeliveredAt && Math.abs(currentDeliveredAt.getTime() - correctDate.getTime()) < 60000) {
+        continue
+      }
+
+      type StoredEvent = { date: string | null; description: string }
+      const events = (Array.isArray(order.trackingEvents) ? order.trackingEvents as StoredEvent[] : []).map((e) =>
+        e.description === 'Entrega realizada' ? { ...e, date: correctDate.toISOString() } : e
+      )
+
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { deliveredAt: correctDate, trackingEvents: events },
+      })
+
+      console.log(`[BackfillSMDelivery] ${order.orderNumber}: ${currentDeliveredAt?.toLocaleDateString('pt-BR')} → ${correctDate.toLocaleDateString('pt-BR')} ${parts[4]}:${parts[5]}`)
+      atualizados++
+      await new Promise((r) => setTimeout(r, 500))
+    } catch (err) {
+      console.error(`[BackfillSMDelivery] Erro ${order.orderNumber}:`, (err as Error).message)
+      erros++
+    }
+  }
+
+  res.json({ message: 'Backfill SAO_MIGUEL deliveredAt concluído', atualizados, semDado, erros, total: orders.length })
 })
 
 // GET /api/tracking/status — retorna último tracking de cada pedido IN_TRANSIT

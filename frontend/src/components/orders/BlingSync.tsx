@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import axios from 'axios'
+import api from '../../lib/api'
 
 interface CompanyStatus {
   key: string
@@ -28,14 +28,14 @@ interface TrackingResult {
 }
 
 const blingApi = {
-  status: () => axios.get<CompanyStatus[]>('/api/bling/status').then((r) => r.data),
-  sync: () => axios.post<SyncResult>('/api/bling/sync').then((r) => r.data),
-  enrich: () => axios.post<EnrichResult>('/api/bling/enrich').then((r) => r.data),
-  disconnect: (company: string) => axios.post(`/api/bling/disconnect/${company}`).then((r) => r.data),
+  status: () => api.get<CompanyStatus[]>('/bling/status').then((r) => r.data),
+  sync: () => api.post<SyncResult>('/bling/sync').then((r) => r.data),
+  enrich: () => api.post<EnrichResult>('/bling/enrich').then((r) => r.data),
+  disconnect: (company: string) => api.post(`/bling/disconnect/${company}`).then((r) => r.data),
 }
 
 const trackingApi = {
-  sync: () => axios.post<TrackingResult>('/api/tracking/sync').then((r) => r.data),
+  sync: () => api.post<TrackingResult>('/tracking/sync').then((r) => r.data),
 }
 
 export function BlingSync() {
@@ -73,7 +73,6 @@ export function BlingSync() {
     mutationFn: trackingApi.sync,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['orders'] })
-      qc.invalidateQueries({ queryKey: ['summary'] })
     },
   })
 

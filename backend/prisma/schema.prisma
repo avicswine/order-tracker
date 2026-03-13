@@ -43,6 +43,7 @@ model Order {
   lastTracking      String?
   lastTrackingAt    DateTime?
   trackingEvents    Json?
+  hasOccurrence     Boolean   @default(false)
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
   statusHistory     StatusHistory[]

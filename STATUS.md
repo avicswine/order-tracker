@@ -1,9 +1,10 @@
 # STATUS — Order Tracker
 
-Última atualização: 2026-02-27 (sessão 3)
+Última atualização: 2026-03-06 (sessão 10)
 
 ## Estado atual
 Aplicação funcional com autenticação JWT (ADMIN/VIEWER), pronta para deploy no Railway.
+Sync automático do Bling + rastreamento roda na inicialização do backend e a cada 2h.
 
 ## Stack
 - **Backend:** Express + TypeScript + Prisma + PostgreSQL (porta 3001)
@@ -34,7 +35,8 @@ powershell.exe -Command "Stop-Process -Id <PID> -Force"
 
 ### Rastreamento
 - Sistemas suportados: SSW, Senior (TCK), SAO_MIGUEL, ATUAL_CARGAS, RODONAVES, BRASPRESS, PUPPETEER (ESM)
-- Sync automático a cada 2h via cron
+- Sync automático na startup (após Bling sync) e a cada 2h via cron
+- Pedidos sem transportadora com API (BRASPRESS, TNT, AZUL, TEX, etc.) permanecem PENDING — comportamento esperado
 - Campos rastreados: status, lastEvent, shippedAt, estimatedDelivery, hasOccurrence, trackingEvents (histórico)
 - Backfill de datas: POST /api/tracking/backfill
 
@@ -42,6 +44,7 @@ powershell.exe -Command "Stop-Process -Id <PID> -Force"
 - CRUD completo
 - Deduplicação: ATUAL CARGAS consolidada em um único registro (CNPJ 08.848.231/0013-03)
 - Nomes padronizados em maiúsculas
+- `resolveCarrier` busca por nome antes de criar nova transportadora — evita duplicatas por filiais com CNPJs diferentes
 
 ### Ranking
 - Página /ranking com desempenho por transportadora
@@ -49,10 +52,12 @@ powershell.exe -Command "Stop-Process -Id <PID> -Force"
 - Filtro por período (botões 30/60 dias ou datas manuais) — filtra por nfIssuedAt
 - Tabela ordenável por qualquer coluna
 - Backfill de nfValue e nfIssuedAt: POST /api/bling/backfill-nf-values
-- **Atrasos permanentes:** pedidos entregues com `deliveredAt > estimatedDelivery` (comparação por data, sem hora) continuam contados no ranking mesmo após entrega
+- **Regra de atraso:** pedido só é considerado atrasado a partir do dia seguinte à previsão (comparação por data, sem hora)
+- **Atrasos permanentes:** pedidos entregues com `deliveredAt > estimatedDelivery` continuam contados mesmo após entrega
 
 ### Bling
-- POST /api/bling/sync — importa NFs dos últimos 90 dias
+- POST /api/bling/sync — importa NFs dos últimos 90 dias com paginação completa
+- Regra: NFs sem transportadora rastreável (Mercado Envios, sem CNPJ) são ignoradas
 - POST /api/bling/enrich — vincula transportadoras em pedidos sem carrier
 - POST /api/bling/backfill-nf-values — preenche nfValue e nfIssuedAt nos pedidos existentes
 
@@ -103,6 +108,79 @@ Arquivos criados na raiz: `railway.toml`, `nixpacks.toml`, `package.json`
 ## Outros
 - Atalho no desktop (`Order Tracker.lnk`) aponta para `iniciar.bat` com ícone personalizado (`icon.ico`)
 
+## Transportadoras bloqueadas (não importar do Bling)
+Lista em `bling.ts:CARRIERS_BLOCKED` — pedidos ignorados no sync, transportadoras apagadas do banco:
+- GARBERG (1 pedido apagado)
+- TNT (20 pedidos apagados)
+- HS MOVERE (3 pedidos apagados)
+
 ## Decisões pendentes
 - Rodonaves: endpoint v3/package + fallback brudam. Pedido AGRO-NF-002987 retorna "Não localizado" — pode ser NF antiga ou fora do range da API.
-- Transportadoras sem sistema de rastreamento (BRASPRESS, TNT, AZUL, TEX): configurar ou ignorar.
+- Transportadoras sem API de rastreamento (AZUL, TEX, ALFA): pedidos ficam PENDING permanentemente.
+- EQUI-NF-000019 (TRD): não localizado na API Senior com CNPJ da Equipage — possível segundo CNPJ/filial da TRD para investigar.
+
+## Implementado (sessão 11)
+- **hasOccurrence:** coluna `Boolean @default(false)` adicionada ao schema (migration `20260313104642_add_has_occurrence`)
+- `runTrackingSync` agora salva `hasOccurrence` no banco a cada sync
+- Novo endpoint `POST /api/tracking/backfill-occurrence` — varre `trackingEvents` existente e detecta keywords de intercorrência; backfill executado: 1/282 detectado
+- **Ranking:** nova coluna "Ocorrências" (count + %) ordenável; `occurrences` e `occurrenceRate` retornados pela API
+- **Lista de pedidos:** badge ⚠️ agora usa `order.hasOccurrence` (campo confiável do banco) em vez de `isOccurrenceEvent(lastTracking)` (heurística)
+
+## Implementado (sessão 10)
+- **Braspress:** rastreamento implementado e funcional
+  - Credenciais por empresa no `.env`: `BRASPRESS_AVIC_*` e `BRASPRESS_AGROGRANJA_*` (Equipage não usa Braspress)
+  - `trackBraspress` reescrito para o formato real da API (`conhecimentos[]`) — formato era diferente do assumido originalmente
+  - `braspressAuth` agora seleciona credencial pelo CNPJ remetente (mapa `BRASPRESS_CREDS`)
+  - Transportadora no banco atualizada: `trackingSystem NONE → BRASPRESS`
+  - Sync executado: 17/17 atualizados (14 DELIVERED, 2 IN_TRANSIT, 1 não localizado — AGRO-NF-003006)
+
+## Implementado (sessão 9)
+- **Aba Pedidos:** filtros de data inicial/final removidos; substituídos por botões de preset 10 · 20 · 30 · 60 · 90 dias (igual ao ranking) filtrando por `shippedStartDate`
+- **Aba Pedidos:** botão WhatsApp agora copia o número para a área de transferência (CTRL+V) em vez de abrir link; exibe "COPIADO" por 2 segundos após clicar
+- **Aba Ranking:** coluna "Prazo médio" substituída por "Média atraso" — média de dias de atraso entre os pedidos atrasados da transportadora (ex: `+3d`)
+- Arquivos temporários de debug apagados da raiz do backend (check_sm.js, check_sm2.js, get_admin.js, show_ranking.js, test_sm.js)
+
+
+## Implementado (sessão 8)
+- Filtros de período no ranking substituídos por botões de preset: 10 · 20 · 30 · 60 · 90 dias
+  - Clique no botão ativo deseleciona (toggle)
+  - Botão "Limpar" aparece enquanto algum filtro estiver ativo
+  - Inputs de data inicial/final removidos
+- Sync de rastreamento executado: 84/84 atualizados, 0 erros
+
+## Implementado (sessão 7)
+- Tooltip de atrasados no ranking: passar o mouse sobre o número de atrasados exibe janela suspensa (440px) com lista de NFs ordenada do mais atrasado ao menos
+  - Campos: NF, cliente, data de envio, previsão de entrega, data de entrega (quando entregue) e badge `+Xd atraso`
+  - Botão RASTREIO no tooltip abre o site da transportadora em nova aba (SAO_MIGUEL, SSW, RODONAVES, ATUAL_CARGAS)
+  - Tooltip não some ao mover o mouse para cima dele — timer 150ms cancelado se mouse entrar na janela
+  - Renderizado via `createPortal` no `body` — sobrepõe tudo (cabeçalho, sidebar), sem corte
+  - Posicionamento `fixed` calculado por `getBoundingClientRect()` — sempre alinhado ao número
+  - Fecha automaticamente ao rolar a página
+- Backend: `GET /carriers/ranking` agora retorna `delayedOrders[]` com detalhes de cada pedido atrasado
+- Sync de rastreamento executado: 85/86 atualizados
+- AVIC-NF-008230 e AGRO-NF-002110 (SAO MIGUEL, dezembro/2025) marcados manualmente como DELIVERED — NFs antigas fora do histórico da API (janela de retenção excedida)
+- API SAO MIGUEL confirmada funcional para NFs recentes
+
+## Implementado (sessão 6)
+- Botão "Últimos 30 dias" nos filtros (baseado em `shippedAt`) — filtra lista de pedidos e cards de resumo
+- Cards de resumo respeitam o filtro `shippedStartDate` (queryKey e API atualizados)
+- Badge "atrasado" exibe dias de atraso: ex. `3d atraso`
+- Email do cliente clicável (`mailto:`) na tabela e no modal de detalhes
+- Script `enrich-emails.ts` criado e executado: 40 pedidos enriquecidos com email do Bling (71 sem email → 31 restam sem dados)
+- Retry automático para rate limit 429 da API do Bling no script de enriquecimento
+- **Bug crítico corrigido:** `deliveredAt` era gravado como `new Date()` (data do sync) ao invés da data real de entrega
+  - Causa: transportadoras como SAO MIGUEL tinham taxa de atraso de 92% (falsa) — pedidos entregues no prazo apareciam como 50-80 dias atrasados
+  - Fix em `tracking.ts`: usa `result.events[0].date` (evento real de entrega) como `deliveredAt`; fallback para `new Date()`
+  - Backfill executado: 153 pedidos corrigidos com data real extraída do `trackingEvents` armazenado
+  - SAO MIGUEL: 92.2% → 22.5% de atraso (23 atrasos reais restantes)
+
+## Correções aplicadas (sessão 5)
+- `endDate` no filtro de pedidos não incluía o dia inteiro (bug: `T00:00:00Z`) — corrigido para `T23:59:59.999`
+- Log de dados sensíveis de clientes no console do Bling — removido
+- DELETE de transportadora com pedidos vinculados agora retorna mensagem amigável (409)
+- Login sem try/catch — corrigido
+- `CARRIERS_BLOCKED` agora cobre também busca por CNPJ (caso carrier seja recriada manualmente)
+- `BlingSync.tsx` migrado do axios global para instância `api` do lib/api.ts
+- `invalidateQueries(['summary'])` ineficaz no BlingSync — corrigido para `['orders']`
+- 4 erros de TypeScript em `bling.ts` corrigidos (tipo `unknown` sem cast, `number` onde esperava `string`)
+- Arquivos temporários para apagar manualmente: `backend/debug2.ts`, `backend/debug3.ts`, `backend/src/scripts/` (exceto `create-user.ts`)

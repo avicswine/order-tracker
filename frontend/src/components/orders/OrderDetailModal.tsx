@@ -74,7 +74,11 @@ export function OrderDetailModal({ order, onClose }: Props) {
             <div>
               <p className="text-xs text-gray-500">Cliente</p>
               <p className="font-medium">{data.customerName}</p>
-              {data.customerEmail && <p className="text-sm text-gray-600">{data.customerEmail}</p>}
+              {data.customerEmail && (
+                <a href={`mailto:${data.customerEmail}`} className="text-sm text-blue-500 hover:text-blue-700 hover:underline">
+                  {data.customerEmail}
+                </a>
+              )}
             </div>
             <div>
               <p className="text-xs text-gray-500">Transportadora</p>
@@ -90,9 +94,10 @@ export function OrderDetailModal({ order, onClose }: Props) {
               <p className="text-xs text-gray-500">Previsão de Entrega</p>
               <p className={`font-medium ${isDelayed ? 'text-orange-600' : ''}`}>
                 {formatDate(data.estimatedDelivery)}
-                {isDelayed && (
-                  <span className="ml-2 text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded">atrasado</span>
-                )}
+                {isDelayed && (() => {
+                  const dias = Math.floor((today.getTime() - new Date(data.estimatedDelivery!).setHours(0,0,0,0)) / 86400000)
+                  return <span className="ml-2 text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded">{dias}d atraso</span>
+                })()}
               </p>
             </div>
             {data.deliveredAt && (

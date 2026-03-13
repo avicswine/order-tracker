@@ -12,6 +12,7 @@ router.get(
     query('status').optional().isIn(Object.values(OrderStatus)),
     query('startDate').optional().isISO8601(),
     query('endDate').optional().isISO8601(),
+    query('shippedStartDate').optional().isISO8601(),
     query('search').optional().trim(),
     query('nfNumber').optional().trim(),
     query('senderCnpj').optional().trim(),
@@ -35,10 +36,16 @@ router.get(
     if (req.query.status) where.status = req.query.status as OrderStatus
 
     if (req.query.startDate || req.query.endDate) {
-      where.createdAt = {
-        ...(req.query.startDate && { gte: new Date(req.query.startDate as string) }),
-        ...(req.query.endDate && { lte: new Date(req.query.endDate as string) }),
+      const dateRange: Record<string, Date> = {}
+      if (req.query.startDate) {
+        dateRange.gte = new Date(req.query.startDate as string)
       }
+      if (req.query.endDate) {
+        const end = new Date(req.query.endDate as string)
+        end.setHours(23, 59, 59, 999)
+        dateRange.lte = end
+      }
+      where.createdAt = dateRange
     }
 
     if (req.query.search) {
@@ -60,6 +67,10 @@ router.get(
 
     if (req.query.carrierId) {
       where.carrierId = req.query.carrierId as string
+    }
+
+    if (req.query.shippedStartDate) {
+      where.shippedAt = { gte: new Date(req.query.shippedStartDate as string) }
     }
 
     if (String(req.query.delayed) === 'true') {
@@ -84,7 +95,7 @@ router.get(
           skip,
           take: limit,
           orderBy,
-          include: { carrier: { select: { id: true, name: true, active: true } } },
+          include: { carrier: { select: { id: true, name: true, active: true, trackingSystem: true, trackingIdentifier: true } } },
         }),
         prisma.order.count({ where }),
       ])
@@ -100,10 +111,16 @@ router.get(
 )
 
 // GET /orders/summary
-router.get('/summary', async (_req: Request, res: Response) => {
+router.get('/summary', async (req: Request, res: Response) => {
   try {
+    const baseWhere: Record<string, unknown> = {}
+    if (req.query.shippedStartDate) {
+      baseWhere.shippedAt = { gte: new Date(req.query.shippedStartDate as string) }
+    }
+
     const counts = await prisma.order.groupBy({
       by: ['status'],
+      where: baseWhere,
       _count: { status: true },
     })
 
@@ -116,11 +133,12 @@ router.get('/summary', async (_req: Request, res: Response) => {
       {} as Record<OrderStatus, number>
     )
 
-    const total = await prisma.order.count()
+    const total = await prisma.order.count({ where: baseWhere })
     const today = new Date()
     today.setHours(0, 0, 0, 0)
     const delayed = await prisma.order.count({
       where: {
+        ...baseWhere,
         estimatedDelivery: { lt: today },
         status: { in: [OrderStatus.PENDING, OrderStatus.IN_TRANSIT] },
       },

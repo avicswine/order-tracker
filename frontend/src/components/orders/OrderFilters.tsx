@@ -52,26 +52,6 @@ export function OrderFiltersBar({ filters, onChange }: Props) {
         </select>
       </div>
 
-      {/* Date range */}
-      <div className="w-40">
-        <label className="label">Data inicial</label>
-        <input
-          type="date"
-          className="input"
-          value={filters.startDate ?? ''}
-          onChange={(e) => onChange({ ...filters, startDate: e.target.value, page: 1 })}
-        />
-      </div>
-      <div className="w-40">
-        <label className="label">Data final</label>
-        <input
-          type="date"
-          className="input"
-          value={filters.endDate ?? ''}
-          onChange={(e) => onChange({ ...filters, endDate: e.target.value, page: 1 })}
-        />
-      </div>
-
       {/* Empresa */}
       <div className="w-44">
         <label className="label">Empresa</label>
@@ -114,6 +94,29 @@ export function OrderFiltersBar({ filters, onChange }: Props) {
         />
       </div>
 
+      {/* Filtro por período (shippedAt) */}
+      <div className="flex items-end gap-2 flex-wrap">
+        {[10, 20, 30, 60, 90].map((days) => {
+          const d = new Date()
+          d.setDate(d.getDate() - days)
+          const dateStr = d.toISOString().slice(0, 10)
+          const active = filters.shippedStartDate === dateStr
+          return (
+            <button
+              key={days}
+              onClick={() => onChange({ ...filters, shippedStartDate: active ? undefined : dateStr, page: 1 })}
+              className={`text-sm font-medium px-3 py-1.5 rounded-md border transition-colors ${
+                active
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400 hover:text-blue-600'
+              }`}
+            >
+              {days} dias
+            </button>
+          )
+        })}
+      </div>
+
       {/* Atrasados */}
       <div className="flex items-end pb-0.5">
         <label className="flex items-center gap-2 cursor-pointer select-none">
@@ -128,7 +131,7 @@ export function OrderFiltersBar({ filters, onChange }: Props) {
       </div>
 
       {/* Clear */}
-      {(filters.search || filters.status || filters.startDate || filters.endDate || filters.senderCnpj || filters.carrierId || filters.nfNumber || filters.delayed) && (
+      {(filters.search || filters.status || filters.startDate || filters.endDate || filters.shippedStartDate || filters.senderCnpj || filters.carrierId || filters.nfNumber || filters.delayed) && (
         <button
           className="btn-secondary"
           onClick={() => onChange({ page: 1 })}

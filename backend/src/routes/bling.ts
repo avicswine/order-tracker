@@ -28,6 +28,9 @@ const BLING_API = 'https://api.bling.com.br/Api/v3'
 const BLING_AUTH_URL = 'https://www.bling.com.br/Api/v3/oauth/authorize'
 const BLING_TOKEN_URL = 'https://www.bling.com.br/Api/v3/oauth/token'
 
+// Transportadoras ignoradas no sync (sem API de rastreamento e sem interesse)
+const CARRIERS_BLOCKED = ['GARBERG', 'TNT', 'HS MOVERE']
+
 // Configuração das 3 empresas
 const COMPANIES: Record<string, { name: string; code: string; cnpj: string; clientId: string; clientSecret: string }> = {
   avic: {
@@ -186,7 +189,7 @@ async function blingGet(companyKey: string, path: string, retries = 3): Promise<
 // Busca e vincula transportadora de uma NF pelo ID interno do Bling
 async function resolveCarrier(companyKey: string, nfId: number, nfNumero: string): Promise<string | undefined> {
   try {
-    const detail = await blingGet(companyKey, `/nfe/${nfId}`)
+    const detail = (await blingGet(companyKey, `/nfe/${nfId}`)) as BlingNFeDetailResponse
     const transportador = detail?.data?.transporte?.transportador
     if (!transportador?.numeroDocumento) return undefined
 
@@ -198,6 +201,12 @@ async function resolveCarrier(companyKey: string, nfId: number, nfNumero: string
       where: { OR: [{ cnpj: cnpjNormalizado }, { cnpj: cnpjRaw }] },
     })
     if (existing) {
+      // Garante que transportadoras bloqueadas recriadas manualmente não sejam vinculadas
+      const bloqueadaExistente = CARRIERS_BLOCKED.some(t => existing.name.toUpperCase().includes(t))
+      if (bloqueadaExistente) {
+        console.log(`[Bling] NF ${nfNumero}: transportadora bloqueada ("${existing.name}") — ignorada`)
+        return undefined
+      }
       console.log(`[Bling] NF ${nfNumero}: transportadora "${transportador.nome}" vinculada a "${existing.name}"`)
       return existing.id
     }
@@ -206,6 +215,22 @@ async function resolveCarrier(companyKey: string, nfId: number, nfNumero: string
       if (/mercado/i.test(transportador.nome)) {
         console.log(`[Bling] NF ${nfNumero}: Mercado Envios — ignorada`)
         return undefined
+      }
+
+      // Ignora transportadoras bloqueadas
+      const bloqueada = CARRIERS_BLOCKED.some(t => (transportador.nome ?? '').toUpperCase().includes(t))
+      if (bloqueada) {
+        console.log(`[Bling] NF ${nfNumero}: transportadora bloqueada ("${transportador.nome}") — ignorada`)
+        return undefined
+      }
+
+      // Antes de criar, verifica se já existe transportadora com o mesmo nome (filiais com CNPJs diferentes)
+      const existingByName = await prisma.carrier.findFirst({
+        where: { name: transportador.nome },
+      })
+      if (existingByName) {
+        console.log(`[Bling] NF ${nfNumero}: transportadora "${transportador.nome}" vinculada pelo nome (CNPJ diferente: ${cnpjNormalizado})`)
+        return existingByName.id
       }
 
       try {
@@ -233,14 +258,13 @@ async function resolveCarrier(companyKey: string, nfId: number, nfNumero: string
 }
 
 // POST /api/bling/sync - importa NFs de todas as empresas conectadas
-router.post('/sync', async (_req: Request, res: Response) => {
+export async function runBlingSync() {
   const connectedCompanies = Object.keys(COMPANIES).filter((key) => !!tokens[key])
 
   if (connectedCompanies.length === 0) {
-    return res.status(401).json({ error: 'Nenhuma empresa conectada ao Bling.' })
+    console.log('[Bling] Nenhuma empresa conectada — sync ignorado.')
+    return { totalCriados: 0, totalIgnorados: 0, results: {} }
   }
-
-  const localCarriers = await prisma.carrier.findMany({ where: { active: true } })
 
   const results: Record<string, { criados: number; ignorados: number }> = {}
 
@@ -250,54 +274,63 @@ router.post('/sync', async (_req: Request, res: Response) => {
     let ignorados = 0
 
     try {
-      // Importa apenas NFs dos últimos 90 dias
+      // Importa NFs dos últimos 90 dias com paginação
       const dataInicio = new Date()
       dataInicio.setDate(dataInicio.getDate() - 90)
       const dataInicioStr = dataInicio.toISOString().slice(0, 10)
-      const nfeData = await blingGet(companyKey, `/nfe?pagina=1&limite=100&dataEmissaoInicial=${dataInicioStr}`)
-      console.log(`[Bling] ${company.name} resposta:`, JSON.stringify(nfeData).slice(0, 500))
-      const nfes: BlingNFe[] = nfeData?.data ?? []
-      console.log(`[Bling] ${company.name}: ${nfes.length} NFs encontradas`)
 
-      for (const nf of nfes) {
-        // Deduplicação por nfNumber + empresa (senderCnpj) para evitar conflito entre empresas
-        const existing = await prisma.order.findFirst({
-          where: { nfNumber: String(nf.numero), senderCnpj: company.cnpj },
-        })
+      let pagina = 1
+      let totalNFs = 0
+      while (true) {
+        const nfeData = (await blingGet(companyKey, `/nfe?pagina=${pagina}&limite=100&dataEmissaoInicial=${dataInicioStr}`)) as BlingListResponse
+        const nfes: BlingNFe[] = nfeData?.data ?? []
+        console.log(`[Bling] ${company.name} — página ${pagina}: ${nfes.length} NFs`)
+        if (nfes.length === 0) break
+        totalNFs += nfes.length
 
-        if (existing) {
-          // Preenche customerPhone se ainda não está salvo
-          const phone = nf.contato?.telefone?.replace(/\D/g, '') || null
-          if (phone && !existing.customerPhone) {
-            await prisma.order.update({ where: { id: existing.id }, data: { customerPhone: phone } })
+        for (const nf of nfes) {
+          // Deduplicação por nfNumber + empresa (senderCnpj) para evitar conflito entre empresas
+          const existing = await prisma.order.findFirst({
+            where: { nfNumber: String(nf.numero), senderCnpj: company.cnpj },
+          })
+
+          if (existing) {
+            // Preenche customerPhone se ainda não está salvo
+            const phone = nf.contato?.telefone?.replace(/\D/g, '') || null
+            if (phone && !existing.customerPhone) {
+              await prisma.order.update({ where: { id: existing.id }, data: { customerPhone: phone } })
+            }
+            ignorados++
+            continue
           }
-          ignorados++
-          continue
+
+          const carrierId = await resolveCarrier(companyKey, nf.id, String(nf.numero))
+
+          // Sem transportadora rastreável → ignora (ex: Mercado Envios, sem transporte)
+          if (!carrierId) { ignorados++; continue }
+
+          await prisma.order.create({
+            data: {
+              orderNumber: `${company.code}-NF-${nf.numero}`,
+              customerName: nf.contato?.nome ?? 'Cliente não informado',
+              customerEmail: nf.contato?.email ?? null,
+              customerPhone: nf.contato?.telefone?.replace(/\D/g, '') || null,
+              nfNumber: String(nf.numero),
+              nfValue: nf.valor ?? null,
+              nfIssuedAt: nf.dataEmissao ? new Date(nf.dataEmissao) : null,
+              senderCnpj: company.cnpj,
+              recipientCnpj: nf.contato?.numeroDocumento?.replace(/\D/g, '') ?? null,
+              carrierId,
+              statusHistory: { create: { status: 'PENDING', note: `Importado do Bling (${company.name})` } },
+            },
+          })
+
+          criados++
         }
 
-        const carrierId = await resolveCarrier(companyKey, nf.id, nf.numero)
-
-        // Sem transportadora rastreável → ignora (ex: Mercado Envios, sem transporte)
-        if (!carrierId) { ignorados++; continue }
-
-        await prisma.order.create({
-          data: {
-            orderNumber: `${company.code}-NF-${nf.numero}`,
-            customerName: nf.contato?.nome ?? 'Cliente não informado',
-            customerEmail: nf.contato?.email ?? null,
-            customerPhone: nf.contato?.telefone?.replace(/\D/g, '') || null,
-            nfNumber: String(nf.numero),
-            nfValue: nf.valor ?? null,
-            nfIssuedAt: nf.dataEmissao ? new Date(nf.dataEmissao) : null,
-            senderCnpj: company.cnpj,
-            recipientCnpj: nf.destinatario?.numeroDocumento?.replace(/\D/g, '') ?? null,
-            carrierId,
-            statusHistory: { create: { status: 'PENDING', note: `Importado do Bling (${company.name})` } },
-          },
-        })
-
-        criados++
+        pagina++
       }
+      console.log(`[Bling] ${company.name}: total ${totalNFs} NFs processadas`)
     } catch (err) {
       console.error(`Erro ao sincronizar ${companyKey}:`, err)
     }
@@ -308,7 +341,17 @@ router.post('/sync', async (_req: Request, res: Response) => {
   const totalCriados = Object.values(results).reduce((s, r) => s + r.criados, 0)
   const totalIgnorados = Object.values(results).reduce((s, r) => s + r.ignorados, 0)
 
-  res.json({ message: 'Sincronização concluída', results, totalCriados, totalIgnorados })
+  return { totalCriados, totalIgnorados, results }
+}
+
+router.post('/sync', async (_req: Request, res: Response) => {
+  const connectedCompanies = Object.keys(COMPANIES).filter((key) => !!tokens[key])
+  if (connectedCompanies.length === 0) {
+    return res.status(401).json({ error: 'Nenhuma empresa conectada ao Bling.' })
+  }
+
+  const result = await runBlingSync()
+  res.json({ message: 'Sincronização concluída', ...result })
 })
 
 // GET /api/bling/debug/nfe/:id - detalhes de uma NF específica
@@ -394,7 +437,7 @@ router.post('/enrich', async (_req: Request, res: Response) => {
   for (const companyKey of connectedCompanies) {
     let pagina = 1
     while (true) {
-      const data = await blingGet(companyKey, `/nfe?pagina=${pagina}&limite=100&dataEmissaoInicial=${enrichDataInicioStr}`)
+      const data = (await blingGet(companyKey, `/nfe?pagina=${pagina}&limite=100&dataEmissaoInicial=${enrichDataInicioStr}`)) as BlingListResponse
       const nfes: BlingNFe[] = data?.data ?? []
       if (nfes.length === 0) break
 
@@ -467,8 +510,8 @@ router.post('/backfill-nf-values', async (_req: Request, res: Response) => {
 
     while (true) {
       try {
-        const data = await blingGet(companyKey, `/nfe?pagina=${pagina}&limite=100&dataEmissaoInicial=${dataInicioStr}`)
-        const nfes: BlingNFe[] = (data as Record<string, unknown>)?.data as BlingNFe[] ?? []
+        const data = (await blingGet(companyKey, `/nfe?pagina=${pagina}&limite=100&dataEmissaoInicial=${dataInicioStr}`)) as BlingListResponse
+        const nfes: BlingNFe[] = data?.data ?? []
         if (nfes.length === 0) break
 
         for (const nf of nfes) {
@@ -501,10 +544,10 @@ router.post('/backfill-nf-values', async (_req: Request, res: Response) => {
     if (!entry) { semDados++; continue }
 
     try {
-      const detail = await blingGet(entry.companyKey, `/nfe/${entry.blingId}`)
-      const detailData = (detail as Record<string, unknown>)?.data as Record<string, unknown> | undefined
-      const valorNota = detailData?.valorNota as number | undefined
-      const dataEmissaoRaw = entry.dataEmissao ?? detailData?.dataEmissao as string | undefined
+      const detail = (await blingGet(entry.companyKey, `/nfe/${entry.blingId}`)) as BlingNFeDetailResponse
+      const detailData = detail?.data
+      const valorNota = detailData?.valorNota
+      const dataEmissaoRaw = entry.dataEmissao ?? detailData?.dataEmissao
 
       const updates: Record<string, unknown> = {}
       if (valorNota != null) updates.nfValue = valorNota
@@ -526,6 +569,76 @@ router.post('/backfill-nf-values', async (_req: Request, res: Response) => {
   res.json({ message: 'Backfill concluído', atualizados, semDados, total: ordersToFill.length })
 })
 
+// POST /api/bling/backfill-recipient-cnpj - preenche recipientCnpj nos pedidos existentes
+// destinatario.numeroDocumento já vem na listagem — sem chamadas extras
+router.post('/backfill-recipient-cnpj', async (_req: Request, res: Response) => {
+  const connectedCompanies = Object.keys(COMPANIES).filter((key) => !!tokens[key])
+  if (connectedCompanies.length === 0) {
+    return res.status(401).json({ error: 'Nenhuma empresa conectada ao Bling.' })
+  }
+
+  const ordersToFill = await prisma.order.findMany({
+    where: { recipientCnpj: null, nfNumber: { not: null } },
+    select: { id: true, nfNumber: true, senderCnpj: true },
+  })
+
+  if (ordersToFill.length === 0) {
+    return res.json({ message: 'Todos os pedidos já têm recipientCnpj preenchido.', atualizados: 0 })
+  }
+
+  console.log(`[BackfillRecipient] ${ordersToFill.length} pedidos para preencher`)
+
+  // Mapa nfNum|senderCnpj → recipientCnpj (digits only)
+  const cnpjMap: Record<string, string> = {}
+  const nfNumbersNeeded = new Set(ordersToFill.map((o) => String(parseInt(o.nfNumber!, 10))))
+
+  const dataInicio = new Date()
+  dataInicio.setDate(dataInicio.getDate() - 365)
+  const dataInicioStr = dataInicio.toISOString().slice(0, 10)
+
+  for (const companyKey of connectedCompanies) {
+    const company = COMPANIES[companyKey]
+    let pagina = 1
+    while (true) {
+      try {
+        const data = (await blingGet(companyKey, `/nfe?pagina=${pagina}&limite=100&dataEmissaoInicial=${dataInicioStr}`)) as BlingListResponse
+        const nfes: BlingNFe[] = data?.data ?? []
+        if (nfes.length === 0) break
+        for (const nf of nfes) {
+          const numSemZero = String(parseInt(String(nf.numero), 10))
+          const docRaw = nf.contato?.numeroDocumento?.replace(/\D/g, '')
+          if (nfNumbersNeeded.has(numSemZero) && docRaw) {
+            cnpjMap[`${numSemZero}|${company.cnpj}`] = docRaw
+          }
+        }
+        if (nfes.length < 100) break
+        pagina++
+        await new Promise((r) => setTimeout(r, 300))
+      } catch (err) {
+        console.error(`[BackfillRecipient] Erro ao listar NFs de ${companyKey}:`, err)
+        break
+      }
+    }
+    console.log(`[BackfillRecipient] ${company.name}: ${pagina} páginas escaneadas`)
+  }
+
+  console.log(`[BackfillRecipient] ${Object.keys(cnpjMap).length} NFs com destinatário encontradas`)
+
+  let atualizados = 0
+  let semDados = 0
+
+  for (const order of ordersToFill) {
+    const key = `${String(parseInt(order.nfNumber!, 10))}|${order.senderCnpj}`
+    const recipientCnpj = cnpjMap[key]
+    if (!recipientCnpj) { semDados++; continue }
+    await prisma.order.update({ where: { id: order.id }, data: { recipientCnpj } })
+    atualizados++
+  }
+
+  console.log(`[BackfillRecipient] Concluído: ${atualizados} atualizados, ${semDados} sem dados`)
+  res.json({ message: 'Backfill concluído', atualizados, semDados, total: ordersToFill.length })
+})
+
 // POST /api/bling/disconnect/:company - desconecta uma empresa
 router.post('/disconnect/:company', (req: Request, res: Response) => {
   delete tokens[req.params.company]
@@ -541,6 +654,20 @@ interface BlingNFe {
   contato?: { nome?: string; email?: string; telefone?: string }
   destinatario?: { numeroDocumento?: string; nome?: string }
   transportador?: { nome?: string; cpfCnpj?: string }
+}
+
+interface BlingListResponse {
+  data?: BlingNFe[]
+}
+
+interface BlingNFeDetailResponse {
+  data?: {
+    transporte?: {
+      transportador?: { numeroDocumento?: string; nome?: string }
+    }
+    valorNota?: number
+    dataEmissao?: string
+  }
 }
 
 export default router

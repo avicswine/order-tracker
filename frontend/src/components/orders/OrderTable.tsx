@@ -1,6 +1,7 @@
+import { useState, useRef } from 'react'
 import type { Order } from '../../types'
 import { StatusBadge } from '../ui/Badge'
-import { formatDate, isOccurrenceEvent, SENDER_COMPANIES } from '../../lib/utils'
+import { formatDate, SENDER_COMPANIES, getTrackingUrl } from '../../lib/utils'
 import { Spinner } from '../ui/Spinner'
 
 interface Props {
@@ -15,6 +16,25 @@ interface Props {
 }
 
 export function OrderTable({ orders, isLoading, onViewDetails, meta, onPageChange, sortBy, sortOrder, onSortChange }: Props) {
+  const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [copiedCnpjId, setCopiedCnpjId] = useState<string | null>(null)
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const copyCnpjTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function copyPhone(orderId: string, phone: string) {
+    navigator.clipboard.writeText(phone)
+    if (copyTimer.current) clearTimeout(copyTimer.current)
+    setCopiedId(orderId)
+    copyTimer.current = setTimeout(() => setCopiedId(null), 2000)
+  }
+
+  function copyCnpj(orderId: string, cnpj: string) {
+    navigator.clipboard.writeText(cnpj.replace(/\D/g, ''))
+    if (copyCnpjTimer.current) clearTimeout(copyCnpjTimer.current)
+    setCopiedCnpjId(orderId)
+    copyCnpjTimer.current = setTimeout(() => setCopiedCnpjId(null), 2000)
+  }
+
   const today = new Date()
   today.setHours(0, 0, 0, 0)
 
@@ -92,25 +112,43 @@ export function OrderTable({ orders, isLoading, onViewDetails, meta, onPageChang
                 </td>
                 <td className="py-3 pr-4">
                   <div className="flex items-center gap-1.5">
-                    <p className="font-medium text-gray-900">{order.customerName}</p>
+                    {order.recipientCnpj ? (
+                      <button
+                        title={`Copiar CNPJ/CPF: ${order.recipientCnpj}`}
+                        onClick={(e) => { e.stopPropagation(); copyCnpj(order.id, order.recipientCnpj!) }}
+                        className="font-medium text-gray-900 hover:text-blue-600 text-left transition-colors"
+                      >
+                        {copiedCnpjId === order.id ? (
+                          <span className="text-xs font-medium text-blue-600">CNPJ COPIADO</span>
+                        ) : order.customerName}
+                      </button>
+                    ) : (
+                      <p className="font-medium text-gray-900">{order.customerName}</p>
+                    )}
                     {order.customerPhone && (
-                      <a
-                        href={`https://wa.me/55${order.customerPhone}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title={`WhatsApp: ${order.customerPhone}`}
-                        onClick={(e) => e.stopPropagation()}
+                      <button
+                        title={`Copiar número: ${order.customerPhone}`}
+                        onClick={(e) => { e.stopPropagation(); copyPhone(order.id, order.customerPhone!) }}
                         className="flex-shrink-0 text-green-500 hover:text-green-600"
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
                           <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
                           <path d="M12 0C5.373 0 0 5.373 0 12c0 2.123.555 4.112 1.527 5.836L.057 23.487l5.773-1.516A11.945 11.945 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-1.891 0-3.659-.494-5.192-1.358l-.372-.222-3.427.9.916-3.343-.243-.386A9.937 9.937 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/>
                         </svg>
-                      </a>
+                      </button>
+                    )}
+                    {copiedId === order.id && (
+                      <span className="text-xs font-medium text-green-600 whitespace-nowrap">COPIADO</span>
                     )}
                   </div>
                   {order.customerEmail && (
-                    <p className="text-xs text-gray-500">{order.customerEmail}</p>
+                    <a
+                      href={`mailto:${order.customerEmail}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-xs text-blue-500 hover:text-blue-700 hover:underline"
+                    >
+                      {order.customerEmail}
+                    </a>
                   )}
                 </td>
                 <td className="py-3 pr-4">
@@ -124,10 +162,14 @@ export function OrderTable({ orders, isLoading, onViewDetails, meta, onPageChang
                   )}
                 </td>
                 <td className="py-3 pr-4">
-                  <div className="flex items-center gap-1.5">
+                  <div
+                    className="flex items-center gap-1.5 cursor-pointer"
+                    onClick={() => onViewDetails(order)}
+                    title="Ver detalhes"
+                  >
                     <StatusBadge status={order.status} />
-                    {isOccurrenceEvent(order.lastTracking) && (
-                      <span title={order.lastTracking ?? ''} className="text-orange-500 cursor-help" aria-label="Intercorrência">⚠️</span>
+                    {order.hasOccurrence && (
+                      <span title={order.lastTracking ?? 'Intercorrência detectada'} className="text-orange-500 cursor-help" aria-label="Intercorrência">⚠️</span>
                     )}
                   </div>
                 </td>
@@ -142,23 +184,34 @@ export function OrderTable({ orders, isLoading, onViewDetails, meta, onPageChang
                     }>
                       {formatDate(order.estimatedDelivery)}
                       {order.status !== 'DELIVERED' && order.status !== 'CANCELLED' &&
-                       new Date(order.estimatedDelivery) < today && (
-                        <span className="ml-1 text-xs bg-orange-100 text-orange-700 px-1 py-0.5 rounded">
-                          atrasado
-                        </span>
-                      )}
+                       new Date(order.estimatedDelivery) < today && (() => {
+                        const dias = Math.floor((today.getTime() - new Date(order.estimatedDelivery).setHours(0,0,0,0)) / 86400000)
+                        return (
+                          <span className="ml-1 text-xs bg-orange-100 text-orange-700 px-1 py-0.5 rounded">
+                            {dias}d atraso
+                          </span>
+                        )
+                       })()}
                     </span>
                   ) : (
                     <span className="text-gray-600">—</span>
                   )}
                 </td>
                 <td className="py-3 text-right">
-                  <button
-                    onClick={() => onViewDetails(order)}
-                    className="text-blue-600 hover:text-blue-800 font-medium text-xs"
-                  >
-                    Detalhes
-                  </button>
+                  {(() => {
+                    const url = getTrackingUrl(order)
+                    return url ? (
+                      <a
+                        href={url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-xs font-medium px-2 py-1 rounded bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-colors whitespace-nowrap"
+                      >
+                        Rastreio
+                      </a>
+                    ) : null
+                  })()}
                 </td>
               </tr>
             ))}

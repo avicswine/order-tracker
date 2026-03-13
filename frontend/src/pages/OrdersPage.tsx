@@ -13,7 +13,11 @@ import type { Order, OrderFilters } from '../types'
 export function OrdersPage() {
   const { user } = useAuth()
   const isAdmin = user?.role === 'ADMIN'
-  const [filters, setFilters] = useState<OrderFilters>({ page: 1, sortBy: 'shippedAt', sortOrder: 'desc' })
+  const [filters, setFilters] = useState<OrderFilters>(() => {
+    const start = new Date()
+    start.setDate(start.getDate() - 20)
+    return { page: 1, sortBy: 'shippedAt', sortOrder: 'desc', shippedStartDate: start.toISOString().slice(0, 10) }
+  })
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [showForm, setShowForm] = useState(false)
 

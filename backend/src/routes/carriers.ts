@@ -37,12 +37,16 @@ router.get(
               shippedAt: true,
               deliveredAt: true,
               nfValue: true,
+              nfNumber: true,
+              customerName: true,
+              senderCnpj: true,
+              hasOccurrence: true,
             },
           },
         },
       })
 
-      const now = new Date()
+      const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
 
       const ranking = carriers
         .filter((c) => c.orders.length > 0)
@@ -50,51 +54,66 @@ router.get(
           const total = c.orders.length
           const delivered = c.orders.filter((o) => o.status === OrderStatus.DELIVERED).length
           const cancelled = c.orders.filter((o) => o.status === OrderStatus.CANCELLED).length
-          const delayed = c.orders.filter(
-            (o) =>
-              o.estimatedDelivery &&
-              (
-                // Ainda em aberto e já passou a previsão
-                (new Date(o.estimatedDelivery) < now &&
-                  (o.status === OrderStatus.PENDING || o.status === OrderStatus.IN_TRANSIT)) ||
-                // Entregue, mas depois da data prevista (compara só a data, ignora hora)
-                (o.status === OrderStatus.DELIVERED &&
-                  o.deliveredAt !== null &&
-                  (() => {
-                    const d = new Date(o.deliveredAt!); d.setHours(0, 0, 0, 0)
-                    const e = new Date(o.estimatedDelivery!); e.setHours(0, 0, 0, 0)
-                    return d > e
-                  })())
-              )
-          ).length
+          const isDelayed = (o: typeof c.orders[0]) => {
+            if (!o.estimatedDelivery) return false
+            const e = new Date(o.estimatedDelivery); e.setHours(0, 0, 0, 0)
+            if (o.status === OrderStatus.PENDING || o.status === OrderStatus.IN_TRANSIT) return e < todayStart
+            if (o.status === OrderStatus.DELIVERED && o.deliveredAt) {
+              const d = new Date(o.deliveredAt); d.setHours(0, 0, 0, 0)
+              return d > e
+            }
+            return false
+          }
+
+          const delayedOrders = c.orders
+            .filter(isDelayed)
+            .map((o) => {
+              const e = new Date(o.estimatedDelivery!); e.setHours(0, 0, 0, 0)
+              const ref = o.status === OrderStatus.DELIVERED && o.deliveredAt
+                ? new Date(o.deliveredAt)
+                : todayStart
+              const refDay = new Date(ref); refDay.setHours(0, 0, 0, 0)
+              return {
+                nfNumber: o.nfNumber,
+                customerName: o.customerName,
+                shippedAt: o.shippedAt,
+                deliveredAt: o.deliveredAt,
+                estimatedDelivery: o.estimatedDelivery,
+                daysDelayed: Math.round((refDay.getTime() - e.getTime()) / 86400000),
+                senderCnpj: o.senderCnpj,
+              }
+            })
+            .sort((a, b) => b.daysDelayed - a.daysDelayed)
+
+          const delayed = delayedOrders.length
           const totalNfValue = c.orders.reduce((sum, o) => sum + (o.nfValue ?? 0), 0)
 
-          // Tempo médio de entrega (dias entre shippedAt e deliveredAt)
-          const deliveredWithDates = c.orders.filter(
-            (o) => o.status === OrderStatus.DELIVERED && o.shippedAt && o.deliveredAt
-          )
-          const avgDeliveryDays =
-            deliveredWithDates.length > 0
-              ? deliveredWithDates.reduce((sum, o) => {
-                  const days = (new Date(o.deliveredAt!).getTime() - new Date(o.shippedAt!).getTime()) / 86400000
-                  return sum + days
-                }, 0) / deliveredWithDates.length
+          // Média de dias de atraso (somente pedidos atrasados)
+          const avgDelayDays =
+            delayedOrders.length > 0
+              ? Math.round(delayedOrders.reduce((sum, o) => sum + o.daysDelayed, 0) / delayedOrders.length * 10) / 10
               : null
+
+          const occurrences = c.orders.filter((o) => o.hasOccurrence).length
 
           return {
             carrierId: c.id,
             carrierName: c.name,
             trackingSystem: c.trackingSystem,
+            trackingIdentifier: c.trackingIdentifier,
             total,
             delivered,
             cancelled,
             delayed,
+            delayedOrders,
             inTransit: c.orders.filter((o) => o.status === OrderStatus.IN_TRANSIT).length,
             pending: c.orders.filter((o) => o.status === OrderStatus.PENDING).length,
             deliveryRate: total > 0 ? delivered / total : 0,
             delayRate: total > 0 ? delayed / total : 0,
             totalNfValue,
-            avgDeliveryDays: avgDeliveryDays !== null ? Math.round(avgDeliveryDays * 10) / 10 : null,
+            avgDeliveryDays: avgDelayDays,
+            occurrences,
+            occurrenceRate: total > 0 ? occurrences / total : 0,
           }
         })
         .sort((a, b) => b.total - a.total)
@@ -214,8 +233,12 @@ router.delete('/:id', async (req: Request, res: Response) => {
     await prisma.carrier.delete({ where: { id: req.params.id } })
     res.status(204).send()
   } catch (err: unknown) {
-    if (err instanceof Error && 'code' in err && (err as { code: string }).code === 'P2025') {
-      return res.status(404).json({ error: 'Carrier not found' })
+    if (err instanceof Error && 'code' in err) {
+      const code = (err as { code: string }).code
+      if (code === 'P2025') return res.status(404).json({ error: 'Carrier not found' })
+      if (code === 'P2003' || code === 'P2014') {
+        return res.status(409).json({ error: 'Transportadora possui pedidos vinculados. Remova os pedidos antes de excluir.' })
+      }
     }
     res.status(500).json({ error: 'Failed to delete carrier' })
   }

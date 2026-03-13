@@ -25,8 +25,17 @@ function parseBrDate(str: string | undefined | null): Date | null {
   if (!str) return null
   const s = str.trim()
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
-    const d = new Date(s)
-    return isNaN(d.getTime()) ? null : d
+    // APIs como Senior serializam campos de data como meia-noite UTC ("YYYY-MM-DDT00:00:00Z").
+    // Tratamos como data local — evita que "2026-03-12T00:00:00Z" vire 11/03 no fuso UTC-3.
+    const p = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?/)
+    if (p) {
+      const d = new Date(
+        parseInt(p[1]), parseInt(p[2]) - 1, parseInt(p[3]),
+        p[4] ? parseInt(p[4]) : 0, p[5] ? parseInt(p[5]) : 0, p[6] ? parseInt(p[6]) : 0
+      )
+      return isNaN(d.getTime()) ? null : d
+    }
+    return null
   }
   const m = s.match(/^(\d{2})\/(\d{2})\/(\d{2,4})(?:[T\s]+(\d{2}):(\d{2}))?/)
   if (m) {
@@ -67,6 +76,7 @@ function mapStatus(text: string): OrderStatus | null {
     t.includes('EM TRANSITO') || t.includes('TRANSFERENCIA') || t.includes('COLETADO') ||
     t.includes('COLETA REALIZADA') || t.includes('EXPEDIDO') || t.includes('EM DISTRIBUICAO') ||
     t.includes('CHEGADA EM UNIDADE') || t.includes('CHEGADA NA UNIDADE') || t.includes('EM SEPARACAO') ||
+    t.includes('CHEGOU NO DEPOSITO') || t.includes('DEPOSITO DE ENTREGA') ||
     t.includes('RECEBIDO') || t.includes('AGUARDANDO') ||
     t.includes('TRANSBORDO') || t.includes('MANIFESTADO') || t.includes('CONHECIMENTO EMITIDO')
   ) return OrderStatus.IN_TRANSIT
@@ -219,11 +229,11 @@ export async function trackSenior(
     const lastFase = fases[fases.length - 1]
 
     // Data de envio = primeira fase executada
-    const shippedAt = firstFase?.dataExecucao ? new Date(firstFase.dataExecucao as string) : null
+    const shippedAt = parseBrDate(firstFase?.dataExecucao as string | undefined)
 
     // Previsão de entrega = campo ISO no objeto tracking
     const prevRaw = tracking.dataPrevisaoEntrega as string | undefined
-    const estimatedDelivery = prevRaw ? new Date(prevRaw) : null
+    const estimatedDelivery = parseBrDate(prevRaw)
 
     // Evento mais recente: preferência para observacao (texto real) sobre fase.descricao (nome técnico)
     const lastFaseFase = lastFase?.fase as Record<string, unknown> | undefined
@@ -241,7 +251,7 @@ export async function trackSenior(
 
     const events: TrackingEvent[] = fases
       .map((f) => ({
-        date: f.dataExecucao ? new Date(f.dataExecucao as string) : null,
+        date: parseBrDate(f.dataExecucao as string | undefined),
         description:
           (f.observacao as string | undefined) ||
           ((f.fase as Record<string, unknown> | undefined)?.descricao as string | undefined) ||
@@ -830,6 +840,7 @@ export async function trackSaoMiguel(
     expectedDate?: string    // previsão de entrega retornada pela API São Miguel
     dtPrevEntrega?: string
     previsaoEntrega?: string
+    dateandhourdelivery?: string  // data/hora real de entrega (distinta da data de registro no track)
     tracks?: { title?: string; date?: string; hour?: string; control?: string }[]
   }
 
@@ -856,10 +867,14 @@ export async function trackSaoMiguel(
   const hasOccurrence = cte.tracks.some((t) => detectOccurrence(t.title ?? '')) || undefined
 
   const events: TrackingEvent[] = cte.tracks
-    .map((t) => ({
-      date: t.date ? parseBrDate(`${t.date}${t.hour ? ' ' + t.hour : ''}`.trim()) : null,
-      description: t.title ?? '',
-    }))
+    .map((t) => {
+      // Para o evento de entrega, usar dateandhourdelivery (data real) em vez de date+hour (data de registro no sistema)
+      const isDeliveryEvent = t.control === 'ENTREGUE' || t.control === 'ENTREGA'
+      const date = (isDeliveryEvent && cte.dateandhourdelivery)
+        ? parseBrDate(cte.dateandhourdelivery)
+        : t.date ? parseBrDate(`${t.date}${t.hour ? ' ' + t.hour : ''}`.trim()) : null
+      return { date, description: t.title ?? '' }
+    })
     .filter((e) => e.description)
   // cte.tracks já vem mais recente primeiro
 
@@ -875,27 +890,44 @@ export async function trackSaoMiguel(
 }
 
 // --- Braspress ---
-// Autenticação: Basic Auth com credenciais fornecidas pela Braspress
-// Variáveis de ambiente: BRASPRESS_USER e BRASPRESS_PASSWORD
+// Autenticação: Basic Auth — credenciais por empresa (CNPJ remetente)
 // URL: GET https://api.braspress.com/v1/tracking/{cnpj}/{notaFiscal}/json
+// Resposta: { conhecimentos: [{ emissao, previsaoEntrega, dataEntrega, status, dataOcorrencia, ultimaOcorrencia, notasFiscais }] }
 
-interface BraspressTracking {
-  dataOcorrencia?: string
-  ocorrencia?: string
-  descricao?: string
-  filial?: string
+interface BraspressConhecimento {
+  numero?: string
+  emissao?: string           // data de envio (dd/MM/yyyy)
+  previsaoEntrega?: string   // previsão de entrega (dd/MM/yyyy)
+  dataEntrega?: string       // data de entrega real (dd/MM/yyyy)
+  status?: string            // "FINALIZADO", etc.
+  dataOcorrencia?: string    // data/hora da última ocorrência
+  ultimaOcorrencia?: string  // descrição da última ocorrência
+  notasFiscais?: { serie?: string; numero?: string }[]
 }
 
 interface BraspressResponse {
-  nroNfe?: string
-  dtPrevEntrega?: string
-  tracking?: BraspressTracking[]
+  conhecimentos?: BraspressConhecimento[]
 }
 
-function braspressAuth(): string {
-  const user = process.env.BRASPRESS_USER ?? ''
-  const pass = process.env.BRASPRESS_PASSWORD ?? ''
-  if (!user || !pass) throw new Error('Credenciais da Braspress não configuradas (BRASPRESS_USER / BRASPRESS_PASSWORD)')
+function braspressMapStatus(status: string, ultimaOcorrencia: string): OrderStatus | null {
+  const s = status.toUpperCase()
+  if (s === 'FINALIZADO') return OrderStatus.DELIVERED
+  if (s === 'CANCELADO') return OrderStatus.CANCELLED
+  if (s.includes('VIAGEM') || s.includes('AWB') || s.includes('TRANSITO') || s.includes('COLETA') || s.includes('ENTREGA')) return OrderStatus.IN_TRANSIT
+  return mapStatus(ultimaOcorrencia)
+}
+
+const BRASPRESS_CREDS: Record<string, { user: string; pass: string }> = {
+  '47715256000149': { user: 'BRASPRESS_AVIC_USER',       pass: 'BRASPRESS_AVIC_PASSWORD' },
+  '54695386000122': { user: 'BRASPRESS_AGROGRANJA_USER', pass: 'BRASPRESS_AGROGRANJA_PASSWORD' },
+}
+
+function braspressAuth(cnpj: string): string {
+  const cred = BRASPRESS_CREDS[cnpj]
+  if (!cred) throw new Error(`Braspress: credenciais não configuradas para CNPJ ${cnpj}`)
+  const user = process.env[cred.user] ?? ''
+  const pass = process.env[cred.pass] ?? ''
+  if (!user || !pass) throw new Error(`Braspress: ${cred.user} / ${cred.pass} não definidos no .env`)
   return 'Basic ' + Buffer.from(`${user}:${pass}`).toString('base64')
 }
 
@@ -911,7 +943,7 @@ export async function trackBraspress(
 
   const res = await fetch(url, {
     headers: {
-      Authorization: braspressAuth(),
+      Authorization: braspressAuth(cnpj),
       'Content-Type': 'application/json; charset=utf-8',
       Accept: 'application/json',
     },
@@ -926,26 +958,32 @@ export async function trackBraspress(
 
   const data = await res.json() as BraspressResponse
 
-  const trackings = data.tracking ?? []
-  if (trackings.length === 0) {
+  const conhecimentos = data.conhecimentos ?? []
+  if (conhecimentos.length === 0) {
     return { status: null, lastEvent: `Não localizado (NF ${nf})` }
   }
 
-  // Pega o último evento (mais recente)
-  const last = trackings[trackings.length - 1]
-  const descricao = last.descricao ?? last.ocorrencia ?? null
+  const c = conhecimentos[0]
+  const lastEvent = c.ultimaOcorrencia ?? c.status ?? null
+  const shippedAt = parseBrDate(c.emissao)
+  const estimatedDelivery = parseBrDate(c.previsaoEntrega)
+  const hasOccurrence = lastEvent ? detectOccurrence(lastEvent) || undefined : undefined
 
-  const events: TrackingEvent[] = trackings
-    .map((t) => ({
-      date: parseBrDate(t.dataOcorrencia),
-      description: t.descricao ?? t.ocorrencia ?? '',
-    }))
-    .filter((e) => e.description)
-    .reverse() // mais recente primeiro
+  // Histórico mínimo: ocorrência mais recente + emissão
+  const events: TrackingEvent[] = []
+  if (lastEvent) {
+    events.push({ date: parseBrDate(c.dataOcorrencia), description: lastEvent })
+  }
+  if (shippedAt) {
+    events.push({ date: shippedAt, description: 'CONHECIMENTO EMITIDO' })
+  }
 
   return {
-    status: descricao ? mapStatus(descricao) : null,
-    lastEvent: descricao,
+    status: braspressMapStatus(c.status ?? '', lastEvent ?? ''),
+    lastEvent,
+    shippedAt,
+    estimatedDelivery,
+    hasOccurrence,
     events: events.length > 0 ? events : undefined,
     raw: data,
   }

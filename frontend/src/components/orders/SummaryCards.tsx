@@ -24,9 +24,10 @@ interface Props {
 }
 
 export function SummaryCards({ filters, onFilter }: Props) {
+  const shippedStartDate = filters.shippedStartDate
   const { data, isLoading } = useQuery({
-    queryKey: ['orders', 'summary'],
-    queryFn: ordersApi.summary,
+    queryKey: ['orders', 'summary', shippedStartDate],
+    queryFn: () => ordersApi.summary(shippedStartDate ? { shippedStartDate } : undefined),
   })
 
   const activeKey = getActiveKey(filters)

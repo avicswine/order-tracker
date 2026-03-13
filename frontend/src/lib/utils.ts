@@ -1,6 +1,32 @@
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import type { OrderStatus } from '../types'
+import type { Order, OrderStatus, TrackingSystem } from '../types'
+
+export function getTrackingUrl(order: Order): string | null {
+  const system = order.carrier?.trackingSystem
+  const cnpj = order.senderCnpj?.replace(/\D/g, '') ?? ''
+  const nf = order.nfNumber ? String(parseInt(order.nfNumber, 10)) : ''
+
+  switch (system as TrackingSystem) {
+    case 'SSW':
+      // SSW aceita parâmetros via query string na página de consulta
+      return `https://ssw.inf.br/2/resultSSW?cnpj=${cnpj}&NR=${nf}`
+    case 'SAO_MIGUEL':
+    case 'PUPPETEER':
+      return 'https://portaldocliente.expressosaomiguel.com.br/rastrear-mercadoria'
+    case 'RODONAVES':
+      return `https://www.rodonaves.com.br/rastreio-de-mercadoria?taxIdRegistration=${cnpj}&invoiceNumber=${nf}`
+    case 'BRASPRESS':
+      return `https://blue.braspress.com/site/w/tracking/find?cpfCnpj=${cnpj}&pedidoNf=${nf}`
+    case 'SENIOR': {
+      const tenant = order.carrier?.trackingIdentifier
+      if (tenant) return `https://${tenant}.senior.com.br/rastreamento`
+      return null
+    }
+    default:
+      return null
+  }
+}
 
 export function formatDate(date: string | null | undefined, fmt = 'dd/MM/yyyy') {
   if (!date) return '—'
@@ -47,9 +73,9 @@ export function formatCNPJ(value: string) {
 }
 
 export const SENDER_COMPANIES = [
-  { cnpj: '47.715.256/0001-49', name: 'AVIC', color: 'bg-blue-600 text-white' },
+  { cnpj: '47.715.256/0001-49', name: 'AVIC', color: 'bg-black text-white' },
   { cnpj: '54.695.386/0001-22', name: 'AGRO', color: 'bg-red-600 text-white' },
-  { cnpj: '56.633.474/0001-25', name: 'EQUI', color: 'bg-green-600 text-white' },
+  { cnpj: '56.633.474/0001-25', name: 'EQUI', color: 'bg-orange-500 text-white' },
 ]
 
 const OCCURRENCE_KEYWORDS = [
