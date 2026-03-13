@@ -5,6 +5,7 @@ import fs from 'fs'
 import path from 'path'
 
 const router = Router()
+const publicRouter = Router()
 
 const TOKENS_FILE = path.join(__dirname, '../../.bling-tokens.json')
 
@@ -71,8 +72,8 @@ router.get('/status', (_req: Request, res: Response) => {
   res.json(status)
 })
 
-// GET /api/bling/auth/:company - inicia OAuth para a empresa
-router.get('/auth/:company', (req: Request, res: Response) => {
+// GET /api/bling/auth/:company - inicia OAuth para a empresa (rota pública)
+publicRouter.get('/auth/:company', (req: Request, res: Response) => {
   const company = COMPANIES[req.params.company]
   if (!company) return res.status(404).json({ error: 'Empresa não encontrada' })
   if (!company.clientId) return res.status(400).json({ error: 'Credenciais não configuradas para esta empresa' })
@@ -86,14 +87,15 @@ router.get('/auth/:company', (req: Request, res: Response) => {
   res.redirect(`${BLING_AUTH_URL}?${params.toString()}`)
 })
 
-// GET /api/bling/callback - recebe código e identifica empresa pelo state
-router.get('/callback', async (req: Request, res: Response) => {
+// GET /api/bling/callback - recebe código e identifica empresa pelo state (rota pública)
+publicRouter.get('/callback', async (req: Request, res: Response) => {
   const { code, state } = req.query
   const companyKey = state as string
   const company = COMPANIES[companyKey]
 
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173'
   if (!code || !company) {
-    return res.redirect('http://localhost:5173?bling=error')
+    return res.redirect(`${frontendUrl}?bling=error`)
   }
 
   try {
@@ -120,10 +122,10 @@ router.get('/callback', async (req: Request, res: Response) => {
     }
     saveTokens()
 
-    res.redirect(`http://localhost:5173?bling=connected&company=${companyKey}`)
+    res.redirect(`${frontendUrl}?bling=connected&company=${companyKey}`)
   } catch (err) {
     console.error(`Erro ao autenticar ${companyKey}:`, err)
-    res.redirect('http://localhost:5173?bling=error')
+    res.redirect(`${frontendUrl}?bling=error`)
   }
 })
 
@@ -670,4 +672,5 @@ interface BlingNFeDetailResponse {
   }
 }
 
+export { publicRouter as blingPublicRouter }
 export default router
