@@ -913,7 +913,7 @@ function braspressMapStatus(status: string, ultimaOcorrencia: string): OrderStat
   const s = status.toUpperCase()
   if (s === 'FINALIZADO') return OrderStatus.DELIVERED
   if (s === 'CANCELADO') return OrderStatus.CANCELLED
-  if (s.includes('VIAGEM') || s.includes('AWB') || s.includes('TRANSITO') || s.includes('COLETA') || s.includes('ENTREGA')) return OrderStatus.IN_TRANSIT
+  if (s.includes('VIAGEM') || s.includes('AWB') || s.includes('TRANSITO') || s.includes('COLETA') || s.includes('ENTREGA') || s.includes('DESTINO') || s.includes('ROTA')) return OrderStatus.IN_TRANSIT
   return mapStatus(ultimaOcorrencia)
 }
 
@@ -976,31 +976,30 @@ export async function trackBraspress(
     }
   }
 
-  // Resposta HTML — extrai dados via regex
+  // Resposta HTML — extrai dados do HTML renderizado pelo servidor
   const html = await res.text()
 
-  // Extrai último status/ocorrência
-  const ocorrenciaMatch = html.match(/ultima[Oo]correncia["']?\s*[:=]\s*["']([^"'<]+)/i)
-    ?? html.match(/class=["'][^"']*status[^"']*["'][^>]*>([^<]{5,})</i)
-  const lastEvent = ocorrenciaMatch?.[1]?.trim() ?? null
+  // Status principal: <td class="dt-status">Em viagem para Destino (Braspress)</td>
+  const statusMatch = html.match(/class=["']dt-status["'][^>]*>([^<]+)</i)
+  const lastEvent = statusMatch?.[1]?.trim() ?? null
 
-  const statusMatch = html.match(/\b(FINALIZADO|ENTREGUE|EM VIAGEM|EM TRANSITO|CANCELADO|COLETADO)\b/i)
-  const statusText = statusMatch?.[1]?.toUpperCase() ?? ''
+  // Data de envio: date=DD/MM/YYYY nos comentários do HTML
+  const dateMatches = [...html.matchAll(/date=(\d{2}\/\d{2}\/\d{4})/g)].map(m => m[1])
+  const shippedAt = dateMatches[0] ? parseBrDate(dateMatches[0]) : null
 
-  const emissaoMatch = html.match(/emissao["']?\s*[:=]\s*["']?(\d{2}\/\d{2}\/\d{4})/i)
-  const previsaoMatch = html.match(/previsao[^"'<]*["']?\s*[:=]\s*["']?(\d{2}\/\d{2}\/\d{4})/i)
+  // Data de entrega real: <td class="dt-data-entrega">DD/MM/YYYY</td>
+  const entregaMatch = html.match(/class=["']dt-data-entrega["'][^>]*>([^<]+)</i)
+  const estimatedDelivery = entregaMatch?.[1]?.trim() ? parseBrDate(entregaMatch[1].trim()) : null
 
-  const shippedAt = parseBrDate(emissaoMatch?.[1])
-  const estimatedDelivery = parseBrDate(previsaoMatch?.[1])
   const hasOccurrence = lastEvent ? detectOccurrence(lastEvent) || undefined : undefined
 
-  if (!lastEvent && !statusText) {
+  if (!lastEvent) {
     console.warn(`[Braspress] NF ${nf}: HTML sem dados reconhecíveis`)
     return { status: null, lastEvent: `Não localizado (NF ${nf})` }
   }
 
   return {
-    status: braspressMapStatus(statusText || lastEvent || '', lastEvent ?? ''),
+    status: braspressMapStatus(lastEvent, lastEvent),
     lastEvent, shippedAt, estimatedDelivery, hasOccurrence,
   }
 }
