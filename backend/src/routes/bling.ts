@@ -40,7 +40,7 @@ const BLING_AUTH_URL = 'https://www.bling.com.br/Api/v3/oauth/authorize'
 const BLING_TOKEN_URL = 'https://www.bling.com.br/Api/v3/oauth/token'
 
 // Transportadoras ignoradas no sync (sem API de rastreamento e sem interesse)
-const CARRIERS_BLOCKED = ['GARBERG', 'TNT', 'HS MOVERE']
+const CARRIERS_BLOCKED = ['GARBERG', 'TNT', 'HS MOVERE', 'PAC']
 
 // Configuração das 3 empresas
 const COMPANIES: Record<string, { name: string; code: string; cnpj: string; clientId: string; clientSecret: string }> = {
