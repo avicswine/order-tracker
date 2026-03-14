@@ -18,11 +18,8 @@ export function getTrackingUrl(order: Order): string | null {
       return `https://www.rodonaves.com.br/rastreio-de-mercadoria?taxIdRegistration=${cnpj}&invoiceNumber=${nf}`
     case 'BRASPRESS':
       return `https://blue.braspress.com/site/w/tracking/find?cpfCnpj=${cnpj}&pedidoNf=${nf}`
-    case 'SENIOR': {
-      const tenant = order.carrier?.trackingIdentifier
-      if (tenant) return `https://${tenant}.senior.com.br/rastreamento`
-      return null
-    }
+    case 'SENIOR':
+      return `https://platform.senior.com.br/logistica-tck/tms/tck-frontend/#/login/signup?tenant=ZEhKa2RISmhibk53YjNKMFpYTT0%3D`
     default:
       return null
   }
