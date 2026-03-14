@@ -332,7 +332,7 @@ export async function runBlingSync(limite?: number, onlyCompany?: string) {
             continue
           }
 
-          await new Promise((r) => setTimeout(r, 1000)) // 1s entre cada NF para evitar rate limit
+          await new Promise((r) => setTimeout(r, 200)) // delay reduzido — retry automático em caso de 429
           const carrierId = await resolveCarrier(companyKey, nf.id, String(nf.numero))
 
           // Sem transportadora rastreável → ignora (ex: Mercado Envios, sem transporte)
