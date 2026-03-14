@@ -8,6 +8,9 @@ const publicRouter = Router()
 // Cache em memória — populado do banco na inicialização via loadTokensFromDB()
 const tokens: Record<string, { access_token: string; refresh_token: string }> = {}
 
+// Lock para evitar syncs paralelos (ex: múltiplos restarts do Railway)
+let syncRunning = false
+
 export async function loadTokensFromDB() {
   const rows = await prisma.blingToken.findMany()
   for (const row of rows) {
@@ -270,6 +273,13 @@ async function resolveCarrier(companyKey: string, nfId: number, nfNumero: string
 
 // POST /api/bling/sync - importa NFs de todas as empresas conectadas
 export async function runBlingSync(limite?: number) {
+  if (syncRunning) {
+    console.log('[Bling] Sync já em andamento — chamada duplicada ignorada.')
+    return { totalCriados: 0, totalIgnorados: 0, results: {} }
+  }
+  syncRunning = true
+
+  try {
   const connectedCompanies = Object.keys(COMPANIES).filter((key) => !!tokens[key])
 
   if (connectedCompanies.length === 0) {
@@ -357,6 +367,9 @@ export async function runBlingSync(limite?: number) {
   const totalIgnorados = Object.values(results).reduce((s, r) => s + r.ignorados, 0)
 
   return { totalCriados, totalIgnorados, results }
+  } finally {
+    syncRunning = false
+  }
 }
 
 router.post('/sync', async (req: Request, res: Response) => {
