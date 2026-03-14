@@ -14,6 +14,10 @@ export async function runTrackingSync(): Promise<{ atualizados: number; erros: n
       carrier: { trackingSystem: { not: TrackingSystem.NONE } },
     },
     include: { carrier: true },
+    orderBy: [
+      { status: 'asc' }, // PENDING antes de IN_TRANSIT (alfabético)
+      { createdAt: 'desc' },
+    ],
   })
 
   if (orders.length === 0) return { atualizados: 0, erros: 0, total: 0 }
