@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '../../lib/api'
 
@@ -34,8 +34,12 @@ const blingApi = {
   disconnect: (company: string) => api.post(`/bling/disconnect/${company}`).then((r) => r.data),
 }
 
-const trackingApi = {
-  sync: () => api.post<TrackingResult>('/tracking/sync').then((r) => r.data),
+interface TrackingProgress {
+  current: number
+  total: number
+  orderNumber: string
+  carrier: string
+  status: string | null
 }
 
 export function BlingSync() {
@@ -69,12 +73,37 @@ export function BlingSync() {
     },
   })
 
-  const trackingMutation = useMutation({
-    mutationFn: trackingApi.sync,
-    onSuccess: () => {
+  const [trackingProgress, setTrackingProgress] = useState<TrackingProgress | null>(null)
+  const [trackingResult, setTrackingResult] = useState<TrackingResult | null>(null)
+  const [trackingRunning, setTrackingRunning] = useState(false)
+  const esRef = useRef<EventSource | null>(null)
+
+  function startTrackingSync() {
+    if (trackingRunning) return
+    setTrackingRunning(true)
+    setTrackingProgress(null)
+    setTrackingResult(null)
+
+    const token = localStorage.getItem('token')
+    const es = new EventSource(`/api/tracking/sync-stream?token=${token}`)
+    esRef.current = es
+
+    es.addEventListener('progress', (e) => {
+      setTrackingProgress(JSON.parse(e.data) as TrackingProgress)
+    })
+    es.addEventListener('done', (e) => {
+      const result = JSON.parse(e.data) as TrackingResult
+      setTrackingResult(result)
+      setTrackingProgress(null)
+      setTrackingRunning(false)
       qc.invalidateQueries({ queryKey: ['orders'] })
-    },
-  })
+      es.close()
+    })
+    es.addEventListener('error', () => {
+      setTrackingRunning(false)
+      es.close()
+    })
+  }
 
   const disconnectMutation = useMutation({
     mutationFn: (company: string) => blingApi.disconnect(company),
@@ -97,10 +126,16 @@ export function BlingSync() {
           {enrichMutation.data.atualizados} transportadoras vinculadas
         </span>
       )}
-      {trackingMutation.data && (
+      {trackingProgress && (
+        <span className="text-xs text-gray-600 max-w-xs truncate">
+          <span className="font-medium">{trackingProgress.current}/{trackingProgress.total}</span>
+          {' · '}{trackingProgress.orderNumber}
+        </span>
+      )}
+      {trackingResult && !trackingProgress && (
         <span className="text-xs text-gray-500">
-          {trackingMutation.data.atualizados}/{trackingMutation.data.total} rastreados
-          {trackingMutation.data.erros > 0 && `, ${trackingMutation.data.erros} erro(s)`}
+          {trackingResult.atualizados}/{trackingResult.total} rastreados
+          {trackingResult.erros > 0 && `, ${trackingResult.erros} erro(s)`}
         </span>
       )}
 
@@ -142,11 +177,11 @@ export function BlingSync() {
 
           <button
             className="btn-secondary text-sm"
-            onClick={() => trackingMutation.mutate()}
-            disabled={syncMutation.isPending || enrichMutation.isPending || trackingMutation.isPending}
+            onClick={startTrackingSync}
+            disabled={syncMutation.isPending || enrichMutation.isPending || trackingRunning}
             title="Consulta status de entrega nas transportadoras"
           >
-            {trackingMutation.isPending ? 'Rastreando...' : (
+            {trackingRunning ? 'Rastreando...' : (
               <>
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}

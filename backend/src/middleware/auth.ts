@@ -19,11 +19,12 @@ declare global {
 
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
   const header = req.headers.authorization
-  if (!header?.startsWith('Bearer ')) {
+  // Fallback: token via query string (usado por SSE, que não suporta headers customizados)
+  const token = header?.startsWith('Bearer ') ? header.slice(7) : (req.query.token as string | undefined)
+
+  if (!token) {
     return res.status(401).json({ error: 'Token não informado' })
   }
-
-  const token = header.slice(7)
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET as string) as AuthPayload
     req.user = payload

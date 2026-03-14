@@ -5,7 +5,9 @@ import { OrderStatus, TrackingSystem, Prisma } from '@prisma/client'
 
 const router = Router()
 
-export async function runTrackingSync(): Promise<{ atualizados: number; erros: number; total: number }> {
+type ProgressCallback = (data: { current: number; total: number; orderNumber: string; carrier: string; status: string | null }) => void
+
+export async function runTrackingSync(onProgress?: ProgressCallback): Promise<{ atualizados: number; erros: number; total: number }> {
   const orders = await prisma.order.findMany({
     where: {
       status: { in: [OrderStatus.PENDING, OrderStatus.IN_TRANSIT] },
@@ -142,20 +144,45 @@ export async function runTrackingSync(): Promise<{ atualizados: number; erros: n
       }
 
       atualizados++
+      onProgress?.({ current: atualizados + erros, total: orders.length, orderNumber: order.orderNumber, carrier: carrier.name, status: novoStatus ?? null })
       await new Promise((r) => setTimeout(r, 500))
     } catch (err) {
       console.error(`[Tracking] Erro ao rastrear ${order.orderNumber}:`, err)
       erros++
+      onProgress?.({ current: atualizados + erros, total: orders.length, orderNumber: order.orderNumber, carrier: carrier.name, status: 'erro' })
     }
   }
 
   return { atualizados, erros, total: orders.length }
 }
 
-// POST /api/tracking/sync — disparo manual
+// POST /api/tracking/sync — disparo manual (sem progresso)
 router.post('/sync', async (_req: Request, res: Response) => {
   const result = await runTrackingSync()
   res.json({ message: 'Rastreamento concluído', ...result })
+})
+
+// GET /api/tracking/sync-stream — SSE com progresso em tempo real
+router.get('/sync-stream', async (req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'text/event-stream')
+  res.setHeader('Cache-Control', 'no-cache')
+  res.setHeader('Connection', 'keep-alive')
+  res.flushHeaders()
+
+  const send = (event: string, data: unknown) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+  }
+
+  try {
+    const result = await runTrackingSync((progress) => {
+      send('progress', progress)
+    })
+    send('done', result)
+  } catch (err) {
+    send('error', { message: String(err) })
+  } finally {
+    res.end()
+  }
 })
 
 // POST /api/tracking/backfill — busca datas de envio/previsão para pedidos sem essas informações
