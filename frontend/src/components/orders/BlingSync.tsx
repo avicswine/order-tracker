@@ -161,7 +161,7 @@ export function BlingSync() {
           <button
             className="btn-secondary text-sm"
             onClick={() => enrichMutation.mutate()}
-            disabled={syncMutation.isPending || enrichMutation.isPending || trackingMutation.isPending}
+            disabled={syncMutation.isPending || enrichMutation.isPending || trackingRunning}
             title="Busca transportadoras no Bling para pedidos que ainda não têm"
           >
             {enrichMutation.isPending ? 'Buscando...' : (
