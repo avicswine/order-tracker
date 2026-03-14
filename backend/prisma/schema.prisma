@@ -65,6 +65,16 @@ model StatusHistory {
   @@map("status_history")
 }
 
+model BlingToken {
+  id           String   @id @default(cuid())
+  companyKey   String   @unique
+  accessToken  String
+  refreshToken String
+  updatedAt    DateTime @updatedAt
+
+  @@map("bling_tokens")
+}
+
 model User {
   id        String   @id @default(cuid())
   name      String

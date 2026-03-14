@@ -5,7 +5,7 @@ import path from 'path'
 import carriersRouter from './routes/carriers'
 import ordersRouter from './routes/orders'
 import trackingRouter, { runTrackingSync } from './routes/tracking'
-import blingRouter, { runBlingSync, blingPublicRouter } from './routes/bling'
+import blingRouter, { runBlingSync, blingPublicRouter, loadTokensFromDB } from './routes/bling'
 import authRouter from './routes/auth'
 import { requireAuth } from './middleware/auth'
 
@@ -44,8 +44,12 @@ app.listen(Number(PORT), '0.0.0.0', () => {
   console.log(`Server running on http://localhost:${PORT}`)
 
   // Sync do Bling ao iniciar — depois de concluir, dispara o rastreamento
-  console.log('[Bling] Iniciando sync automático na startup...')
-  runBlingSync()
+  console.log('[Bling] Carregando tokens do banco...')
+  loadTokensFromDB()
+    .then(() => {
+      console.log('[Bling] Iniciando sync automático na startup...')
+      return runBlingSync()
+    })
     .then(r => {
       console.log(`[Bling] Sync concluído — criados: ${r.totalCriados}, ignorados: ${r.totalIgnorados}`)
       console.log('[Tracking] Iniciando sync de rastreamento na startup...')

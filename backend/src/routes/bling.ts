@@ -1,27 +1,34 @@
 import { Router, Request, Response } from 'express'
 import axios from 'axios'
 import { prisma } from '../lib/prisma'
-import fs from 'fs'
-import path from 'path'
 
 const router = Router()
 const publicRouter = Router()
 
-const TOKENS_FILE = path.join(__dirname, '../../.bling-tokens.json')
+// Cache em memória — populado do banco na inicialização via loadTokensFromDB()
+const tokens: Record<string, { access_token: string; refresh_token: string }> = {}
 
-function loadTokens(): Record<string, { access_token: string; refresh_token: string }> {
-  try {
-    if (fs.existsSync(TOKENS_FILE)) {
-      return JSON.parse(fs.readFileSync(TOKENS_FILE, 'utf-8'))
-    }
-  } catch {}
-  return {}
+export async function loadTokensFromDB() {
+  const rows = await prisma.blingToken.findMany()
+  for (const row of rows) {
+    tokens[row.companyKey] = { access_token: row.accessToken, refresh_token: row.refreshToken }
+  }
+  console.log(`[Bling] Tokens carregados do banco: ${rows.map(r => r.companyKey).join(', ') || 'nenhum'}`)
 }
 
-function saveTokens() {
-  try {
-    fs.writeFileSync(TOKENS_FILE, JSON.stringify(tokens, null, 2))
-  } catch {}
+async function saveToken(companyKey: string) {
+  const t = tokens[companyKey]
+  if (!t) return
+  await prisma.blingToken.upsert({
+    where: { companyKey },
+    update: { accessToken: t.access_token, refreshToken: t.refresh_token },
+    create: { companyKey, accessToken: t.access_token, refreshToken: t.refresh_token },
+  })
+}
+
+async function deleteToken(companyKey: string) {
+  delete tokens[companyKey]
+  await prisma.blingToken.deleteMany({ where: { companyKey } })
 }
 
 const BLING_REDIRECT_URI = process.env.BLING_REDIRECT_URI!
@@ -57,8 +64,6 @@ const COMPANIES: Record<string, { name: string; code: string; cnpj: string; clie
   },
 }
 
-// Tokens persistidos em arquivo por empresa
-const tokens: Record<string, { access_token: string; refresh_token: string }> = loadTokens()
 
 // GET /api/bling/status - status de conexão de todas as empresas
 router.get('/status', (_req: Request, res: Response) => {
@@ -120,7 +125,7 @@ publicRouter.get('/callback', async (req: Request, res: Response) => {
       access_token: response.data.access_token,
       refresh_token: response.data.refresh_token,
     }
-    saveTokens()
+    await saveToken(companyKey)
 
     res.redirect(`${frontendUrl}?bling=connected&company=${companyKey}`)
   } catch (err) {
@@ -155,7 +160,7 @@ async function refreshToken(companyKey: string) {
     access_token: response.data.access_token,
     refresh_token: response.data.refresh_token,
   }
-  saveTokens()
+  await saveToken(companyKey)
 }
 
 // Chamada autenticada ao Bling por empresa (com retry em 401 e 429)
@@ -642,9 +647,8 @@ router.post('/backfill-recipient-cnpj', async (_req: Request, res: Response) => 
 })
 
 // POST /api/bling/disconnect/:company - desconecta uma empresa
-router.post('/disconnect/:company', (req: Request, res: Response) => {
-  delete tokens[req.params.company]
-  saveTokens()
+router.post('/disconnect/:company', async (req: Request, res: Response) => {
+  await deleteToken(req.params.company)
   res.json({ message: 'Desconectado' })
 })
 
