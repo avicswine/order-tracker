@@ -76,6 +76,7 @@ export function BlingSync() {
   const [trackingProgress, setTrackingProgress] = useState<TrackingProgress | null>(null)
   const [trackingResult, setTrackingResult] = useState<TrackingResult | null>(null)
   const [trackingRunning, setTrackingRunning] = useState(false)
+  const [trackingError, setTrackingError] = useState<string | null>(null)
   const esRef = useRef<EventSource | null>(null)
 
   function startTrackingSync() {
@@ -83,6 +84,7 @@ export function BlingSync() {
     setTrackingRunning(true)
     setTrackingProgress(null)
     setTrackingResult(null)
+    setTrackingError(null)
 
     const token = localStorage.getItem('token')
     const es = new EventSource(`/api/tracking/sync-stream?token=${token}`)
@@ -99,10 +101,18 @@ export function BlingSync() {
       qc.invalidateQueries({ queryKey: ['orders'] })
       es.close()
     })
-    es.addEventListener('error', () => {
+    es.addEventListener('error', (e) => {
+      const msg = (e as MessageEvent).data ? JSON.parse((e as MessageEvent).data).message : 'Falha na conexão com o servidor'
+      setTrackingError(msg)
       setTrackingRunning(false)
       es.close()
     })
+  }
+
+  function closeTrackingModal() {
+    setTrackingResult(null)
+    setTrackingError(null)
+    setTrackingProgress(null)
   }
 
   const disconnectMutation = useMutation({
@@ -116,12 +126,16 @@ export function BlingSync() {
   return (
     <div className="flex items-center gap-3">
       {/* Modal de progresso de rastreamento */}
-      {(trackingRunning || trackingResult) && (
+      {(trackingRunning || trackingResult || trackingError) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-2xl shadow-2xl p-6 w-80 flex flex-col gap-4">
             <h3 className="text-base font-semibold text-gray-800">
-              {trackingRunning ? 'Atualizando rastreamento...' : 'Rastreamento concluído'}
+              {trackingRunning ? 'Atualizando rastreamento...' : trackingError ? 'Erro no rastreamento' : 'Rastreamento concluído'}
             </h3>
+
+            {trackingRunning && !trackingProgress && (
+              <p className="text-sm text-gray-500">Conectando...</p>
+            )}
 
             {trackingProgress && (
               <>
@@ -144,6 +158,13 @@ export function BlingSync() {
               </>
             )}
 
+            {trackingError && (
+              <>
+                <p className="text-sm text-red-600">{trackingError}</p>
+                <button className="btn-primary text-sm w-full" onClick={closeTrackingModal}>Fechar</button>
+              </>
+            )}
+
             {trackingResult && !trackingRunning && (
               <>
                 <div className="text-sm text-gray-700 space-y-1">
@@ -153,12 +174,7 @@ export function BlingSync() {
                   )}
                   <p className="text-gray-400 text-xs">Total: {trackingResult.total} pedidos</p>
                 </div>
-                <button
-                  className="btn-primary text-sm w-full"
-                  onClick={() => setTrackingResult(null)}
-                >
-                  Fechar
-                </button>
+                <button className="btn-primary text-sm w-full" onClick={closeTrackingModal}>Fechar</button>
               </>
             )}
           </div>
