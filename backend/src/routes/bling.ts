@@ -216,7 +216,7 @@ async function resolveCarrier(companyKey: string, nfId: number, nfNumero: string
     })
     if (existing) {
       // Garante que transportadoras bloqueadas recriadas manualmente não sejam vinculadas
-      const bloqueadaExistente = CARRIERS_BLOCKED.some(t => existing.name.toUpperCase().includes(t))
+      const bloqueadaExistente = CARRIERS_BLOCKED.some(t => new RegExp(`\\b${t}\\b`).test(existing.name.toUpperCase()))
       if (bloqueadaExistente) {
         console.log(`[Bling] NF ${nfNumero}: transportadora bloqueada ("${existing.name}") — ignorada`)
         return undefined
@@ -232,7 +232,7 @@ async function resolveCarrier(companyKey: string, nfId: number, nfNumero: string
       }
 
       // Ignora transportadoras bloqueadas
-      const bloqueada = CARRIERS_BLOCKED.some(t => (transportador.nome ?? '').toUpperCase().includes(t))
+      const bloqueada = CARRIERS_BLOCKED.some(t => new RegExp(`\\b${t}\\b`).test((transportador.nome ?? '').toUpperCase()))
       if (bloqueada) {
         console.log(`[Bling] NF ${nfNumero}: transportadora bloqueada ("${transportador.nome}") — ignorada`)
         return undefined
