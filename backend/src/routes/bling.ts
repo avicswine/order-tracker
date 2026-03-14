@@ -269,7 +269,7 @@ async function resolveCarrier(companyKey: string, nfId: number, nfNumero: string
 }
 
 // POST /api/bling/sync - importa NFs de todas as empresas conectadas
-export async function runBlingSync() {
+export async function runBlingSync(limite?: number) {
   const connectedCompanies = Object.keys(COMPANIES).filter((key) => !!tokens[key])
 
   if (connectedCompanies.length === 0) {
@@ -300,6 +300,8 @@ export async function runBlingSync() {
         totalNFs += nfes.length
 
         for (const nf of nfes) {
+          if (limite && criados >= limite) break
+
           // Deduplicação por nfNumber + empresa (senderCnpj) para evitar conflito entre empresas
           const existing = await prisma.order.findFirst({
             where: { nfNumber: String(nf.numero), senderCnpj: company.cnpj },
@@ -340,6 +342,7 @@ export async function runBlingSync() {
           criados++
         }
 
+        if (limite && criados >= limite) break
         pagina++
       }
       console.log(`[Bling] ${company.name}: total ${totalNFs} NFs processadas`)
@@ -356,14 +359,15 @@ export async function runBlingSync() {
   return { totalCriados, totalIgnorados, results }
 }
 
-router.post('/sync', async (_req: Request, res: Response) => {
+router.post('/sync', async (req: Request, res: Response) => {
   await loadTokensFromDB()
   const connectedCompanies = Object.keys(COMPANIES).filter((key) => !!tokens[key])
   if (connectedCompanies.length === 0) {
     return res.status(401).json({ error: 'Nenhuma empresa conectada ao Bling.' })
   }
 
-  const result = await runBlingSync()
+  const limite = req.body?.limite ? Number(req.body.limite) : undefined
+  const result = await runBlingSync(limite)
   res.json({ message: 'Sincronização concluída', ...result })
 })
 
