@@ -272,7 +272,7 @@ async function resolveCarrier(companyKey: string, nfId: number, nfNumero: string
 }
 
 // POST /api/bling/sync - importa NFs de todas as empresas conectadas
-export async function runBlingSync(limite?: number) {
+export async function runBlingSync(limite?: number, onlyCompany?: string) {
   if (syncRunning) {
     console.log('[Bling] Sync já em andamento — chamada duplicada ignorada.')
     return { totalCriados: 0, totalIgnorados: 0, results: {} }
@@ -280,7 +280,7 @@ export async function runBlingSync(limite?: number) {
   syncRunning = true
 
   try {
-  const connectedCompanies = Object.keys(COMPANIES).filter((key) => !!tokens[key])
+  const connectedCompanies = Object.keys(COMPANIES).filter((key) => !!tokens[key] && (!onlyCompany || key === onlyCompany))
 
   if (connectedCompanies.length === 0) {
     console.log('[Bling] Nenhuma empresa conectada — sync ignorado.')
@@ -385,7 +385,8 @@ router.post('/sync', async (req: Request, res: Response) => {
   }
 
   const limite = req.body?.limite ? Number(req.body.limite) : undefined
-  const result = await runBlingSync(limite)
+  const onlyCompany = req.body?.company as string | undefined
+  const result = await runBlingSync(limite, onlyCompany)
   res.json({ message: 'Sincronização concluída', ...result })
 })
 

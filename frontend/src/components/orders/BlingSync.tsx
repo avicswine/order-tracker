@@ -29,7 +29,7 @@ interface TrackingResult {
 
 const blingApi = {
   status: () => api.get<CompanyStatus[]>('/bling/status').then((r) => r.data),
-  sync: () => api.post<SyncResult>('/bling/sync').then((r) => r.data),
+  sync: (company?: string) => api.post<SyncResult>('/bling/sync', company ? { company } : {}).then((r) => r.data),
   enrich: () => api.post<EnrichResult>('/bling/enrich').then((r) => r.data),
   disconnect: (company: string) => api.post(`/bling/disconnect/${company}`).then((r) => r.data),
 }
@@ -55,7 +55,7 @@ export function BlingSync() {
   }, [refetch])
 
   const syncMutation = useMutation({
-    mutationFn: blingApi.sync,
+    mutationFn: (company?: string) => blingApi.sync(company),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['orders'] })
       qc.invalidateQueries({ queryKey: ['bling-status'] })
@@ -109,7 +109,7 @@ export function BlingSync() {
         <>
           <button
             className="btn-secondary text-sm"
-            onClick={() => syncMutation.mutate()}
+            onClick={() => syncMutation.mutate(undefined)}
             disabled={syncMutation.isPending || enrichMutation.isPending}
           >
             {syncMutation.isPending ? 'Importando...' : (
@@ -168,8 +168,16 @@ export function BlingSync() {
                 <span className="h-2 w-2 rounded-full bg-green-500" />
                 <span className="text-xs font-medium text-green-700">{company.name}</span>
                 <button
+                  onClick={() => syncMutation.mutate(company.key)}
+                  disabled={syncMutation.isPending}
+                  className="ml-1 text-green-400 hover:text-blue-500 leading-none"
+                  title={`Importar só ${company.name}`}
+                >
+                  ↓
+                </button>
+                <button
                   onClick={() => disconnectMutation.mutate(company.key)}
-                  className="ml-1 text-green-400 hover:text-red-500 leading-none"
+                  className="text-green-400 hover:text-red-500 leading-none"
                   title="Desconectar"
                 >
                   ×
