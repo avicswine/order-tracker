@@ -81,17 +81,9 @@ export function BlingSync() {
   const [copied, setCopied] = useState(false)
   const esRef = useRef<EventSource | null>(null)
 
-  function startTrackingSync() {
-    if (trackingRunning) return
-    setTrackingRunning(true)
-    setTrackingProgress(null)
-    setTrackingResult(null)
-    setTrackingError(null)
-    setTrackingErrorOrders([])
-    setCopied(false)
-
+  function openSseStream(url: string, accumulated: TrackingResult | null, onDone: (r: TrackingResult) => void) {
     const token = localStorage.getItem('order_tracker_token')
-    const es = new EventSource(`/api/tracking/sync-stream?token=${token}`)
+    const es = new EventSource(`${url}?token=${token}`)
     esRef.current = es
 
     es.addEventListener('progress', (e) => {
@@ -103,17 +95,41 @@ export function BlingSync() {
     })
     es.addEventListener('done', (e) => {
       const result = JSON.parse(e.data) as TrackingResult
-      setTrackingResult(result)
-      setTrackingProgress(null)
-      setTrackingRunning(false)
-      qc.invalidateQueries({ queryKey: ['orders'] })
+      const merged: TrackingResult = {
+        atualizados: (accumulated?.atualizados ?? 0) + result.atualizados,
+        erros: (accumulated?.erros ?? 0) + result.erros,
+        total: (accumulated?.total ?? 0) + result.total,
+      }
       es.close()
+      onDone(merged)
     })
     es.addEventListener('error', (e) => {
       const msg = (e as MessageEvent).data ? JSON.parse((e as MessageEvent).data).message : 'Falha na conexão com o servidor'
       setTrackingError(msg)
       setTrackingRunning(false)
       es.close()
+    })
+  }
+
+  function startTrackingSync() {
+    if (trackingRunning) return
+    setTrackingRunning(true)
+    setTrackingProgress(null)
+    setTrackingResult(null)
+    setTrackingError(null)
+    setTrackingErrorOrders([])
+    setCopied(false)
+
+    // 1. Sync geral (todos os carriers)
+    openSseStream('/api/tracking/sync-stream', null, (result1) => {
+      // 2. Após terminar, sync específico São Miguel (garante que SM sempre roda)
+      setTrackingProgress(null)
+      openSseStream('/api/tracking/sync-stream-sm', result1, (result2) => {
+        setTrackingResult(result2)
+        setTrackingProgress(null)
+        setTrackingRunning(false)
+        qc.invalidateQueries({ queryKey: ['orders'] })
+      })
     })
   }
 

@@ -9,17 +9,19 @@ type ProgressCallback = (data: { current: number; total: number; orderNumber: st
 
 const TRACKING_CONCURRENCY = 5
 
-export async function runTrackingSync(onProgress?: ProgressCallback): Promise<{ atualizados: number; erros: number; total: number }> {
+export async function runTrackingSync(onProgress?: ProgressCallback, systems?: TrackingSystem[]): Promise<{ atualizados: number; erros: number; total: number }> {
   const orders = await prisma.order.findMany({
     where: {
       status: { in: [OrderStatus.PENDING, OrderStatus.IN_TRANSIT] },
       nfNumber: { not: null },
       senderCnpj: { not: null },
-      carrier: { trackingSystem: { not: TrackingSystem.NONE } },
+      carrier: systems
+        ? { trackingSystem: { in: systems } }
+        : { trackingSystem: { not: TrackingSystem.NONE } },
     },
     include: { carrier: true },
     orderBy: [
-      { status: 'asc' }, // PENDING antes de IN_TRANSIT (alfabético)
+      { status: 'asc' },
       { createdAt: 'desc' },
     ],
   })
@@ -165,29 +167,32 @@ router.post('/sync', async (_req: Request, res: Response) => {
   res.json({ message: 'Rastreamento concluído', ...result })
 })
 
-// GET /api/tracking/sync-stream — SSE com progresso em tempo real
-router.get('/sync-stream', async (req: Request, res: Response) => {
-  res.setHeader('Content-Type', 'text/event-stream')
-  res.setHeader('Cache-Control', 'no-cache')
-  res.setHeader('Connection', 'keep-alive')
-  res.setHeader('X-Accel-Buffering', 'no') // desativa buffer do Nginx/Railway
-  res.flushHeaders()
+function sseHandler(systems?: TrackingSystem[]) {
+  return async (_req: Request, res: Response) => {
+    res.setHeader('Content-Type', 'text/event-stream')
+    res.setHeader('Cache-Control', 'no-cache')
+    res.setHeader('Connection', 'keep-alive')
+    res.setHeader('X-Accel-Buffering', 'no')
+    res.flushHeaders()
 
-  const send = (event: string, data: unknown) => {
-    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
-  }
+    const send = (event: string, data: unknown) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
 
-  try {
-    const result = await runTrackingSync((progress) => {
-      send('progress', progress)
-    })
-    send('done', result)
-  } catch (err) {
-    send('error', { message: String(err) })
-  } finally {
-    res.end()
+    try {
+      const result = await runTrackingSync((progress) => send('progress', progress), systems)
+      send('done', result)
+    } catch (err) {
+      send('error', { message: String(err) })
+    } finally {
+      res.end()
+    }
   }
-})
+}
+
+// GET /api/tracking/sync-stream — SSE com progresso em tempo real (todos)
+router.get('/sync-stream', sseHandler())
+
+// GET /api/tracking/sync-stream-sm — SSE só para São Miguel
+router.get('/sync-stream-sm', sseHandler([TrackingSystem.SAO_MIGUEL]))
 
 // POST /api/tracking/backfill — busca datas de envio/previsão para pedidos sem essas informações
 // Não altera status — apenas preenche shippedAt e estimatedDelivery
