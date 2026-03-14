@@ -756,7 +756,9 @@ export async function trackRodonaves(
 // --- Expresso São Miguel (API direta) ---
 
 const SM_APP_KEY = 'Sx8AHhuIpDZYfY5GlzOzrlG1fYlhl4HD'
-const SM_API_URL = 'https://srv.expressosaomiguel.com.br:40490/api-portal-cliente/tracks'
+// SM_PROXY_URL: Cloudflare Worker que mascara o IP do Railway (porta 40490 é bloqueada em cloud)
+// Localmente usa a API direta; em produção usa o proxy se configurado
+const SM_API_URL = process.env.SM_PROXY_URL || 'https://srv.expressosaomiguel.com.br:40490/api-portal-cliente/tracks'
 
 function smEvpBytesToKey(passphrase: string, salt: Buffer, keyLen: number, ivLen: number) {
   const totalLen = keyLen + ivLen
