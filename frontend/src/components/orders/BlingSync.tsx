@@ -86,7 +86,7 @@ export function BlingSync() {
     setTrackingResult(null)
     setTrackingError(null)
 
-    const token = localStorage.getItem('token')
+    const token = localStorage.getItem('order_tracker_token')
     const es = new EventSource(`/api/tracking/sync-stream?token=${token}`)
     esRef.current = es
 
