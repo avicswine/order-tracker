@@ -166,7 +166,11 @@ async function refreshToken(companyKey: string) {
 // Chamada autenticada ao Bling por empresa (com retry em 401 e 429)
 async function blingGet(companyKey: string, path: string, retries = 3): Promise<unknown> {
   const token = tokens[companyKey]
-  if (!token) throw new Error(`Empresa ${companyKey} não conectada`)
+  if (!token) {
+    // Tenta recarregar do banco antes de desistir
+    await loadTokensFromDB()
+    if (!tokens[companyKey]) throw new Error(`Empresa ${companyKey} não conectada`)
+  }
 
   try {
     const response = await axios.get(`${BLING_API}${path}`, {
@@ -352,6 +356,7 @@ export async function runBlingSync() {
 }
 
 router.post('/sync', async (_req: Request, res: Response) => {
+  await loadTokensFromDB()
   const connectedCompanies = Object.keys(COMPANIES).filter((key) => !!tokens[key])
   if (connectedCompanies.length === 0) {
     return res.status(401).json({ error: 'Nenhuma empresa conectada ao Bling.' })
