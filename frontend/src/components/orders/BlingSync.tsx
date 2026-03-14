@@ -77,6 +77,8 @@ export function BlingSync() {
   const [trackingResult, setTrackingResult] = useState<TrackingResult | null>(null)
   const [trackingRunning, setTrackingRunning] = useState(false)
   const [trackingError, setTrackingError] = useState<string | null>(null)
+  const [trackingErrorOrders, setTrackingErrorOrders] = useState<{ orderNumber: string; carrier: string }[]>([])
+  const [copied, setCopied] = useState(false)
   const esRef = useRef<EventSource | null>(null)
 
   function startTrackingSync() {
@@ -85,13 +87,19 @@ export function BlingSync() {
     setTrackingProgress(null)
     setTrackingResult(null)
     setTrackingError(null)
+    setTrackingErrorOrders([])
+    setCopied(false)
 
     const token = localStorage.getItem('order_tracker_token')
     const es = new EventSource(`/api/tracking/sync-stream?token=${token}`)
     esRef.current = es
 
     es.addEventListener('progress', (e) => {
-      setTrackingProgress(JSON.parse(e.data) as TrackingProgress)
+      const progress = JSON.parse(e.data) as TrackingProgress
+      setTrackingProgress(progress)
+      if (progress.status === 'erro') {
+        setTrackingErrorOrders((prev) => [...prev, { orderNumber: progress.orderNumber, carrier: progress.carrier }])
+      }
     })
     es.addEventListener('done', (e) => {
       const result = JSON.parse(e.data) as TrackingResult
@@ -113,6 +121,25 @@ export function BlingSync() {
     setTrackingResult(null)
     setTrackingError(null)
     setTrackingProgress(null)
+    setTrackingErrorOrders([])
+    setCopied(false)
+  }
+
+  function copyErrors() {
+    // Agrupa por empresa
+    const byCompany: Record<string, string[]> = {}
+    for (const o of trackingErrorOrders) {
+      const empresa = o.orderNumber.split('-')[0]
+      if (!byCompany[empresa]) byCompany[empresa] = []
+      byCompany[empresa].push(o.orderNumber)
+    }
+    const text = Object.entries(byCompany)
+      .map(([empresa, nfs]) => `${empresa}:\n${nfs.join('\n')}`)
+      .join('\n\n')
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
   }
 
   const disconnectMutation = useMutation({
@@ -183,6 +210,38 @@ export function BlingSync() {
                   )}
                   <p className="text-gray-400 text-xs">Total: {trackingResult.total} pedidos</p>
                 </div>
+
+                {trackingErrorOrders.length > 0 && (
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-red-600">NFs com erro</span>
+                      <button
+                        onClick={copyErrors}
+                        className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"
+                      >
+                        {copied ? '✓ Copiado' : '📋 Copiar'}
+                      </button>
+                    </div>
+                    <div className="max-h-40 overflow-y-auto rounded-lg bg-gray-50 border border-gray-100 p-2 space-y-0.5">
+                      {Object.entries(
+                        trackingErrorOrders.reduce<Record<string, string[]>>((acc, o) => {
+                          const empresa = o.orderNumber.split('-')[0]
+                          if (!acc[empresa]) acc[empresa] = []
+                          acc[empresa].push(o.orderNumber)
+                          return acc
+                        }, {})
+                      ).map(([empresa, nfs]) => (
+                        <div key={empresa}>
+                          <p className="text-xs font-semibold text-gray-500 mt-1">{empresa}</p>
+                          {nfs.map((nf) => (
+                            <p key={nf} className="text-xs text-red-500 pl-2">{nf}</p>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <button className="btn-primary text-sm w-full" onClick={closeTrackingModal}>Fechar</button>
               </>
             )}
