@@ -939,53 +939,69 @@ export async function trackBraspress(
   const cnpj = senderCnpj.replace(/\D/g, '')
   const nf = String(parseInt(nfNumber, 10))
 
-  const url = `https://api.braspress.com/v1/tracking/${cnpj}/${nf}/json`
+  // Endpoint público — não requer autenticação e acessível de qualquer IP
+  const url = `https://blue.braspress.com/site/w/tracking/find?cpfCnpj=${cnpj}&pedidoNf=${nf}`
 
   const res = await fetch(url, {
-    headers: {
-      Authorization: braspressAuth(cnpj),
-      'Content-Type': 'application/json; charset=utf-8',
-      Accept: 'application/json',
-    },
+    headers: { Accept: 'application/json, text/html' },
     signal: AbortSignal.timeout(15000),
   })
 
   if (!res.ok) {
-    let msg = `HTTP ${res.status}`
-    try { const j = await res.json() as Record<string, unknown>; msg = (j.message ?? msg) as string } catch {}
-    return { status: null, lastEvent: `Erro: ${msg}` }
+    return { status: null, lastEvent: `Erro: HTTP ${res.status}` }
   }
 
-  const data = await res.json() as BraspressResponse
+  const contentType = res.headers.get('content-type') ?? ''
 
-  const conhecimentos = data.conhecimentos ?? []
-  if (conhecimentos.length === 0) {
+  // Resposta JSON
+  if (contentType.includes('json')) {
+    const data = await res.json() as BraspressResponse
+    const conhecimentos = data.conhecimentos ?? []
+    if (conhecimentos.length === 0) return { status: null, lastEvent: `Não localizado (NF ${nf})` }
+
+    const c = conhecimentos[0]
+    const lastEvent = c.ultimaOcorrencia ?? c.status ?? null
+    const shippedAt = parseBrDate(c.emissao)
+    const estimatedDelivery = parseBrDate(c.previsaoEntrega)
+    const hasOccurrence = lastEvent ? detectOccurrence(lastEvent) || undefined : undefined
+    const events: TrackingEvent[] = []
+    if (lastEvent) events.push({ date: parseBrDate(c.dataOcorrencia), description: lastEvent })
+    if (shippedAt) events.push({ date: shippedAt, description: 'CONHECIMENTO EMITIDO' })
+
+    return {
+      status: braspressMapStatus(c.status ?? '', lastEvent ?? ''),
+      lastEvent, shippedAt, estimatedDelivery, hasOccurrence,
+      events: events.length > 0 ? events : undefined,
+      raw: data,
+    }
+  }
+
+  // Resposta HTML — extrai dados via regex
+  const html = await res.text()
+
+  // Extrai último status/ocorrência
+  const ocorrenciaMatch = html.match(/ultima[Oo]correncia["']?\s*[:=]\s*["']([^"'<]+)/i)
+    ?? html.match(/class=["'][^"']*status[^"']*["'][^>]*>([^<]{5,})</i)
+  const lastEvent = ocorrenciaMatch?.[1]?.trim() ?? null
+
+  const statusMatch = html.match(/\b(FINALIZADO|ENTREGUE|EM VIAGEM|EM TRANSITO|CANCELADO|COLETADO)\b/i)
+  const statusText = statusMatch?.[1]?.toUpperCase() ?? ''
+
+  const emissaoMatch = html.match(/emissao["']?\s*[:=]\s*["']?(\d{2}\/\d{2}\/\d{4})/i)
+  const previsaoMatch = html.match(/previsao[^"'<]*["']?\s*[:=]\s*["']?(\d{2}\/\d{2}\/\d{4})/i)
+
+  const shippedAt = parseBrDate(emissaoMatch?.[1])
+  const estimatedDelivery = parseBrDate(previsaoMatch?.[1])
+  const hasOccurrence = lastEvent ? detectOccurrence(lastEvent) || undefined : undefined
+
+  if (!lastEvent && !statusText) {
+    console.warn(`[Braspress] NF ${nf}: HTML sem dados reconhecíveis`)
     return { status: null, lastEvent: `Não localizado (NF ${nf})` }
   }
 
-  const c = conhecimentos[0]
-  const lastEvent = c.ultimaOcorrencia ?? c.status ?? null
-  const shippedAt = parseBrDate(c.emissao)
-  const estimatedDelivery = parseBrDate(c.previsaoEntrega)
-  const hasOccurrence = lastEvent ? detectOccurrence(lastEvent) || undefined : undefined
-
-  // Histórico mínimo: ocorrência mais recente + emissão
-  const events: TrackingEvent[] = []
-  if (lastEvent) {
-    events.push({ date: parseBrDate(c.dataOcorrencia), description: lastEvent })
-  }
-  if (shippedAt) {
-    events.push({ date: shippedAt, description: 'CONHECIMENTO EMITIDO' })
-  }
-
   return {
-    status: braspressMapStatus(c.status ?? '', lastEvent ?? ''),
-    lastEvent,
-    shippedAt,
-    estimatedDelivery,
-    hasOccurrence,
-    events: events.length > 0 ? events : undefined,
-    raw: data,
+    status: braspressMapStatus(statusText || lastEvent || '', lastEvent ?? ''),
+    lastEvent, shippedAt, estimatedDelivery, hasOccurrence,
   }
 }
 
