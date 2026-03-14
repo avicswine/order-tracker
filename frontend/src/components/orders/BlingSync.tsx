@@ -129,9 +129,18 @@ export function BlingSync() {
       {(trackingRunning || trackingResult || trackingError) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-2xl shadow-2xl p-6 w-80 flex flex-col gap-4">
-            <h3 className="text-base font-semibold text-gray-800">
-              {trackingRunning ? 'Atualizando rastreamento...' : trackingError ? 'Erro no rastreamento' : 'Rastreamento concluído'}
-            </h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-semibold text-gray-800">
+                {trackingRunning ? 'Atualizando rastreamento...' : trackingError ? 'Erro no rastreamento' : 'Rastreamento concluído'}
+              </h3>
+              <button
+                onClick={() => { esRef.current?.close(); setTrackingRunning(false); closeTrackingModal() }}
+                className="text-gray-400 hover:text-gray-600 text-lg leading-none"
+                title="Cancelar"
+              >
+                ×
+              </button>
+            </div>
 
             {trackingRunning && !trackingProgress && (
               <p className="text-sm text-gray-500">Conectando...</p>
