@@ -164,7 +164,7 @@ async function refreshToken(companyKey: string) {
 }
 
 // Chamada autenticada ao Bling por empresa (com retry em 401 e 429)
-async function blingGet(companyKey: string, path: string, retries = 3): Promise<unknown> {
+async function blingGet(companyKey: string, path: string, retries = 5): Promise<unknown> {
   const token = tokens[companyKey]
   if (!token) {
     // Tenta recarregar do banco antes de desistir
@@ -187,7 +187,7 @@ async function blingGet(companyKey: string, path: string, retries = 3): Promise<
         return response.data
       }
       if (err.response?.status === 429 && retries > 0) {
-        const wait = (4 - retries) * 2000 // 2s, 4s, 6s
+        const wait = (6 - retries) * 5000 // 5s, 10s, 15s, 20s, 25s
         console.warn(`[Bling] Rate limit (429) em ${path}. Aguardando ${wait / 1000}s antes de tentar novamente...`)
         await new Promise((r) => setTimeout(r, wait))
         return blingGet(companyKey, path, retries - 1)
@@ -315,6 +315,7 @@ export async function runBlingSync() {
             continue
           }
 
+          await new Promise((r) => setTimeout(r, 1000)) // 1s entre cada NF para evitar rate limit
           const carrierId = await resolveCarrier(companyKey, nf.id, String(nf.numero))
 
           // Sem transportadora rastreável → ignora (ex: Mercado Envios, sem transporte)
