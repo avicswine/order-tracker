@@ -163,14 +163,11 @@ export function OrderTable({ orders, isLoading, onViewDetails, meta, onPageChang
                 </td>
                 <td className="py-3 pr-4">
                   <div
-                    className="flex items-center gap-1.5 cursor-pointer"
+                    className="cursor-pointer"
                     onClick={() => onViewDetails(order)}
                     title="Ver detalhes"
                   >
-                    <StatusBadge status={order.status} />
-                    {order.hasOccurrence && (
-                      <span title={order.lastTracking ?? 'Intercorrência detectada'} className="text-orange-500 cursor-help" aria-label="Intercorrência">⚠️</span>
-                    )}
+                    <StatusBadge status={order.status} hasOccurrence={order.hasOccurrence} />
                   </div>
                 </td>
                 <td className="py-3 pr-4 text-gray-600">{formatDate(order.shippedAt)}</td>

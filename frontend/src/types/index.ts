@@ -115,6 +115,7 @@ export interface OrderFilters {
   senderCnpj?: string
   carrierId?: string
   delayed?: boolean
+  hasOccurrence?: boolean
   page?: number
   sortBy?: 'shippedAt' | 'estimatedDelivery'
   sortOrder?: 'asc' | 'desc'

@@ -82,6 +82,10 @@ router.get(
       }
     }
 
+    if (String(req.query.hasOccurrence) === 'true') {
+      where.hasOccurrence = true
+    }
+
     try {
       const sortBy = req.query.sortBy as 'shippedAt' | 'estimatedDelivery' | undefined
       const sortOrder = (req.query.sortOrder as 'asc' | 'desc') || 'asc'
