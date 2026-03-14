@@ -300,6 +300,13 @@ export async function runBlingSync(limite?: number) {
       dataInicio.setDate(dataInicio.getDate() - 90)
       const dataInicioStr = dataInicio.toISOString().slice(0, 10)
 
+      // Carrega nfNumbers já existentes para esta empresa em memória (evita N consultas ao banco)
+      const existingOrders = await prisma.order.findMany({
+        where: { senderCnpj: company.cnpj },
+        select: { id: true, nfNumber: true, customerPhone: true },
+      })
+      const existingMap = new Map(existingOrders.map(o => [o.nfNumber, o]))
+
       let pagina = 1
       let totalNFs = 0
       while (true) {
@@ -312,10 +319,8 @@ export async function runBlingSync(limite?: number) {
         for (const nf of nfes) {
           if (limite && criados >= limite) break
 
-          // Deduplicação por nfNumber + empresa (senderCnpj) para evitar conflito entre empresas
-          const existing = await prisma.order.findFirst({
-            where: { nfNumber: String(nf.numero), senderCnpj: company.cnpj },
-          })
+          // Deduplicação por nfNumber em memória (sem consulta ao banco)
+          const existing = existingMap.get(String(nf.numero))
 
           if (existing) {
             // Preenche customerPhone se ainda não está salvo
