@@ -115,7 +115,57 @@ export function BlingSync() {
 
   return (
     <div className="flex items-center gap-3">
-      {/* Resultado da última operação */}
+      {/* Modal de progresso de rastreamento */}
+      {(trackingRunning || trackingResult) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-80 flex flex-col gap-4">
+            <h3 className="text-base font-semibold text-gray-800">
+              {trackingRunning ? 'Atualizando rastreamento...' : 'Rastreamento concluído'}
+            </h3>
+
+            {trackingProgress && (
+              <>
+                <div className="w-full bg-gray-100 rounded-full h-2">
+                  <div
+                    className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${Math.round((trackingProgress.current / trackingProgress.total) * 100)}%` }}
+                  />
+                </div>
+                <div className="text-sm text-gray-600 space-y-0.5">
+                  <p className="font-medium">
+                    {trackingProgress.current} / {trackingProgress.total}
+                    <span className="text-gray-400 font-normal ml-2">
+                      ({Math.round((trackingProgress.current / trackingProgress.total) * 100)}%)
+                    </span>
+                  </p>
+                  <p className="text-xs text-gray-500 truncate">{trackingProgress.orderNumber}</p>
+                  <p className="text-xs text-gray-400 truncate">{trackingProgress.carrier}</p>
+                </div>
+              </>
+            )}
+
+            {trackingResult && !trackingRunning && (
+              <>
+                <div className="text-sm text-gray-700 space-y-1">
+                  <p><span className="font-medium text-green-600">{trackingResult.atualizados}</span> rastreados com sucesso</p>
+                  {trackingResult.erros > 0 && (
+                    <p><span className="font-medium text-red-500">{trackingResult.erros}</span> com erro</p>
+                  )}
+                  <p className="text-gray-400 text-xs">Total: {trackingResult.total} pedidos</p>
+                </div>
+                <button
+                  className="btn-primary text-sm w-full"
+                  onClick={() => setTrackingResult(null)}
+                >
+                  Fechar
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Resultado das outras operações */}
       {syncMutation.data && !enrichMutation.data && (
         <span className="text-xs text-gray-500">
           {syncMutation.data.totalCriados} importados, {syncMutation.data.totalIgnorados} ignorados
@@ -124,18 +174,6 @@ export function BlingSync() {
       {enrichMutation.data && (
         <span className="text-xs text-gray-500">
           {enrichMutation.data.atualizados} transportadoras vinculadas
-        </span>
-      )}
-      {trackingProgress && (
-        <span className="text-xs text-gray-600 max-w-xs truncate">
-          <span className="font-medium">{trackingProgress.current}/{trackingProgress.total}</span>
-          {' · '}{trackingProgress.orderNumber}
-        </span>
-      )}
-      {trackingResult && !trackingProgress && (
-        <span className="text-xs text-gray-500">
-          {trackingResult.atualizados}/{trackingResult.total} rastreados
-          {trackingResult.erros > 0 && `, ${trackingResult.erros} erro(s)`}
         </span>
       )}
 

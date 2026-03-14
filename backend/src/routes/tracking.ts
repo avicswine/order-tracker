@@ -7,6 +7,8 @@ const router = Router()
 
 type ProgressCallback = (data: { current: number; total: number; orderNumber: string; carrier: string; status: string | null }) => void
 
+const TRACKING_CONCURRENCY = 5
+
 export async function runTrackingSync(onProgress?: ProgressCallback): Promise<{ atualizados: number; erros: number; total: number }> {
   const orders = await prisma.order.findMany({
     where: {
@@ -27,7 +29,7 @@ export async function runTrackingSync(onProgress?: ProgressCallback): Promise<{ 
   let atualizados = 0
   let erros = 0
 
-  for (const order of orders) {
+  async function processOne(order: typeof orders[number]): Promise<void> {
     const carrier = order.carrier!
     const cnpj = order.senderCnpj!
     const nf = order.nfNumber!
@@ -40,13 +42,13 @@ export async function runTrackingSync(onProgress?: ProgressCallback): Promise<{ 
       } else if (carrier.trackingSystem === TrackingSystem.SENIOR) {
         if (!carrier.trackingIdentifier) {
           console.warn(`[Tracking] ${order.orderNumber}: Senior sem tenant configurado`)
-          continue
+          return
         }
         result = await trackSenior(cnpj, nf, carrier.trackingIdentifier)
       } else if (carrier.trackingSystem === TrackingSystem.PUPPETEER) {
         if (!carrier.trackingIdentifier) {
           console.warn(`[Tracking] ${order.orderNumber}: PUPPETEER sem portal configurado`)
-          continue
+          return
         }
         result = await trackWithPuppeteer(cnpj, nf, carrier.trackingIdentifier)
       } else if (carrier.trackingSystem === TrackingSystem.SAO_MIGUEL) {
@@ -58,7 +60,7 @@ export async function runTrackingSync(onProgress?: ProgressCallback): Promise<{ 
       } else if (carrier.trackingSystem === TrackingSystem.BRASPRESS) {
         result = await trackBraspress(cnpj, nf, carrier.trackingIdentifier)
       } else {
-        continue
+        return
       }
 
       let novoStatus = result.status
@@ -92,18 +94,15 @@ export async function runTrackingSync(onProgress?: ProgressCallback): Promise<{ 
       }
 
       if (result.events) {
-        // Carrier retorna histórico completo — substitui
         updates.trackingEvents = result.events.map((e) => ({
           date: e.date?.toISOString() ?? null,
           description: e.description,
         }))
       } else if (lastEvent) {
-        // Carrier retorna apenas evento atual (ex: Atual Cargas) — acumula
         type StoredEvent = { date: string | null; description: string }
         const existing = Array.isArray(order.trackingEvents)
           ? (order.trackingEvents as StoredEvent[])
           : []
-        // Adiciona apenas se diferente do evento mais recente já armazenado
         const mostRecent = existing[0]?.description
         if (lastEvent !== mostRecent) {
           updates.trackingEvents = [{ date: new Date().toISOString(), description: lastEvent }, ...existing]
@@ -116,7 +115,6 @@ export async function runTrackingSync(onProgress?: ProgressCallback): Promise<{ 
       if (novoStatus && novoStatus !== order.status) {
         updates.status = novoStatus
         if (novoStatus === OrderStatus.DELIVERED) {
-          // Busca o evento de entrega no histórico (pode não ser o events[0] se houve evento pós-entrega)
           const deliveredEvent = result.events?.find((e) => {
             const t = e.description.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
             return t.includes('ENTREGUE') || t.includes('ENTREGA REALIZADA') || t.includes('ENTREGA EFETUADA') || t.includes('OCORRENCIA DE ENTREGA')
@@ -145,12 +143,17 @@ export async function runTrackingSync(onProgress?: ProgressCallback): Promise<{ 
 
       atualizados++
       onProgress?.({ current: atualizados + erros, total: orders.length, orderNumber: order.orderNumber, carrier: carrier.name, status: novoStatus ?? null })
-      await new Promise((r) => setTimeout(r, 500))
     } catch (err) {
       console.error(`[Tracking] Erro ao rastrear ${order.orderNumber}:`, err)
       erros++
       onProgress?.({ current: atualizados + erros, total: orders.length, orderNumber: order.orderNumber, carrier: carrier.name, status: 'erro' })
     }
+  }
+
+  // Processa em lotes paralelos para acelerar o rastreamento
+  for (let i = 0; i < orders.length; i += TRACKING_CONCURRENCY) {
+    const chunk = orders.slice(i, i + TRACKING_CONCURRENCY)
+    await Promise.all(chunk.map(processOne))
   }
 
   return { atualizados, erros, total: orders.length }
