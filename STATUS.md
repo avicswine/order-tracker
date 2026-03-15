@@ -1,6 +1,6 @@
 # STATUS — Order Tracker
 
-Última atualização: 2026-03-06 (sessão 10)
+Última atualização: 2026-03-14 (sessão 12)
 
 ## Estado atual
 Aplicação funcional com autenticação JWT (ADMIN/VIEWER), pronta para deploy no Railway.
@@ -118,6 +118,61 @@ Lista em `bling.ts:CARRIERS_BLOCKED` — pedidos ignorados no sync, transportado
 - Rodonaves: endpoint v3/package + fallback brudam. Pedido AGRO-NF-002987 retorna "Não localizado" — pode ser NF antiga ou fora do range da API.
 - Transportadoras sem API de rastreamento (AZUL, TEX, ALFA): pedidos ficam PENDING permanentemente.
 - EQUI-NF-000019 (TRD): não localizado na API Senior com CNPJ da Equipage — possível segundo CNPJ/filial da TRD para investigar.
+
+## Implementado (sessão 12)
+
+### Deploy Railway + SSE + São Miguel
+- Deploy Railway funcional com auto-deploy via GitHub
+- **Cloudflare Worker proxy** criado (`sm-proxy-worker.js`) para contornar bloqueio de IP da São Miguel na porta 40490
+  - URL: `https://little-lab-f6c5.avicswine.workers.dev`
+  - Variável Railway: `SM_PROXY_URL`
+- **SSE (Server-Sent Events)** para progresso em tempo real do rastreamento
+  - Corrigida chave do token (`'token'` → `'order_tracker_token'`)
+  - Adicionado header `X-Accel-Buffering: no` para desativar buffer do Nginx/Railway
+- **Braspress:** URL trocada de `api.braspress.com` (bloqueada) para `blue.braspress.com` (pública, HTML)
+- **Rastreamento paralelo:** processamento de 5 pedidos simultâneos (sem delay)
+- **Modal de progresso:** barra de progresso + NF atual + empresa + lista de erros agrupada por empresa + botão copiar + botão X para cancelar
+- **Sync São Miguel automático:** após sync geral, roda sync específico SM via `GET /api/tracking/sync-stream-sm`
+- **Scrip diagnóstico São Miguel:** `sync-sm-now.mjs` executado manualmente — atualizou 16+ pedidos EQUI/AGRO
+
+### Correções de dados
+- **54 previsões de entrega inválidas** removidas do banco (estimatedDelivery < shippedAt)
+  - Causa: API São Miguel retorna `expectedDate` desatualizado (previsão antiga que já passou)
+  - Fix no código: sync não salva `estimatedDelivery` se for anterior a `shippedAt`
+- **PAC bloqueado** com regex de palavra completa (`\bPAC\b`) — evita bloquear DESPACHOS
+- **VICTORIA CARGAS:** 2 pedidos apagados por engano pelo filtro PAC — reimportar via Bling
+
+### Análise de datas (14/03/2026)
+Resultado do `review-dates.mjs`:
+- **13 NFs com enviado = sábado 14/03:** Atual Cargas, Azurelog, Mengue — provavelmente NF emitida hoje (normal) ou data de registro da transportadora. AVIC-NF-009036 tem 15/02 (domingo) — suspeito
+- **17 NFs sem data de envio:** transportadoras sem API (B. Transportes, Leomar, Mengue sem sistema, TRD sem dados)
+- **11 NFs com previsão vencida:** maioria Braspress — precisam de sync para atualizar status ou confirmar ocorrência
+
+## Pendências para próxima sessão
+
+### Prioritário
+1. **NFs com previsão vencida** — verificar se foram entregues ou têm ocorrência (rodar sync Braspress/Rodonaves)
+   - AGRO: 002948, 003002, 003040, 003126, 003141
+   - AVIC: 009012, 009036, 009094, 009095, 009115, 009246
+2. **AVIC-NF-009036 (São Miguel)** — shippedAt = 15/02 (domingo), previsão 16/02 vencida — verificar se foi entregue
+3. **NFs a importar:** 9459 AVIC, 3128 AGRO, 3167 AGRO (não existem no banco ainda — importar via Bling)
+4. **AGRO-NF-003128:** transportadora real é MENGUE (não São Miguel) — corrigir após importar
+
+### Transportadoras sem rastreio (ficam PENDING permanentemente)
+- B. TRANSPORTES LTDA
+- Expresso Leomar Ltda
+- AZURELOG (parcialmente — SSW retorna "Informação não disponível")
+- MENGUE EXPRESS (parcialmente)
+- TRD: EQUI-NF-000019 e 000067 sem dados na API Senior
+
+### Scripts úteis disponíveis
+```bash
+railway run node backend/sync-sm-now.mjs      # sync manual São Miguel
+railway run node backend/review-dates.mjs     # análise geral de datas
+railway run node backend/fix-dates.mjs        # remove previsões < enviado
+railway run node backend/test-nf.mjs          # diagnóstico de NF específica (editar antes)
+railway run node backend/test-sm-prod.mjs     # testa API São Miguel na produção
+```
 
 ## Implementado (sessão 11)
 - **hasOccurrence:** coluna `Boolean @default(false)` adicionada ao schema (migration `20260313104642_add_has_occurrence`)
