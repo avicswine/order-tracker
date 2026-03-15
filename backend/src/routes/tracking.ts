@@ -112,7 +112,11 @@ export async function runTrackingSync(onProgress?: ProgressCallback, systems?: T
       }
 
       if (result.shippedAt && !order.shippedAt) updates.shippedAt = result.shippedAt
-      if (result.estimatedDelivery) updates.estimatedDelivery = result.estimatedDelivery
+      // Só salva estimatedDelivery se for depois de shippedAt (evita previsão desatualizada da transportadora)
+      const shipped = (result.shippedAt ?? order.shippedAt)
+      if (result.estimatedDelivery && (!shipped || result.estimatedDelivery > shipped)) {
+        updates.estimatedDelivery = result.estimatedDelivery
+      }
 
       if (novoStatus && novoStatus !== order.status) {
         updates.status = novoStatus
