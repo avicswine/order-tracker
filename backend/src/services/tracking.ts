@@ -912,8 +912,8 @@ interface BraspressResponse {
 }
 
 function braspressMapStatus(status: string, ultimaOcorrencia: string): OrderStatus | null {
-  const s = status.toUpperCase()
-  if (s === 'FINALIZADO') return OrderStatus.DELIVERED
+  const s = status.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  if (s === 'FINALIZADO' || s.includes('ENTREGA REALIZADA') || s.includes('ENTREGA EFETUADA')) return OrderStatus.DELIVERED
   if (s === 'CANCELADO') return OrderStatus.CANCELLED
   if (s.includes('VIAGEM') || s.includes('AWB') || s.includes('TRANSITO') || s.includes('COLETA') || s.includes('ENTREGA') || s.includes('DESTINO') || s.includes('ROTA')) return OrderStatus.IN_TRANSIT
   return mapStatus(ultimaOcorrencia)
