@@ -70,6 +70,8 @@ function buildOrderTrackingUrl(
       return `https://blue.braspress.com/site/w/tracking/find?cpfCnpj=${cnpj}&pedidoNf=${nf}`
     case 'SENIOR':
       return trackingIdentifier ? `https://${trackingIdentifier}.senior.com.br/rastreamento` : null
+    case 'ATUAL_CARGAS':
+      return 'https://cliente.atualcargas.com.br'
     default:
       return null
   }

@@ -20,7 +20,13 @@ export function getTrackingUrl(order: Order): string | null {
       return `https://blue.braspress.com/site/w/tracking/find?cpfCnpj=${cnpj}&pedidoNf=${nf}`
     case 'SENIOR':
       return `https://platform.senior.com.br/logistica-tck/tms/tck-frontend/#/login/signup?tenant=ZEhKa2RISmhibk53YjNKMFpYTT0%3D`
+    case 'ATUAL_CARGAS':
+      return 'https://cliente.atualcargas.com.br'
     default:
+      // Se trackingIdentifier for uma URL, usa como link de rastreio manual
+      if (order.carrier?.trackingIdentifier?.startsWith('http')) {
+        return order.carrier.trackingIdentifier
+      }
       return null
   }
 }
