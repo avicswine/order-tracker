@@ -1,10 +1,11 @@
 # STATUS — Order Tracker
 
-Última atualização: 2026-03-14 (sessão 12)
+Última atualização: 2026-03-15 (sessão 14)
 
 ## Estado atual
-Aplicação funcional com autenticação JWT (ADMIN/VIEWER), pronta para deploy no Railway.
+Aplicação funcional com autenticação JWT (ADMIN/VIEWER), em produção no Railway.
 Sync automático do Bling + rastreamento roda na inicialização do backend e a cada 2h.
+URL produção: https://order-tracker-production-4189.up.railway.app/
 
 ## Stack
 - **Backend:** Express + TypeScript + Prisma + PostgreSQL (porta 3001)
@@ -119,6 +120,14 @@ Lista em `bling.ts:CARRIERS_BLOCKED` — pedidos ignorados no sync, transportado
 - Transportadoras sem API de rastreamento (AZUL, TEX, ALFA): pedidos ficam PENDING permanentemente.
 - EQUI-NF-000019 (TRD): não localizado na API Senior com CNPJ da Equipage — possível segundo CNPJ/filial da TRD para investigar.
 
+## Implementado (sessão 14)
+- **Bug Braspress corrigido:** `braspressMapStatus` retornava IN_TRANSIT para "Entrega Realizada" porque `s.includes('ENTREGA')` capturava o evento antes do fallback
+  - Fix: check explícito para "ENTREGA REALIZADA" e "ENTREGA EFETUADA" antes do bloco IN_TRANSIT
+  - 8 NFs atualizadas para DELIVERED após re-sync: AGRO 002948, 003002, 003040, 003141 | AVIC 009012, 009094, 009095, 009115
+- `getTrackingUrl` e `buildOrderTrackingUrl`: adicionado caso ATUAL_CARGAS; NONE usa `trackingIdentifier` como URL manual
+- Sidebar: link Power BI adicionado (localhost:5175, temporário)
+- URL de produção Railway salva no STATUS.md
+
 ## Implementado (sessão 12)
 
 ### Deploy Railway + SSE + São Miguel
@@ -150,19 +159,16 @@ Resultado do `review-dates.mjs`:
 
 ## Pendências para próxima sessão
 
-### Prioritário
-1. **NFs com previsão vencida** — verificar se foram entregues ou têm ocorrência (rodar sync Braspress/Rodonaves)
-   - AGRO: 002948, 003002, 003040, 003126, 003141
-   - AVIC: 009012, 009036, 009094, 009095, 009115, 009246
-2. **AVIC-NF-009036 (São Miguel)** — shippedAt = 15/02 (domingo), previsão 16/02 vencida — verificar se foi entregue
-3. **NFs a importar:** 9459 AVIC, 3128 AGRO, 3167 AGRO (não existem no banco ainda — importar via Bling)
-4. **AGRO-NF-003128:** transportadora real é MENGUE (não São Miguel) — corrigir após importar
+### Em aberto
+1. **AGRO-003126 (Rodonaves)** — "Atualização de entrega Bragança Paulista" — ainda em trânsito, acompanhar
+2. **AVIC-009036 (São Miguel)** — "Chegou na unidade de destino, em conferência" — ainda em trânsito, acompanhar
+3. **AVIC-009246 (TRD)** — sem dados na API Senior (PENDING) — mesma situação de EQUI-000019 e 000067
 
 ### Transportadoras sem rastreio (ficam PENDING permanentemente)
-- B. TRANSPORTES LTDA
-- Expresso Leomar Ltda
+- B. TRANSPORTES LTDA — botão RASTREIO aponta para portal Bauer Express
+- Expresso Leomar Ltda — botão RASTREIO aponta para portal Leomar
+- MENGUE EXPRESS — botão RASTREIO aponta para portal Coopex/Mengue
 - AZURELOG (parcialmente — SSW retorna "Informação não disponível")
-- MENGUE EXPRESS (parcialmente)
 - TRD: EQUI-NF-000019 e 000067 sem dados na API Senior
 
 ### Scripts úteis disponíveis
