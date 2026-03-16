@@ -80,7 +80,7 @@ export function Sidebar() {
           </NavLink>
         ))}
         <a
-          href="http://localhost:5174/"
+          href="/portal"
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors text-gray-400 hover:bg-gray-800 hover:text-white"
