@@ -89,25 +89,30 @@ export async function runTrackingSync(onProgress?: ProgressCallback, systems?: T
 
       console.log(`[Tracking] ${order.orderNumber} (${carrier.name}): "${lastEvent}" → ${novoStatus ?? 'sem mapeamento'}${result.hasOccurrence ? ' ⚠️ INTERCORRÊNCIA' : ''}${result.shippedAt ? ` | Envio: ${result.shippedAt.toLocaleDateString('pt-BR')}` : ''}${result.estimatedDelivery ? ` | Prev: ${result.estimatedDelivery.toLocaleDateString('pt-BR')}` : ''}`)
 
+      // Quando a API não encontrou o pedido (status null), não sobrescreve lastTracking
+      // (ex: Atual Cargas remove pedidos entregues da lista, retornando "Não localizado")
+      const semDados = result.status === null
       const updates: Record<string, unknown> = {
-        lastTracking: lastEvent,
         lastTrackingAt: new Date(),
         hasOccurrence: result.hasOccurrence ?? false,
       }
+      if (!semDados) updates.lastTracking = lastEvent
 
-      if (result.events) {
-        updates.trackingEvents = result.events.map((e) => ({
-          date: e.date?.toISOString() ?? null,
-          description: e.description,
-        }))
-      } else if (lastEvent) {
-        type StoredEvent = { date: string | null; description: string }
-        const existing = Array.isArray(order.trackingEvents)
-          ? (order.trackingEvents as StoredEvent[])
-          : []
-        const mostRecent = existing[0]?.description
-        if (lastEvent !== mostRecent) {
-          updates.trackingEvents = [{ date: new Date().toISOString(), description: lastEvent }, ...existing]
+      if (!semDados) {
+        if (result.events) {
+          updates.trackingEvents = result.events.map((e) => ({
+            date: e.date?.toISOString() ?? null,
+            description: e.description,
+          }))
+        } else if (lastEvent) {
+          type StoredEvent = { date: string | null; description: string }
+          const existing = Array.isArray(order.trackingEvents)
+            ? (order.trackingEvents as StoredEvent[])
+            : []
+          const mostRecent = existing[0]?.description
+          if (lastEvent !== mostRecent) {
+            updates.trackingEvents = [{ date: new Date().toISOString(), description: lastEvent }, ...existing]
+          }
         }
       }
 
