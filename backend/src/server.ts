@@ -7,6 +7,7 @@ import ordersRouter from './routes/orders'
 import trackingRouter, { runTrackingSync } from './routes/tracking'
 import blingRouter, { blingPublicRouter, loadTokensFromDB } from './routes/bling'
 import authRouter from './routes/auth'
+import publicRouter from './routes/public'
 import { requireAuth } from './middleware/auth'
 
 const app = express()
@@ -24,6 +25,7 @@ if (isProd) {
 app.use(express.json())
 
 app.use('/api/auth', authRouter)
+app.use('/api/public', publicRouter)
 app.use('/api/bling', blingPublicRouter)
 app.use('/api/carriers', requireAuth, carriersRouter)
 app.use('/api/orders', requireAuth, ordersRouter)
@@ -34,9 +36,12 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
 })
 
-// Em produção, qualquer rota não-API devolve o index.html (SPA)
+// Em produção: serve o portal do cliente em /portal e o painel em tudo mais
 if (isProd) {
+  const portalDist = path.join(__dirname, '../../customer-portal/dist')
   const frontendDist = path.join(__dirname, '../../frontend/dist')
+  app.use('/portal', express.static(portalDist))
+  app.get('/portal/*', (_req, res) => res.sendFile(path.join(portalDist, 'index.html')))
   app.get('*', (_req, res) => res.sendFile(path.join(frontendDist, 'index.html')))
 }
 
