@@ -6,6 +6,10 @@
 Aplicação funcional com autenticação JWT (ADMIN/VIEWER), em produção no Railway.
 Sync automático do Bling + rastreamento roda na inicialização do backend e a cada 2h.
 URL produção: https://order-tracker-production-4189.up.railway.app/
+URL customizada (pendente — Railway plano não suporta domínio custom): https://rastreio.avicswine.com.br
+  - DNS configurado corretamente (CNAME + TXT propagados)
+  - Bloqueado por limite de domínios do plano Railway atual
+  - Solução: upgrade para Hobby ($5/mês) em Settings → Billing
 
 ## Stack
 - **Backend:** Express + TypeScript + Prisma + PostgreSQL (porta 3001)
