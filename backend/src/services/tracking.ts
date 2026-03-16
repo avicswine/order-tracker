@@ -84,8 +84,10 @@ function mapStatus(text: string): OrderStatus | null {
 }
 
 // --- SSW ---
-// O HTML mostra apenas eventos mas o CSV (link "Download em CSV") expõe
-// "Previsao de Entrega" e "Data Entrega" — colunas não visíveis no HTML.
+// Página principal (ssw_resultSSW): mostra apenas os eventos mais recentes.
+// Página detalhada (ssw_SSWDetalhado): mostra histórico completo — necessária para
+// obter a data real de coleta/envio (primeiro evento = mais antigo).
+// Acesso à página detalhada requer tokens "id" e "md" extraídos do link "Mais detalhes".
 export async function trackSSW(
   senderCnpj: string,
   nfNumber: string,
@@ -133,8 +135,58 @@ export async function trackSSW(
     }
   })
 
-  // Tabela SSW vem do mais recente ao mais antigo — o último item é a coleta/envio
-  shippedAt = allEvents.length > 0 ? (allEvents[allEvents.length - 1].date ?? null) : null
+  // Busca histórico completo via página detalhada para obter a data real de coleta
+  // A página detalhada tem token "id" e "md" no onclick do link "Mais detalhes"
+  try {
+    let detailPath: string | null = null
+    $('a').each((_i, el) => {
+      const onclick = $(el).attr('onclick') ?? ''
+      const m = onclick.match(/opx\('([^']+)'\)/)
+      if (m) detailPath = m[1]
+    })
+
+    if (detailPath) {
+      const detailUrl = `https://ssw.inf.br${detailPath}`
+      const detailRes = await axios.get(detailUrl, { timeout: 10000 })
+      const $d = cheerio.load(detailRes.data as string)
+
+      const detailEvents: TrackingEvent[] = []
+      $d('table tr').each((_i, row) => {
+        const cells = $d(row).find('td')
+        if (cells.length >= 3) {
+          // col0: <p><br> separa data e hora — substituir <br> por espaço antes de extrair texto
+          $d(cells[0]).find('br').replaceWith(' ')
+          const col0Text = $d(cells[0]).text().trim()
+          const dateStr = col0Text.match(/(\d{2}\/\d{2}\/\d{2,4}(?:\s+\d{2}:\d{2})?)/)?.[1]
+          if (!dateStr) return
+
+          const cell2 = $d(cells[2])
+          cell2.find('a, button').remove()
+          const situacao = cell2.text().trim().replace(/\s+/g, ' ')
+          if (!situacao || SKIP.some((s) => situacao.toLowerCase().includes(s))) return
+
+          detailEvents.push({ date: parseBrDate(dateStr), description: situacao })
+        }
+      })
+
+      if (detailEvents.length > 0) {
+        // Tabela detalhada vem em ordem crescente (mais antigo primeiro)
+        shippedAt = detailEvents[0].date ?? null
+        // Sobrescreve allEvents com o histórico completo (reverso = mais recente primeiro)
+        allEvents.length = 0
+        allEvents.push(...[...detailEvents].reverse())
+        lastEvent = allEvents[0]?.description ?? lastEvent
+      }
+    }
+  } catch {
+    // Falha silenciosa — usa eventos da página principal
+    if (allEvents.length > 0) shippedAt = allEvents[allEvents.length - 1].date ?? null
+  }
+
+  // Fallback: se não buscou detalhes, shippedAt vem do último evento da página principal
+  if (!shippedAt && allEvents.length > 0) {
+    shippedAt = allEvents[allEvents.length - 1].date ?? null
+  }
 
   // Busca previsão de entrega via CSV — contém colunas "Previsao de Entrega" e "Data Entrega"
   // que não aparecem no HTML. O link de download está no HTML como "Download em CSV".
@@ -176,7 +228,7 @@ export async function trackSSW(
     shippedAt,
     estimatedDelivery,
     hasOccurrence: hasOccurrence || undefined,
-    events: allEvents.length > 0 ? [...allEvents].reverse() : undefined, // mais recente primeiro
+    events: allEvents.length > 0 ? allEvents : undefined,
   }
 }
 
