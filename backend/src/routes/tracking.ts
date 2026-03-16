@@ -115,9 +115,11 @@ export async function runTrackingSync(onProgress?: ProgressCallback, systems?: T
       if (result.shippedAt && (!order.shippedAt || result.shippedAt < order.shippedAt)) {
         updates.shippedAt = result.shippedAt
       }
-      // Só salva estimatedDelivery se for depois de shippedAt (evita previsão desatualizada da transportadora)
+      // Só salva estimatedDelivery se a data (sem hora) for igual ou depois de shippedAt
+      // Comparação por dia evita falso bloqueio quando shippedAt tem hora e estimatedDelivery é meia-noite
       const shipped = (result.shippedAt ?? order.shippedAt)
-      if (result.estimatedDelivery && (!shipped || result.estimatedDelivery > shipped)) {
+      const toDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+      if (result.estimatedDelivery && (!shipped || toDay(result.estimatedDelivery) >= toDay(shipped))) {
         updates.estimatedDelivery = result.estimatedDelivery
       }
 
