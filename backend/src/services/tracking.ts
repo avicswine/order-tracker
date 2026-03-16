@@ -127,12 +127,14 @@ export async function trackSSW(
       const dateStr = col1Text.match(/(\d{2}\/\d{2}\/\d{2,4}(?:\s+\d{2}:\d{2})?)/)?.[1]
       const eventDate = parseBrDate(dateStr)
 
-      if (eventDate && !shippedAt) shippedAt = eventDate
       if (detectOccurrence(situacao)) hasOccurrence = true
       lastEvent = situacao
       allEvents.push({ date: eventDate, description: situacao })
     }
   })
+
+  // Tabela SSW vem do mais recente ao mais antigo — o último item é a coleta/envio
+  shippedAt = allEvents.length > 0 ? (allEvents[allEvents.length - 1].date ?? null) : null
 
   // Busca previsão de entrega via CSV — contém colunas "Previsao de Entrega" e "Data Entrega"
   // que não aparecem no HTML. O link de download está no HTML como "Download em CSV".
