@@ -11,7 +11,7 @@ const router = Router()
 router.post(
   '/login',
   [
-    body('email').isEmail().normalizeEmail(),
+    body('email').isEmail().trim().toLowerCase(),
     body('password').notEmpty(),
   ],
   async (req: Request, res: Response) => {
