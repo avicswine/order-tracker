@@ -111,7 +111,10 @@ export async function runTrackingSync(onProgress?: ProgressCallback, systems?: T
         }
       }
 
-      if (result.shippedAt && !order.shippedAt) updates.shippedAt = result.shippedAt
+      // Sobrescreve shippedAt se a nova data for anterior à armazenada (coleta real = evento mais antigo)
+      if (result.shippedAt && (!order.shippedAt || result.shippedAt < order.shippedAt)) {
+        updates.shippedAt = result.shippedAt
+      }
       // Só salva estimatedDelivery se for depois de shippedAt (evita previsão desatualizada da transportadora)
       const shipped = (result.shippedAt ?? order.shippedAt)
       if (result.estimatedDelivery && (!shipped || result.estimatedDelivery > shipped)) {
