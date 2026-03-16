@@ -1,5 +1,7 @@
 import express from 'express'
 import cors from 'cors'
+import helmet from 'helmet'
+import rateLimit from 'express-rate-limit'
 import cron from 'node-cron'
 import path from 'path'
 import carriersRouter from './routes/carriers'
@@ -13,6 +15,21 @@ import { requireAuth } from './middleware/auth'
 const app = express()
 const PORT = process.env.PORT || 3001
 const isProd = process.env.NODE_ENV === 'production'
+
+// Headers de segurança HTTP
+app.use(helmet({
+  contentSecurityPolicy: false, // desativado para não quebrar o frontend React
+  crossOriginEmbedderPolicy: false,
+}))
+
+// Rate limit geral — 300 req/min por IP (proteção contra flood)
+app.use(rateLimit({
+  windowMs: 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Muitas requisições. Tente novamente em 1 minuto.' },
+}))
 
 // Em produção serve o frontend buildado — sem CORS necessário
 if (isProd) {

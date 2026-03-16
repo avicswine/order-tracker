@@ -2,14 +2,25 @@ import { Router, Request, Response } from 'express'
 import { body, validationResult } from 'express-validator'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
+import rateLimit from 'express-rate-limit'
 import { prisma } from '../lib/prisma'
 import { requireAuth } from '../middleware/auth'
 
 const router = Router()
 
+// Rate limit no login — 10 tentativas por IP a cada 15 min (anti brute-force)
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Muitas tentativas de login. Tente novamente em 15 minutos.' },
+})
+
 // POST /api/auth/login
 router.post(
   '/login',
+  loginLimiter,
   [
     body('email').isEmail().trim().toLowerCase(),
     body('password').notEmpty(),
