@@ -139,7 +139,8 @@ export async function trackSSW(
   // A página detalhada tem token "id" e "md" no onclick do link "Mais detalhes"
   try {
     let detailPath: string | null = null
-    $('a').each((_i, el) => {
+    // O link de detalhes pode estar em <a> ou em <tr> com onclick — busca em qualquer elemento
+    $('[onclick]').each((_i, el) => {
       const onclick = $(el).attr('onclick') ?? ''
       const m = onclick.match(/opx\('([^']+)'\)/)
       if (m) detailPath = m[1]
@@ -178,8 +179,8 @@ export async function trackSSW(
         lastEvent = allEvents[0]?.description ?? lastEvent
       }
     }
-  } catch {
-    // Falha silenciosa — usa eventos da página principal
+  } catch (err) {
+    console.warn('[SSW] Falha ao buscar página detalhada:', (err as Error).message)
     if (allEvents.length > 0) shippedAt = allEvents[allEvents.length - 1].date ?? null
   }
 
