@@ -1,6 +1,6 @@
 # STATUS — Order Tracker
 
-Última atualização: 2026-03-15 (sessão 14)
+Última atualização: 2026-03-16 (sessão 15)
 
 ## Estado atual
 Aplicação funcional com autenticação JWT (ADMIN/VIEWER), em produção no Railway.
@@ -123,6 +123,20 @@ Lista em `bling.ts:CARRIERS_BLOCKED` — pedidos ignorados no sync, transportado
 - Rodonaves: endpoint v3/package + fallback brudam. Pedido AGRO-NF-002987 retorna "Não localizado" — pode ser NF antiga ou fora do range da API.
 - Transportadoras sem API de rastreamento (AZUL, TEX, ALFA): pedidos ficam PENDING permanentemente.
 - EQUI-NF-000019 (TRD): não localizado na API Senior com CNPJ da Equipage — possível segundo CNPJ/filial da TRD para investigar.
+
+## Implementado (sessão 15)
+- **Login Gmail corrigido:** `normalizeEmail()` removia pontos do email — trocado por `.trim().toLowerCase()`
+- **Portal do Cliente online:** `customer-portal/` deployado em `/portal`, vite.config com `base: '/portal'`, server.ts serve estático em produção
+- **Portal Cliente — busca por CNPJ funcionando:** backfill de `recipientCnpj` executado em produção (310/310 pedidos atualizados via Bling API)
+- **Sidebar:** link "Portal do Cliente" corrigido de `localhost:5174` para `/portal`
+- **SSW shippedAt corrigido:** buscava data do evento mais recente ao invés do mais antigo
+  - Fix: seletor `$('[onclick]')` em vez de `$('a')` — captura o link de detalhes mesmo quando está apenas no `<tr>`
+  - Página detalhada (`ssw_SSWDetalhado`) usada para obter histórico completo em ordem cronológica
+  - `shippedAt = detailEvents[0]` (DOCUMENTO DE TRANSPORTE EMITIDO = evento mais antigo)
+  - Backfill executado: 14 pedidos SSW corrigidos (AZURELOG, MENGUE EXPRESS, B. TRANSPORTES)
+- **Atual Cargas — "Não localizado" não sobrescreve rastreio:** quando API retorna `status: null`, `lastTracking` e `trackingEvents` não são atualizados — preserva último evento válido
+- **NF 9343 AVIC:** marcada manualmente como ENTREGUE (confirmado no site da transportadora — Atual Cargas remove entregues da lista)
+- **NF 9285 AVIC:** transportadora alterada para AZURELOG TRANSPORTES LTDA, rastreio refeito
 
 ## Implementado (sessão 14)
 - **Bug Braspress corrigido:** `braspressMapStatus` retornava IN_TRANSIT para "Entrega Realizada" porque `s.includes('ENTREGA')` capturava o evento antes do fallback
