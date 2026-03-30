@@ -574,17 +574,24 @@ async function trackExpressoSaoMiguel(
 
 const ATUAL_LOGIN_URL = 'https://cliente.atualcargas.com.br/api/cadastro/login'
 const ATUAL_LIST_URL  = 'https://cliente.atualcargas.com.br/api/rastreamento/senha/lista-encomendas'
-const ATUAL_DOCUMENT  = process.env.ATUAL_CARGAS_DOCUMENT ?? '47715256000149'
-const ATUAL_PASSWORD  = process.env.ATUAL_CARGAS_PASSWORD ?? '925196'
 
-let atualSessionCookie: string | null = null
-let atualSessionExpires = 0
+// Credenciais por empresa (CNPJ remetente)
+const ATUAL_CREDS: Record<string, { doc: string; pass: string }> = {
+  '47715256000149': { doc: process.env.ATUAL_CARGAS_DOCUMENT ?? '47715256000149', pass: process.env.ATUAL_CARGAS_PASSWORD ?? '925196' },
+  '54695386000122': { doc: process.env.ATUAL_CARGAS_AGRO_DOCUMENT ?? '54695386000122', pass: process.env.ATUAL_CARGAS_AGRO_PASSWORD ?? '748194' },
+}
 
-async function atualLogin(): Promise<string> {
+// Cache de sessão por empresa
+const atualSessions: Record<string, { cookie: string; expires: number }> = {}
+
+async function atualLogin(senderCnpj: string): Promise<string> {
+  const cred = ATUAL_CREDS[senderCnpj]
+  if (!cred) throw new Error(`Atual Cargas: credenciais não configuradas para CNPJ ${senderCnpj}`)
+
   const res = await fetch(ATUAL_LOGIN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ document: ATUAL_DOCUMENT, password: ATUAL_PASSWORD }),
+    body: JSON.stringify({ document: cred.doc, password: cred.pass }),
     signal: AbortSignal.timeout(15000),
   })
   if (!res.ok) throw new Error(`Atual login falhou: HTTP ${res.status}`)
@@ -594,14 +601,17 @@ async function atualLogin(): Promise<string> {
   if (!match) throw new Error('Atual: cookie de sessão não encontrado')
 
   // Sessão dura 59 min (3540s no portal) — renova com 5min de folga
-  atualSessionExpires = Date.now() + 54 * 60 * 1000
-  atualSessionCookie = `painel-cliente/iron-session=${match[1]}`
-  return atualSessionCookie
+  atualSessions[senderCnpj] = {
+    cookie: `painel-cliente/iron-session=${match[1]}`,
+    expires: Date.now() + 54 * 60 * 1000,
+  }
+  return atualSessions[senderCnpj].cookie
 }
 
-async function atualGetCookie(): Promise<string> {
-  if (atualSessionCookie && Date.now() < atualSessionExpires) return atualSessionCookie
-  return atualLogin()
+async function atualGetCookie(senderCnpj: string): Promise<string> {
+  const session = atualSessions[senderCnpj]
+  if (session && Date.now() < session.expires) return session.cookie
+  return atualLogin(senderCnpj)
 }
 
 function atualMapStatus(situacao: string, titulo: string): OrderStatus | null {
@@ -615,11 +625,12 @@ export async function trackAtualCargas(
   senderCnpj: string,
   nfNumber: string
 ): Promise<TrackingResult> {
+  const cnpj = senderCnpj.replace(/\D/g, '')
   const nfBusca = String(parseInt(nfNumber, 10))
-  const cookie = await atualGetCookie()
+  const cookie = await atualGetCookie(cnpj)
 
   const url = new URL(ATUAL_LIST_URL)
-  url.searchParams.set('cnpj', senderCnpj.replace(/\D/g, ''))
+  url.searchParams.set('cnpj', cnpj)
   url.searchParams.set('tipo', 'remetente')
 
   const res = await fetch(url.toString(), {
@@ -629,8 +640,8 @@ export async function trackAtualCargas(
 
   if (!res.ok) {
     // Sessão pode ter expirado — tenta renovar uma vez
-    atualSessionCookie = null
-    const cookie2 = await atualGetCookie()
+    delete atualSessions[cnpj]
+    const cookie2 = await atualGetCookie(cnpj)
     const res2 = await fetch(url.toString(), {
       headers: { Cookie: cookie2 },
       signal: AbortSignal.timeout(15000),
