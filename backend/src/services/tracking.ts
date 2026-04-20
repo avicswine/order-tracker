@@ -62,6 +62,7 @@ function detectOccurrence(text: string): boolean {
     t.includes('RECUSADO') ||
     t.includes('SUSTADO') ||
     t.includes('IMPEDIMENTO') ||
+    t.includes('ENTREGA PREJUDICADA') ||
     (t.includes('OCORRENCIA') && !t.includes('SEM OCORRENCIA') && !t.includes('OCORRENCIA DE ENTREGA'))
   )
 }
@@ -78,7 +79,8 @@ function mapStatus(text: string): OrderStatus | null {
     t.includes('CHEGADA EM UNIDADE') || t.includes('CHEGADA NA UNIDADE') || t.includes('EM SEPARACAO') ||
     t.includes('CHEGOU NO DEPOSITO') || t.includes('DEPOSITO DE ENTREGA') ||
     t.includes('RECEBIDO') || t.includes('AGUARDANDO') ||
-    t.includes('TRANSBORDO') || t.includes('MANIFESTADO') || t.includes('CONHECIMENTO EMITIDO')
+    t.includes('TRANSBORDO') || t.includes('MANIFESTADO') || t.includes('CONHECIMENTO EMITIDO') ||
+    t.includes('ENTREGA PREJUDICADA')
   ) return OrderStatus.IN_TRANSIT
   return null
 }
