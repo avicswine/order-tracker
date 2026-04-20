@@ -7,7 +7,7 @@ import path from 'path'
 import carriersRouter from './routes/carriers'
 import ordersRouter from './routes/orders'
 import trackingRouter, { runTrackingSync } from './routes/tracking'
-import blingRouter, { blingPublicRouter, loadTokensFromDB } from './routes/bling'
+import blingRouter, { blingPublicRouter, loadTokensFromDB, runBlingSync } from './routes/bling'
 import authRouter from './routes/auth'
 import publicRouter from './routes/public'
 import { requireAuth } from './middleware/auth'
@@ -69,13 +69,17 @@ app.listen(Number(PORT), '0.0.0.0', () => {
   loadTokensFromDB()
     .catch(err => console.error('[Startup] Erro ao carregar tokens:', err))
 
-  // Sincronização automática a cada 2 horas
+  // Sincronização automática a cada 2 horas: importa NFs novas do Bling + atualiza rastreamento
   cron.schedule('0 */2 * * *', async () => {
-    console.log('[Cron] Iniciando sync automático de rastreamento...')
-    const result = await runTrackingSync()
-    console.log(`[Cron] Sync concluído — atualizados: ${result.atualizados}, erros: ${result.erros}, total: ${result.total}`)
+    console.log('[Cron] Iniciando sync Bling...')
+    const bling = await runBlingSync()
+    console.log(`[Cron] Bling concluído — criados: ${bling.totalCriados}, ignorados: ${bling.totalIgnorados}`)
+
+    console.log('[Cron] Iniciando sync de rastreamento...')
+    const tracking = await runTrackingSync()
+    console.log(`[Cron] Rastreamento concluído — atualizados: ${tracking.atualizados}, erros: ${tracking.erros}, total: ${tracking.total}`)
   })
-  console.log('[Cron] Sync de rastreamento agendado a cada 2 horas')
+  console.log('[Cron] Sync automático agendado a cada 2 horas (Bling + rastreamento)')
 })
 
 export default app
