@@ -4,6 +4,7 @@ import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
 import cron from 'node-cron'
 import path from 'path'
+import bcrypt from 'bcryptjs'
 import carriersRouter from './routes/carriers'
 import ordersRouter from './routes/orders'
 import trackingRouter, { runTrackingSync } from './routes/tracking'
@@ -11,6 +12,7 @@ import blingRouter, { blingPublicRouter, loadTokensFromDB, runBlingSync } from '
 import authRouter from './routes/auth'
 import publicRouter from './routes/public'
 import { requireAuth } from './middleware/auth'
+import { prisma } from './lib/prisma'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -51,6 +53,29 @@ app.use('/api/tracking', requireAuth, trackingRouter)
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
+})
+
+// ROTA TEMPORÁRIA — cria o primeiro admin se o banco estiver vazio
+// Removida automaticamente após o uso
+app.post('/api/setup-admin', async (req, res) => {
+  try {
+    const count = await prisma.user.count()
+    if (count > 0) {
+      return res.status(403).json({ error: 'Já existem usuários cadastrados. Rota desativada.' })
+    }
+    const { name, email, password } = req.body
+    if (!name || !email || !password) {
+      return res.status(400).json({ error: 'Informe name, email e password.' })
+    }
+    const hashed = await bcrypt.hash(password, 12)
+    const user = await prisma.user.create({
+      data: { name, email, password: hashed, role: 'ADMIN' },
+      select: { id: true, name: true, email: true, role: true },
+    })
+    return res.json({ success: true, user })
+  } catch (e) {
+    return res.status(500).json({ error: String(e) })
+  }
 })
 
 // Em produção: serve o portal do cliente em /portal e o painel em tudo mais
