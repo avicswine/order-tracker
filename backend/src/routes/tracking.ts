@@ -191,12 +191,17 @@ function sseHandler(systems?: TrackingSystem[]) {
 
     const send = (event: string, data: unknown) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
 
+    // Heartbeat a cada 30s para evitar que o proxy do Railway corte a conexão
+    // durante esperas longas entre pedidos (Puppeteer, timeouts de API, etc.)
+    const heartbeat = setInterval(() => res.write(': heartbeat\n\n'), 30000)
+
     try {
       const result = await runTrackingSync((progress) => send('progress', progress), systems)
       send('done', result)
     } catch (err) {
       send('error', { message: String(err) })
     } finally {
+      clearInterval(heartbeat)
       res.end()
     }
   }

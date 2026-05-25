@@ -429,12 +429,17 @@ router.get('/sync-stream', async (req: Request, res: Response) => {
 
   const onlyCompany = (req.query.company as string) || undefined
 
+  // Heartbeat a cada 30s para evitar que o proxy do Railway corte a conexão
+  // durante esperas longas (ex: retry de rate limit do Bling pode levar até 75s)
+  const heartbeat = setInterval(() => res.write(': heartbeat\n\n'), 30000)
+
   try {
     const result = await runBlingSync(undefined, onlyCompany, (progress) => send('progress', progress))
     send('done', result)
   } catch (err) {
     send('error', { message: String(err) })
   } finally {
+    clearInterval(heartbeat)
     res.end()
   }
 })
