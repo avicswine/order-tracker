@@ -10,6 +10,7 @@ import trackingRouter, { runTrackingSync } from './routes/tracking'
 import blingRouter, { blingPublicRouter, loadTokensFromDB, runBlingSync } from './routes/bling'
 import authRouter from './routes/auth'
 import publicRouter from './routes/public'
+import setupRouter from './routes/setup'
 import { requireAuth } from './middleware/auth'
 
 const app = express()
@@ -42,6 +43,7 @@ if (isProd) {
 app.use(express.json())
 
 app.use('/api/auth', authRouter)
+app.use('/api/setup', setupRouter)
 app.use('/api/public', publicRouter)
 app.use('/api/bling', blingPublicRouter)
 app.use('/api/carriers', requireAuth, carriersRouter)
