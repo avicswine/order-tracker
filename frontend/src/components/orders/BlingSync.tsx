@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '../../lib/api'
 
@@ -27,9 +27,15 @@ interface TrackingResult {
   total: number
 }
 
+interface BlingProgress {
+  company: string
+  criados: number
+  ignorados: number
+  currentNf?: string
+}
+
 const blingApi = {
   status: () => api.get<CompanyStatus[]>('/bling/status').then((r) => r.data),
-  sync: (company?: string) => api.post<SyncResult>('/bling/sync', company ? { company } : {}).then((r) => r.data),
   enrich: () => api.post<EnrichResult>('/bling/enrich').then((r) => r.data),
   disconnect: (company: string) => api.post(`/bling/disconnect/${company}`).then((r) => r.data),
 }
@@ -58,14 +64,54 @@ export function BlingSync() {
     }
   }, [refetch])
 
-  const syncMutation = useMutation({
-    mutationFn: (company?: string) => blingApi.sync(company),
-    onSuccess: () => {
+  // --- Bling sync via SSE ---
+  const [blingRunning, setBlingRunning] = useState(false)
+  const [blingProgress, setBlingProgress] = useState<BlingProgress | null>(null)
+  const [blingResult, setBlingResult] = useState<SyncResult | null>(null)
+  const [blingError, setBlingError] = useState<string | null>(null)
+  const blingEsRef = useRef<EventSource | null>(null)
+
+  function startBlingSync(company?: string) {
+    if (blingRunning) return
+    setBlingRunning(true)
+    setBlingProgress(null)
+    setBlingResult(null)
+    setBlingError(null)
+
+    const token = localStorage.getItem('order_tracker_token')
+    const qs = new URLSearchParams({ token: token ?? '' })
+    if (company) qs.set('company', company)
+    const es = new EventSource(`/api/bling/sync-stream?${qs.toString()}`)
+    blingEsRef.current = es
+
+    es.addEventListener('progress', (e) => {
+      setBlingProgress(JSON.parse(e.data) as BlingProgress)
+    })
+    es.addEventListener('done', (e) => {
+      const result = JSON.parse(e.data) as SyncResult
+      setBlingResult(result)
+      setBlingRunning(false)
       qc.invalidateQueries({ queryKey: ['orders'] })
       qc.invalidateQueries({ queryKey: ['bling-status'] })
-    },
-  })
+      es.close()
+    })
+    es.addEventListener('error', (e) => {
+      const msg = (e as MessageEvent).data
+        ? JSON.parse((e as MessageEvent).data).message
+        : 'Falha na conexão com o servidor'
+      setBlingError(msg)
+      setBlingRunning(false)
+      es.close()
+    })
+  }
 
+  function closeBlingModal() {
+    setBlingResult(null)
+    setBlingError(null)
+    setBlingProgress(null)
+  }
+
+  // --- Enrich ---
   const enrichMutation = useMutation({
     mutationFn: blingApi.enrich,
     onSuccess: () => {
@@ -73,6 +119,7 @@ export function BlingSync() {
     },
   })
 
+  // --- Tracking SSE ---
   const [trackingProgress, setTrackingProgress] = useState<TrackingProgress | null>(null)
   const [trackingResult, setTrackingResult] = useState<TrackingResult | null>(null)
   const [trackingRunning, setTrackingRunning] = useState(false)
@@ -120,9 +167,7 @@ export function BlingSync() {
     setTrackingErrorOrders([])
     setCopied(false)
 
-    // 1. Sync geral (todos os carriers)
     openSseStream('/api/tracking/sync-stream', null, (result1) => {
-      // 2. Após terminar, sync específico São Miguel (garante que SM sempre roda)
       setTrackingProgress(null)
       openSseStream('/api/tracking/sync-stream-sm', result1, (result2) => {
         setTrackingResult(result2)
@@ -142,7 +187,6 @@ export function BlingSync() {
   }
 
   function copyErrors() {
-    // Agrupa por empresa
     const byCompany: Record<string, string[]> = {}
     for (const o of trackingErrorOrders) {
       const empresa = o.orderNumber.split('-')[0]
@@ -165,10 +209,71 @@ export function BlingSync() {
 
   const connectedCount = companies.filter((c) => c.connected).length
   const anyConnected = connectedCount > 0
+  const anyBusy = blingRunning || enrichMutation.isPending || trackingRunning
 
   return (
     <div className="flex items-center gap-3">
-      {/* Modal de progresso de rastreamento */}
+      {/* Modal: importação Bling */}
+      {(blingRunning || blingResult || blingError) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-80 flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-semibold text-gray-800">
+                {blingRunning ? 'Importando do Bling...' : blingError ? 'Erro na importação' : 'Importação concluída'}
+              </h3>
+              <button
+                onClick={() => { blingEsRef.current?.close(); setBlingRunning(false); closeBlingModal() }}
+                className="text-gray-400 hover:text-gray-600 text-lg leading-none"
+                title="Fechar"
+              >
+                ×
+              </button>
+            </div>
+
+            {blingRunning && !blingProgress && (
+              <p className="text-sm text-gray-500">Conectando ao Bling...</p>
+            )}
+
+            {blingProgress && (
+              <div className="text-sm text-gray-600 space-y-1">
+                <p className="font-medium text-gray-700">{blingProgress.company}</p>
+                <p>
+                  <span className="font-medium text-green-600">{blingProgress.criados}</span>
+                  <span className="text-gray-400"> importados · </span>
+                  <span className="text-gray-500">{blingProgress.ignorados}</span>
+                  <span className="text-gray-400"> ignorados</span>
+                </p>
+                {blingProgress.currentNf && (
+                  <p className="text-xs text-gray-400">NF {blingProgress.currentNf}</p>
+                )}
+              </div>
+            )}
+
+            {blingError && (
+              <>
+                <p className="text-sm text-red-600">{blingError}</p>
+                <button className="btn-primary text-sm w-full" onClick={closeBlingModal}>Fechar</button>
+              </>
+            )}
+
+            {blingResult && !blingRunning && (
+              <>
+                <div className="text-sm text-gray-700 space-y-1">
+                  {blingResult.totalCriados > 0 ? (
+                    <p><span className="font-medium text-green-600">{blingResult.totalCriados}</span> novos pedidos importados</p>
+                  ) : (
+                    <p className="text-gray-500">Nenhum pedido novo encontrado</p>
+                  )}
+                  <p className="text-gray-400 text-xs">{blingResult.totalIgnorados} já existiam (ignorados)</p>
+                </div>
+                <button className="btn-primary text-sm w-full" onClick={closeBlingModal}>Fechar</button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal: rastreamento */}
       {(trackingRunning || trackingResult || trackingError) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-2xl shadow-2xl p-6 w-80 flex flex-col gap-4">
@@ -265,27 +370,20 @@ export function BlingSync() {
         </div>
       )}
 
-      {/* Resultado das outras operações */}
-      {syncMutation.data && !enrichMutation.data && (
-        <span className="text-xs text-gray-500">
-          {syncMutation.data.totalCriados} importados, {syncMutation.data.totalIgnorados} ignorados
-        </span>
-      )}
       {enrichMutation.data && (
         <span className="text-xs text-gray-500">
           {enrichMutation.data.atualizados} transportadoras vinculadas
         </span>
       )}
 
-      {/* Botões Bling (aparecem se ao menos 1 empresa conectada) */}
       {anyConnected && (
         <>
           <button
             className="btn-secondary text-sm"
-            onClick={() => syncMutation.mutate(undefined)}
-            disabled={syncMutation.isPending || enrichMutation.isPending}
+            onClick={() => startBlingSync()}
+            disabled={anyBusy}
           >
-            {syncMutation.isPending ? 'Importando...' : (
+            {blingRunning ? 'Importando...' : (
               <>
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -299,7 +397,7 @@ export function BlingSync() {
           <button
             className="btn-secondary text-sm"
             onClick={() => enrichMutation.mutate()}
-            disabled={syncMutation.isPending || enrichMutation.isPending || trackingRunning}
+            disabled={anyBusy}
             title="Busca transportadoras no Bling para pedidos que ainda não têm"
           >
             {enrichMutation.isPending ? 'Buscando...' : (
@@ -316,7 +414,7 @@ export function BlingSync() {
           <button
             className="btn-secondary text-sm"
             onClick={startTrackingSync}
-            disabled={syncMutation.isPending || enrichMutation.isPending || trackingRunning}
+            disabled={anyBusy}
             title="Consulta status de entrega nas transportadoras"
           >
             {trackingRunning ? 'Rastreando...' : (
@@ -341,9 +439,9 @@ export function BlingSync() {
                 <span className="h-2 w-2 rounded-full bg-green-500" />
                 <span className="text-xs font-medium text-green-700">{company.name}</span>
                 <button
-                  onClick={() => syncMutation.mutate(company.key)}
-                  disabled={syncMutation.isPending}
-                  className="ml-1 text-green-400 hover:text-blue-500 leading-none"
+                  onClick={() => startBlingSync(company.key)}
+                  disabled={anyBusy}
+                  className="ml-1 text-green-400 hover:text-blue-500 leading-none disabled:opacity-40"
                   title={`Importar só ${company.name}`}
                 >
                   ↓

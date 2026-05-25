@@ -11,6 +11,8 @@ const tokens: Record<string, { access_token: string; refresh_token: string }> = 
 // Lock para evitar syncs paralelos (ex: múltiplos restarts do Railway)
 let syncRunning = false
 
+type BlingProgressCallback = (data: { company: string; criados: number; ignorados: number; currentNf?: string }) => void
+
 export async function loadTokensFromDB() {
   const rows = await prisma.blingToken.findMany()
   for (const row of rows) {
@@ -272,7 +274,7 @@ async function resolveCarrier(companyKey: string, nfId: number, nfNumero: string
 }
 
 // POST /api/bling/sync - importa NFs de todas as empresas conectadas
-export async function runBlingSync(limite?: number, onlyCompany?: string) {
+export async function runBlingSync(limite?: number, onlyCompany?: string, onProgress?: BlingProgressCallback) {
   if (syncRunning) {
     console.log('[Bling] Sync já em andamento — chamada duplicada ignorada.')
     return { totalCriados: 0, totalIgnorados: 0, results: {} }
@@ -288,6 +290,8 @@ export async function runBlingSync(limite?: number, onlyCompany?: string) {
   }
 
   const results: Record<string, { criados: number; ignorados: number }> = {}
+  let runningCriados = 0
+  let runningIgnorados = 0
 
   for (const companyKey of connectedCompanies) {
     const company = COMPANIES[companyKey]
@@ -329,6 +333,8 @@ export async function runBlingSync(limite?: number, onlyCompany?: string) {
               await prisma.order.update({ where: { id: existing.id }, data: { customerPhone: phone } })
             }
             ignorados++
+            runningIgnorados++
+            onProgress?.({ company: company.name, criados: runningCriados, ignorados: runningIgnorados, currentNf: String(nf.numero) })
             continue
           }
 
@@ -336,7 +342,12 @@ export async function runBlingSync(limite?: number, onlyCompany?: string) {
           const carrierId = await resolveCarrier(companyKey, nf.id, String(nf.numero))
 
           // Sem transportadora rastreável → ignora (ex: Mercado Envios, sem transporte)
-          if (!carrierId) { ignorados++; continue }
+          if (!carrierId) {
+            ignorados++
+            runningIgnorados++
+            onProgress?.({ company: company.name, criados: runningCriados, ignorados: runningIgnorados, currentNf: String(nf.numero) })
+            continue
+          }
 
           await prisma.order.create({
             data: {
@@ -355,6 +366,8 @@ export async function runBlingSync(limite?: number, onlyCompany?: string) {
           })
 
           criados++
+          runningCriados++
+          onProgress?.({ company: company.name, criados: runningCriados, ignorados: runningIgnorados, currentNf: String(nf.numero) })
         }
 
         if (limite && criados >= limite) break
@@ -388,6 +401,42 @@ router.post('/sync', async (req: Request, res: Response) => {
   const onlyCompany = req.body?.company as string | undefined
   const result = await runBlingSync(limite, onlyCompany)
   res.json({ message: 'Sincronização concluída', ...result })
+})
+
+// GET /api/bling/sync-stream — SSE com progresso em tempo real
+router.get('/sync-stream', async (req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'text/event-stream')
+  res.setHeader('Cache-Control', 'no-cache')
+  res.setHeader('Connection', 'keep-alive')
+  res.setHeader('X-Accel-Buffering', 'no')
+  res.flushHeaders()
+
+  const send = (event: string, data: unknown) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+
+  if (syncRunning) {
+    send('error', { message: 'Sincronização já em andamento. Aguarde e tente novamente.' })
+    res.end()
+    return
+  }
+
+  await loadTokensFromDB()
+  const connectedCompanies = Object.keys(COMPANIES).filter((key) => !!tokens[key])
+  if (connectedCompanies.length === 0) {
+    send('error', { message: 'Nenhuma empresa conectada ao Bling.' })
+    res.end()
+    return
+  }
+
+  const onlyCompany = (req.query.company as string) || undefined
+
+  try {
+    const result = await runBlingSync(undefined, onlyCompany, (progress) => send('progress', progress))
+    send('done', result)
+  } catch (err) {
+    send('error', { message: String(err) })
+  } finally {
+    res.end()
+  }
 })
 
 // GET /api/bling/debug/nfe/:id - detalhes de uma NF específica
