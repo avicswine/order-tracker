@@ -1,30 +1,22 @@
-import nodemailer from 'nodemailer'
+import { Resend } from 'resend'
 
-let transporter: nodemailer.Transporter | null = null
+let client: Resend | null = null
 
-function getTransporter(): nodemailer.Transporter {
-  if (transporter) return transporter
-
-  const user = process.env.GMAIL_USER
-  const pass = process.env.GMAIL_APP_PASSWORD
-
-  if (!user || !pass) {
-    throw new Error('GMAIL_USER e GMAIL_APP_PASSWORD não configurados')
-  }
-
-  transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: { user, pass },
-  })
-
-  return transporter
+function getClient(): Resend {
+  if (client) return client
+  const apiKey = process.env.RESEND_API_KEY
+  if (!apiKey) throw new Error('RESEND_API_KEY não configurada')
+  client = new Resend(apiKey)
+  return client
 }
+
+const FROM = process.env.EMAIL_FROM ?? 'no-reply@avicswine.com.br'
 
 export async function sendEmail(to: string, subject: string, html: string): Promise<{ ok: boolean; error?: string }> {
   try {
-    const t = getTransporter()
-    const from = process.env.GMAIL_USER!
-    await t.sendMail({ from: `"Rastreamento" <${from}>`, to, subject, html })
+    const resend = getClient()
+    const { error } = await resend.emails.send({ from: `Rastreamento AVIC <${FROM}>`, to, subject, html })
+    if (error) throw new Error(error.message)
     return { ok: true }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
