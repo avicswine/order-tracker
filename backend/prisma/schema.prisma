@@ -47,6 +47,7 @@ model Order {
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
   statusHistory     StatusHistory[]
+  notifications     OrderNotification[]
 
   @@index([status])
   @@index([nfNumber])
@@ -86,6 +87,20 @@ model User {
   updatedAt DateTime @updatedAt
 
   @@map("users")
+}
+
+model OrderNotification {
+  id         String   @id @default(cuid())
+  orderId    String
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  channel    String   // "WHATSAPP" | "EMAIL"
+  sentAt     DateTime @default(now())
+  eventHash  String   // hash do lastTracking para deduplicação
+  success    Boolean
+  error      String?
+
+  @@unique([orderId, eventHash])
+  @@map("order_notifications")
 }
 
 enum UserRole {

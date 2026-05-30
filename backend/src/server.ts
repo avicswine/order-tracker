@@ -11,7 +11,9 @@ import blingRouter, { blingPublicRouter, loadTokensFromDB, runBlingSync } from '
 import authRouter from './routes/auth'
 import publicRouter from './routes/public'
 import setupRouter from './routes/setup'
+import whatsappRouter from './routes/whatsapp'
 import { requireAuth } from './middleware/auth'
+import { initWhatsApp, destroyAll } from './services/whatsapp'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -50,6 +52,7 @@ app.use('/api/carriers', requireAuth, carriersRouter)
 app.use('/api/orders', requireAuth, ordersRouter)
 app.use('/api/bling', requireAuth, blingRouter)
 app.use('/api/tracking', requireAuth, trackingRouter)
+app.use('/api/whatsapp', requireAuth, whatsappRouter)
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
@@ -70,6 +73,9 @@ app.listen(Number(PORT), '0.0.0.0', () => {
   // Carrega tokens do banco na inicialização (sem disparar sync)
   loadTokensFromDB()
     .catch(err => console.error('[Startup] Erro ao carregar tokens:', err))
+
+  // Inicia instâncias WhatsApp (AVIC + AGRO)
+  initWhatsApp()
 
   // Sincronização automática a cada 2 horas: importa NFs novas do Bling + atualiza rastreamento
   cron.schedule('0 */2 * * *', async () => {

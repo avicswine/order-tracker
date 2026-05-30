@@ -6,6 +6,7 @@ import { LoginPage } from './pages/LoginPage'
 import { OrdersPage } from './pages/OrdersPage'
 import { CarriersPage } from './pages/CarriersPage'
 import { RankingPage } from './pages/RankingPage'
+import { WhatsAppPage } from './pages/WhatsAppPage'
 
 export default function App() {
   return (
@@ -22,6 +23,7 @@ export default function App() {
                     <Route path="/" element={<OrdersPage />} />
                     <Route path="/carriers" element={<CarriersPage />} />
                     <Route path="/ranking" element={<RankingPage />} />
+                    <Route path="/whatsapp" element={<WhatsAppPage />} />
                   </Routes>
                 </Layout>
               </PrivateRoute>

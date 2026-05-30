@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express'
 import { prisma } from '../lib/prisma'
 import { trackSSW, trackSenior, trackWithPuppeteer, trackSaoMiguel, trackAtualCargas, trackRodonaves, trackBraspress } from '../services/tracking'
 import { OrderStatus, TrackingSystem, Prisma } from '@prisma/client'
+import { notifyOrderUpdate } from '../services/notifier'
 
 const router = Router()
 
@@ -155,6 +156,23 @@ export async function runTrackingSync(onProgress?: ProgressCallback, systems?: T
         })
       } else {
         await prisma.order.update({ where: { id: order.id }, data: updates })
+      }
+
+      // Notifica o cliente se lastTracking mudou (fire-and-forget)
+      if (!semDados && lastEvent && lastEvent !== order.lastTracking) {
+        const estimatedDelivery = (updates.estimatedDelivery as Date | undefined) ?? order.estimatedDelivery
+        notifyOrderUpdate({
+          id: order.id,
+          orderNumber: order.orderNumber,
+          nfNumber: order.nfNumber,
+          customerName: order.customerName,
+          customerEmail: order.customerEmail,
+          customerPhone: order.customerPhone,
+          senderCnpj: order.senderCnpj,
+          estimatedDelivery: estimatedDelivery ?? null,
+          lastTracking: lastEvent,
+          lastTrackingAt: new Date(),
+        }).catch(err => console.error(`[Notifier] Erro ao notificar ${order.orderNumber}:`, err))
       }
 
       atualizados++

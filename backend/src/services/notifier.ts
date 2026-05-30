@@ -1,0 +1,218 @@
+import crypto from 'crypto'
+import { prisma } from '../lib/prisma'
+import { sendMessage, type WppCompany } from './whatsapp'
+import { sendEmail } from './emailer'
+
+const PORTAL_URL = process.env.PORTAL_URL ?? 'https://order-tracker-production-4189.up.railway.app/portal/'
+
+// CNPJ das empresas → instância WhatsApp
+const SENDER_TO_WPP: Record<string, WppCompany> = {
+  '47715256000149': 'avic',     // AVIC
+  '54695386000122': 'agro',     // AGROGRANJA
+  // Equipage não tem WhatsApp — vai por email
+}
+
+// Valida celular brasileiro: DDD (2 dígitos) + 9 + 8 dígitos = 11 dígitos
+// Aceita também o formato antigo sem o 9 (10 dígitos), mas celulares SP/RJ sempre têm 9
+function isMobilePhone(digits: string): boolean {
+  if (!digits) return false
+  const d = digits.replace(/\D/g, '')
+  // Com código do país 55: 55 + 11 dígitos = 13; sem: 11 dígitos
+  const local = d.startsWith('55') ? d.slice(2) : d
+  if (local.length === 11) return local[2] === '9'   // DDD + 9XXXXXXXX
+  if (local.length === 10) return true               // DDD + 8 dígitos (celular antigo)
+  return false
+}
+
+// Garante o formato 55DDDNUMERO para o WhatsApp
+function toWhatsAppNumber(digits: string): string {
+  const d = digits.replace(/\D/g, '')
+  if (d.startsWith('55')) return d
+  return '55' + d
+}
+
+function hashEvent(orderId: string, eventText: string): string {
+  return crypto.createHash('sha256').update(`${orderId}:${eventText}`).digest('hex').slice(0, 16)
+}
+
+function formatDate(iso: string | Date | null | undefined): string {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  return d.toLocaleDateString('pt-BR')
+}
+
+function formatDateTime(iso: string | Date | null | undefined): string {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  return `${d.toLocaleDateString('pt-BR')} às ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+}
+
+// Verifica se já enviou alguma notificação para esse pedido HOJE
+async function sentToday(orderId: string): Promise<boolean> {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const count = await prisma.orderNotification.count({
+    where: { orderId, success: true, sentAt: { gte: today } },
+  })
+  return count > 0
+}
+
+// Verifica se esse evento já foi notificado (deduplicação)
+async function alreadyNotified(orderId: string, eventHash: string): Promise<boolean> {
+  const existing = await prisma.orderNotification.findUnique({
+    where: { orderId_eventHash: { orderId, eventHash } },
+  })
+  return !!existing
+}
+
+async function saveNotification(
+  orderId: string,
+  eventHash: string,
+  channel: string,
+  success: boolean,
+  error?: string
+) {
+  try {
+    await prisma.orderNotification.create({
+      data: { orderId, eventHash, channel, success, error: error ?? null },
+    })
+  } catch {
+    // @@unique pode dar conflito em paralelo — ignora
+  }
+}
+
+function buildWhatsAppMessage(order: {
+  orderNumber: string
+  nfNumber: string | null
+  customerName: string
+  estimatedDelivery: Date | null
+  lastTracking: string | null
+  lastTrackingAt: Date | null
+}, isFirstToday: boolean, isFirstEver: boolean): string {
+  const nf = order.nfNumber ? String(parseInt(order.nfNumber, 10)) : order.orderNumber
+  const evento = order.lastTracking ?? ''
+  const dataEvento = formatDateTime(order.lastTrackingAt)
+  const previsao = order.estimatedDelivery ? formatDate(order.estimatedDelivery) : null
+
+  let header: string
+  if (isFirstEver) {
+    header = `Olá, tudo bem? Temos boas notícias!\n\nSeu pedido foi despachado:`
+  } else if (isFirstToday) {
+    header = `Olá, tudo bem? Seu pedido teve uma atualização:`
+  } else {
+    header = `Oi, eu novamente, Seu pedido teve uma atualização:`
+  }
+
+  let body = `${header}\n\n${evento}`
+  if (dataEvento && dataEvento !== '—') body += `\n\n${dataEvento}`
+
+  if (previsao && isFirstEver) {
+    body += `\n\nPrevisão de entrega: ${previsao}.`
+  }
+
+  body += `\n\nPara acompanhar o rastreio, basta acessar o link:\n${PORTAL_URL}\nE digitar o seu CPF ou CNPJ.\n\nAgradecemos a preferência. 🙏`
+
+  return body
+}
+
+function buildEmailHtml(order: {
+  orderNumber: string
+  nfNumber: string | null
+  customerName: string
+  estimatedDelivery: Date | null
+  lastTracking: string | null
+  lastTrackingAt: Date | null
+}, isFirstEver: boolean): string {
+  const nf = order.nfNumber ? String(parseInt(order.nfNumber, 10)) : order.orderNumber
+  const evento = order.lastTracking ?? ''
+  const dataEvento = formatDateTime(order.lastTrackingAt)
+  const previsao = order.estimatedDelivery ? formatDate(order.estimatedDelivery) : null
+
+  const titulo = isFirstEver ? 'Seu pedido foi despachado!' : 'Atualização do seu pedido'
+
+  return `
+<!DOCTYPE html>
+<html>
+<body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#333">
+  <h2 style="color:#1d4ed8">${titulo}</h2>
+  <p>Olá, ${order.customerName}!</p>
+  <div style="background:#f1f5f9;border-left:4px solid #1d4ed8;padding:12px 16px;margin:16px 0;border-radius:4px">
+    <strong>NF ${nf}</strong><br>
+    ${evento}
+    ${dataEvento !== '—' ? `<br><small style="color:#64748b">${dataEvento}</small>` : ''}
+  </div>
+  ${previsao && isFirstEver ? `<p>📅 <strong>Previsão de entrega:</strong> ${previsao}</p>` : ''}
+  <p>Para acompanhar o rastreio, acesse:<br>
+    <a href="${PORTAL_URL}" style="color:#1d4ed8">${PORTAL_URL}</a><br>
+    e digite o seu CPF ou CNPJ.
+  </p>
+  <p style="color:#64748b;font-size:13px">Agradecemos a preferência.</p>
+</body>
+</html>`
+}
+
+export async function notifyOrderUpdate(order: {
+  id: string
+  orderNumber: string
+  nfNumber: string | null
+  customerName: string
+  customerEmail: string | null
+  customerPhone: string | null
+  senderCnpj: string | null
+  estimatedDelivery: Date | null
+  lastTracking: string | null
+  lastTrackingAt: Date | null
+}): Promise<void> {
+  if (!order.lastTracking) return
+
+  const eventHash = hashEvent(order.id, order.lastTracking)
+
+  // Deduplicação: já notificou esse evento?
+  if (await alreadyNotified(order.id, eventHash)) return
+
+  const alreadySentToday = await sentToday(order.id)
+
+  // Verifica se é o primeiro evento já enviado (nunca houve notificação com sucesso)
+  const anyPrior = await prisma.orderNotification.count({ where: { orderId: order.id, success: true } })
+  const isFirstEver = anyPrior === 0
+
+  const message = buildWhatsAppMessage(order, !alreadySentToday, isFirstEver)
+  const subject = isFirstEver ? `Pedido despachado — NF ${order.nfNumber ?? order.orderNumber}` : `Atualização do pedido — NF ${order.nfNumber ?? order.orderNumber}`
+
+  const phone = order.customerPhone?.replace(/\D/g, '') ?? ''
+  const wppCompany = order.senderCnpj ? SENDER_TO_WPP[order.senderCnpj.replace(/\D/g, '')] : undefined
+
+  let notified = false
+
+  // Tenta WhatsApp primeiro
+  if (phone && isMobilePhone(phone) && wppCompany) {
+    const wppNumber = toWhatsAppNumber(phone)
+    const result = await sendMessage(wppCompany, wppNumber, message)
+    if (result.ok) {
+      await saveNotification(order.id, eventHash, 'WHATSAPP', true)
+      console.log(`[Notifier] ✅ WhatsApp (${wppCompany}) → ${wppNumber} | ${order.orderNumber}`)
+      notified = true
+    } else {
+      console.warn(`[Notifier] ⚠️ WhatsApp falhou (${result.error}) — tentando email...`)
+      await saveNotification(order.id, eventHash, 'WHATSAPP', false, result.error)
+    }
+  }
+
+  // Fallback: email
+  if (!notified && order.customerEmail) {
+    const html = buildEmailHtml(order, isFirstEver)
+    const result = await sendEmail(order.customerEmail, subject, html)
+    if (result.ok) {
+      await saveNotification(order.id, eventHash, 'EMAIL', true)
+      console.log(`[Notifier] ✅ Email → ${order.customerEmail} | ${order.orderNumber}`)
+    } else {
+      await saveNotification(order.id, eventHash, 'EMAIL', false, result.error)
+      console.warn(`[Notifier] ❌ Email falhou: ${result.error}`)
+    }
+    return
+  }
+
+  if (!notified) {
+    console.log(`[Notifier] ℹ️ Sem contato (phone/email) para ${order.orderNumber} — notificação ignorada`)
+  }
+}
