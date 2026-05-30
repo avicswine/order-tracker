@@ -12,6 +12,7 @@ import authRouter from './routes/auth'
 import publicRouter from './routes/public'
 import setupRouter from './routes/setup'
 import whatsappRouter from './routes/whatsapp'
+import notificationsRouter from './routes/notifications'
 import { requireAuth } from './middleware/auth'
 import { initWhatsApp, destroyAll } from './services/whatsapp'
 
@@ -56,6 +57,7 @@ app.use('/api/orders', requireAuth, ordersRouter)
 app.use('/api/bling', requireAuth, blingRouter)
 app.use('/api/tracking', requireAuth, trackingRouter)
 app.use('/api/whatsapp', requireAuth, whatsappRouter)
+app.use('/api/notifications', requireAuth, notificationsRouter)
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })

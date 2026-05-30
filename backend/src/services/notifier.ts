@@ -70,11 +70,13 @@ async function saveNotification(
   eventHash: string,
   channel: string,
   success: boolean,
+  recipient?: string,
+  eventText?: string,
   error?: string
 ) {
   try {
     await prisma.orderNotification.create({
-      data: { orderId, eventHash, channel, success, error: error ?? null },
+      data: { orderId, eventHash, channel, success, recipient: recipient ?? null, eventText: eventText ?? null, error: error ?? null },
     })
   } catch {
     // @@unique pode dar conflito em paralelo — ignora
@@ -187,12 +189,12 @@ export async function notifyOrderUpdate(order: {
     const wppNumber = toWhatsAppNumber(phone)
     const result = await sendMessage(wppCompany, wppNumber, message)
     if (result.ok) {
-      await saveNotification(order.id, eventHash, 'WHATSAPP', true)
+      await saveNotification(order.id, eventHash, 'WHATSAPP', true, wppNumber, order.lastTracking ?? undefined)
       console.log(`[Notifier] ✅ WhatsApp (${wppCompany}) → ${wppNumber} | ${order.orderNumber}`)
       notified = true
     } else {
       console.warn(`[Notifier] ⚠️ WhatsApp falhou (${result.error}) — tentando email...`)
-      await saveNotification(order.id, eventHash, 'WHATSAPP', false, result.error)
+      await saveNotification(order.id, eventHash, 'WHATSAPP', false, wppNumber, order.lastTracking ?? undefined, result.error)
     }
   }
 
@@ -201,10 +203,10 @@ export async function notifyOrderUpdate(order: {
     const html = buildEmailHtml(order, isFirstEver)
     const result = await sendEmail(order.customerEmail, subject, html)
     if (result.ok) {
-      await saveNotification(order.id, eventHash, 'EMAIL', true)
+      await saveNotification(order.id, eventHash, 'EMAIL', true, order.customerEmail, order.lastTracking ?? undefined)
       console.log(`[Notifier] ✅ Email → ${order.customerEmail} | ${order.orderNumber}`)
     } else {
-      await saveNotification(order.id, eventHash, 'EMAIL', false, result.error)
+      await saveNotification(order.id, eventHash, 'EMAIL', false, order.customerEmail, order.lastTracking ?? undefined, result.error)
       console.warn(`[Notifier] ❌ Email falhou: ${result.error}`)
     }
     return

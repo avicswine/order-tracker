@@ -104,6 +104,8 @@ model OrderNotification {
   orderId    String
   order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   channel    String   // "WHATSAPP" | "EMAIL"
+  recipient  String?  // número ou email usado no envio
+  eventText  String?  // texto do lastTracking no momento do envio
   sentAt     DateTime @default(now())
   eventHash  String   // hash do lastTracking para deduplicação
   success    Boolean
