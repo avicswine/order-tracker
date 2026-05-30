@@ -19,6 +19,9 @@ const app = express()
 const PORT = process.env.PORT || 3001
 const isProd = process.env.NODE_ENV === 'production'
 
+// Railway usa proxy reverso — necessário para express-rate-limit funcionar corretamente
+app.set('trust proxy', 1)
+
 // Headers de segurança HTTP
 app.use(helmet({
   contentSecurityPolicy: false, // desativado para não quebrar o frontend React
