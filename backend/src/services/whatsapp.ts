@@ -97,10 +97,24 @@ function createInstance(company: WppCompany): WppInstance {
   const executablePath = findChromium()
   const client = new Client({
     authStrategy: new LocalAuth({ dataPath: getAuthPath(company), clientId: company }),
+    // Fixa versão estável do WhatsApp Web para evitar incompatibilidade em servidor headless
+    webVersionCache: {
+      type: 'remote',
+      remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.3000.1015901307-alpha.html',
+    },
     puppeteer: {
       headless: true,
       ...(executablePath ? { executablePath } : {}),
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--disable-extensions',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding',
+      ],
     },
   })
 
@@ -129,7 +143,7 @@ function createInstance(company: WppCompany): WppInstance {
     inst.qrDataUrl = null
     console.log(`[WhatsApp/${company}] Carregando ${percent}% — ${message}`)
     limparTimer()
-    inst.conectandoTimer = setTimeout(async () => {
+    inst.conectandoTimer = setTimeout(async () => {  // 120s — servidor headless precisa de mais tempo
       if (inst.status !== 'pronto') {
         inst.tentativas++
         if (inst.tentativas >= 2) {
@@ -144,7 +158,7 @@ function createInstance(company: WppCompany): WppInstance {
         await sleep(2000)
         iniciar()
       }
-    }, 60_000)
+    }, 120_000)
   })
 
   client.on('authenticated', () => {
