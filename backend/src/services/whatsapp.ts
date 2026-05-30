@@ -1,72 +1,57 @@
-import { Client, LocalAuth } from 'whatsapp-web.js'
-import { execSync } from 'child_process'
+import makeWASocket, {
+  useMultiFileAuthState,
+  DisconnectReason,
+  fetchLatestBaileysVersion,
+  makeCacheableSignalKeyStore,
+  type WASocket,
+} from '@whiskeysockets/baileys'
+import { Boom } from '@hapi/boom'
 import QRCode from 'qrcode'
 import path from 'path'
 import fs from 'fs'
+import pino from 'pino'
 
 export type WppCompany = 'avic' | 'agro'
 type WppStatus = 'iniciando' | 'qr' | 'conectando' | 'pronto' | 'desconectado'
 
 interface WppInstance {
-  client: Client
+  sock: WASocket | null
   status: WppStatus
   qrDataUrl: string | null
-  conectandoTimer: ReturnType<typeof setTimeout> | null
-  tentativas: number
+  numero: string | null
+  reconnecting: boolean
 }
 
 const instances: Partial<Record<WppCompany, WppInstance>> = {}
 
 function getAuthPath(company: WppCompany): string {
-  // Railway: /tmp é efêmero mas funciona entre requests da mesma instância
-  const base = process.env.WPP_AUTH_PATH ?? path.join(process.cwd(), '.wwebjs_auth')
+  const base = process.env.WPP_AUTH_PATH ?? path.join(process.cwd(), '.wpp_auth')
   return path.join(base, company)
-}
-
-function limparSessao(company: WppCompany) {
-  const authDir = getAuthPath(company)
-  try { fs.rmSync(authDir, { recursive: true, force: true }) } catch { /* ignora */ }
-  console.log(`[WhatsApp/${company}] Sessão apagada — novo QR será gerado`)
-}
-
-function sleep(ms: number) {
-  return new Promise(r => setTimeout(r, ms))
 }
 
 export function getStatus(company: WppCompany): { status: WppStatus; qr: string | null; numero: string | null } {
   const inst = instances[company]
   if (!inst) return { status: 'desconectado', qr: null, numero: null }
-
-  let numero: string | null = null
-  if (inst.status === 'pronto') {
-    try {
-      const user = (inst.client as unknown as { info?: { wid?: { user?: string } } }).info?.wid?.user
-      if (user) {
-        const n = String(user)
-        if (n.length >= 12) {
-          numero = `+${n.slice(0,2)} (${n.slice(2,4)}) ${n.slice(4,n.length-4)}-${n.slice(-4)}`
-        } else {
-          numero = `+${n}`
-        }
-      }
-    } catch { /* info ainda não disponível */ }
-  }
-  return { status: inst.status, qr: inst.qrDataUrl, numero }
+  return { status: inst.status, qr: inst.qrDataUrl, numero: inst.numero }
 }
 
 export async function sendMessage(company: WppCompany, phone: string, message: string): Promise<{ ok: boolean; error?: string }> {
   const inst = instances[company]
-  if (!inst || inst.status !== 'pronto') {
+  if (!inst?.sock || inst.status !== 'pronto') {
     return { ok: false, error: `WhatsApp ${company} não está conectado (status: ${inst?.status ?? 'não iniciado'})` }
   }
 
-  const phoneDigits = phone.replace(/\D/g, '')
+  const digits = phone.replace(/\D/g, '')
+  const jid = digits.endsWith('@s.whatsapp.net') ? digits : `${digits}@s.whatsapp.net`
+
   try {
-    const numberId = await inst.client.getNumberId(phoneDigits)
-    if (!numberId) {
+    // Verifica se número existe no WhatsApp
+    const results = await inst.sock.onWhatsApp(digits)
+    const result = results?.[0]
+    if (!result?.exists) {
       return { ok: false, error: 'Número não encontrado no WhatsApp' }
     }
-    await inst.client.sendMessage(numberId._serialized, message)
+    await inst.sock.sendMessage(jid, { text: message })
     return { ok: true }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
@@ -74,149 +59,142 @@ export async function sendMessage(company: WppCompany, phone: string, message: s
   }
 }
 
-function findChromium(): string | undefined {
-  const candidates = [
-    '/usr/bin/google-chrome',
-    '/usr/bin/chromium',
-    '/usr/bin/chromium-browser',
-    '/run/current-system/sw/bin/chromium',
-    '/nix/var/nix/profiles/default/bin/chromium',
-  ]
-  for (const p of candidates) {
-    if (fs.existsSync(p)) { console.log(`[WhatsApp] Chromium encontrado em: ${p}`); return p }
-  }
+async function startInstance(company: WppCompany): Promise<void> {
+  const authPath = getAuthPath(company)
+  fs.mkdirSync(authPath, { recursive: true })
+
+  const inst = instances[company]!
+  inst.status = 'iniciando'
+  inst.sock = null
+
   try {
-    const found = execSync('which chromium chromium-browser google-chrome 2>/dev/null | head -1', { encoding: 'utf8' }).trim()
-    if (found) { console.log(`[WhatsApp] Chromium via which: ${found}`); return found }
-  } catch { /* ignora */ }
-  console.log('[WhatsApp] Chromium não encontrado — usando bundled do puppeteer')
-  return undefined
+    const { state, saveCreds } = await useMultiFileAuthState(authPath)
+    const { version } = await fetchLatestBaileysVersion()
+    console.log(`[WhatsApp/${company}] Usando Baileys v${version.join('.')}`)
+
+    const sock = makeWASocket({
+      version,
+      auth: {
+        creds: state.creds,
+        keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' })),
+      },
+      printQRInTerminal: false,
+      logger: pino({ level: 'silent' }),
+      browser: ['OrderTracker', 'Chrome', '120.0.0'],
+    })
+
+    inst.sock = sock
+
+    sock.ev.on('creds.update', saveCreds)
+
+    sock.ev.on('connection.update', async (update) => {
+      const { connection, lastDisconnect, qr } = update
+
+      if (qr) {
+        inst.status = 'qr'
+        inst.qrDataUrl = await QRCode.toDataURL(qr)
+        console.log(`[WhatsApp/${company}] QR gerado — escaneie para conectar`)
+      }
+
+      if (connection === 'connecting') {
+        if (inst.status !== 'qr') inst.status = 'conectando'
+        console.log(`[WhatsApp/${company}] Conectando…`)
+      }
+
+      if (connection === 'open') {
+        inst.status = 'pronto'
+        inst.qrDataUrl = null
+        const num = sock.user?.id?.split(':')[0] ?? null
+        inst.numero = num ? formatNumber(num) : null
+        console.log(`[WhatsApp/${company}] ✅ Conectado — ${inst.numero ?? 'número desconhecido'}`)
+      }
+
+      if (connection === 'close') {
+        inst.status = 'desconectado'
+        inst.qrDataUrl = null
+        inst.numero = null
+
+        const reason = (lastDisconnect?.error as Boom)?.output?.statusCode
+        const loggedOut = reason === DisconnectReason.loggedOut
+
+        console.log(`[WhatsApp/${company}] Desconectado — motivo: ${reason} ${loggedOut ? '(deslogado)' : '(reconectando)'}`)
+
+        if (loggedOut) {
+          // Limpa sessão e reinicia para mostrar novo QR
+          clearAuth(company)
+        }
+
+        if (!inst.reconnecting) {
+          inst.reconnecting = true
+          setTimeout(async () => {
+            inst.reconnecting = false
+            await startInstance(company)
+          }, 3000)
+        }
+      }
+    })
+  } catch (err) {
+    console.error(`[WhatsApp/${company}] Erro ao iniciar:`, err instanceof Error ? err.message : err)
+    inst.status = 'desconectado'
+    if (!inst.reconnecting) {
+      inst.reconnecting = true
+      setTimeout(async () => {
+        inst.reconnecting = false
+        await startInstance(company)
+      }, 10_000)
+    }
+  }
 }
 
-function createInstance(company: WppCompany): WppInstance {
-  const executablePath = findChromium()
-  const client = new Client({
-    authStrategy: new LocalAuth({ dataPath: getAuthPath(company), clientId: company }),
-    // Fixa versão estável do WhatsApp Web para evitar incompatibilidade em servidor headless
-    webVersionCache: {
-      type: 'remote',
-      remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.3000.1015901307-alpha.html',
-    },
-    puppeteer: {
-      headless: true,
-      ...(executablePath ? { executablePath } : {}),
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--disable-extensions',
-        '--disable-background-timer-throttling',
-        '--disable-backgrounding-occluded-windows',
-        '--disable-renderer-backgrounding',
-      ],
-    },
-  })
+function clearAuth(company: WppCompany) {
+  const authPath = getAuthPath(company)
+  try { fs.rmSync(authPath, { recursive: true, force: true }) } catch { /* ignora */ }
+  fs.mkdirSync(authPath, { recursive: true })
+  console.log(`[WhatsApp/${company}] Sessão apagada — novo QR será gerado`)
+}
 
-  const inst: WppInstance = { client, status: 'iniciando', qrDataUrl: null, conectandoTimer: null, tentativas: 0 }
-
-  function limparTimer() {
-    if (inst.conectandoTimer) { clearTimeout(inst.conectandoTimer); inst.conectandoTimer = null }
-  }
-
-  async function iniciar() {
-    inst.status = 'iniciando'
-    client.initialize().catch((err: Error) =>
-      console.error(`[WhatsApp/${company}] Erro ao iniciar:`, err.message)
-    )
-  }
-
-  client.on('qr', async (qr: string) => {
-    limparTimer()
-    inst.status = 'qr'
-    inst.qrDataUrl = await QRCode.toDataURL(qr)
-    console.log(`[WhatsApp/${company}] QR gerado — escaneie para conectar`)
-  })
-
-  client.on('loading_screen', (percent: number, message: string) => {
-    inst.status = 'conectando'
-    inst.qrDataUrl = null
-    console.log(`[WhatsApp/${company}] Carregando ${percent}% — ${message}`)
-    limparTimer()
-    inst.conectandoTimer = setTimeout(async () => {  // 120s — servidor headless precisa de mais tempo
-      if (inst.status !== 'pronto') {
-        inst.tentativas++
-        if (inst.tentativas >= 2) {
-          console.warn(`[WhatsApp/${company}] ${inst.tentativas}ª tentativa falhou — limpando sessão...`)
-          try { await client.destroy() } catch { /* ignora */ }
-          limparSessao(company)
-          inst.tentativas = 0
-        } else {
-          console.warn(`[WhatsApp/${company}] Preso em "conectando" — reiniciando...`)
-          try { await client.destroy() } catch { /* ignora */ }
-        }
-        await sleep(2000)
-        iniciar()
-      }
-    }, 120_000)
-  })
-
-  client.on('authenticated', () => {
-    inst.status = 'conectando'
-    inst.qrDataUrl = null
-    console.log(`[WhatsApp/${company}] Autenticado`)
-  })
-
-  client.on('auth_failure', (msg: string) => {
-    inst.status = 'desconectado'
-    console.error(`[WhatsApp/${company}] Falha de autenticação:`, msg)
-  })
-
-  client.on('ready', () => {
-    limparTimer()
-    inst.tentativas = 0
-    inst.status = 'pronto'
-    inst.qrDataUrl = null
-    console.log(`[WhatsApp/${company}] ✅ Pronto para enviar mensagens`)
-  })
-
-  client.on('disconnected', (reason: string) => {
-    limparTimer()
-    inst.status = 'desconectado'
-    inst.qrDataUrl = null
-    console.log(`[WhatsApp/${company}] Desconectado:`, reason)
-  })
-
-  iniciar()
-  return inst
+function formatNumber(raw: string): string {
+  const n = raw.replace(/\D/g, '')
+  if (n.length === 13) return `+${n.slice(0,2)} (${n.slice(2,4)}) ${n.slice(4,9)}-${n.slice(9)}`
+  if (n.length === 12) return `+${n.slice(0,2)} (${n.slice(2,4)}) ${n.slice(4,8)}-${n.slice(8)}`
+  return `+${n}`
 }
 
 export function initWhatsApp() {
-  console.log('[WhatsApp] Iniciando instâncias AVIC e AGRO...')
-  instances.avic = createInstance('avic')
-  instances.agro = createInstance('agro')
+  console.log('[WhatsApp] Iniciando instâncias AVIC e AGRO (Baileys)...')
+  for (const company of ['avic', 'agro'] as WppCompany[]) {
+    instances[company] = { sock: null, status: 'iniciando', qrDataUrl: null, numero: null, reconnecting: false }
+    startInstance(company).catch(err =>
+      console.error(`[WhatsApp/${company}] Falha ao iniciar:`, err?.message)
+    )
+  }
 }
 
 export async function restartInstance(company: WppCompany) {
   const inst = instances[company]
-  if (!inst) return
-  try { await inst.client.destroy() } catch { /* ignora */ }
-  const newInst = createInstance(company)
-  instances[company] = newInst
+  if (inst?.sock) {
+    try { await inst.sock.end(undefined) } catch { /* ignora */ }
+  }
+  if (inst) inst.reconnecting = false
+  await startInstance(company)
 }
 
 export async function logoutInstance(company: WppCompany) {
   const inst = instances[company]
-  if (!inst) return
-  try { await inst.client.logout() } catch { /* ignora */ }
-  try { await inst.client.destroy() } catch { /* ignora */ }
-  limparSessao(company)
-  const newInst = createInstance(company)
-  instances[company] = newInst
+  if (inst?.sock) {
+    try { await inst.sock.logout() } catch { /* ignora */ }
+    try { await inst.sock.end(undefined) } catch { /* ignora */ }
+  }
+  clearAuth(company)
+  if (inst) inst.reconnecting = false
+  await startInstance(company)
 }
 
 export async function destroyAll() {
   for (const company of Object.keys(instances) as WppCompany[]) {
-    try { await instances[company]?.client.destroy() } catch { /* ignora */ }
+    const inst = instances[company]
+    if (inst?.sock) {
+      try { await inst.sock.end(undefined) } catch { /* ignora */ }
+    }
   }
 }
