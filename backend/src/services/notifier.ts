@@ -91,7 +91,6 @@ function buildWhatsAppMessage(order: {
 }, isFirstToday: boolean, isFirstEver: boolean): string {
   const nf = order.nfNumber ? String(parseInt(order.nfNumber, 10)) : order.orderNumber
   const evento = order.lastTracking ?? ''
-  const dataEvento = formatDateTime(order.lastTrackingAt)
   const previsao = order.estimatedDelivery ? formatDate(order.estimatedDelivery) : null
 
   let header: string
@@ -104,7 +103,6 @@ function buildWhatsAppMessage(order: {
   }
 
   let body = `${header}\n\n${evento}`
-  if (dataEvento && dataEvento !== '—') body += `\n\n${dataEvento}`
 
   if (previsao && isFirstEver) {
     body += `\n\nPrevisão de entrega: ${previsao}.`
