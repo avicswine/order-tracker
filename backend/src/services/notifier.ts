@@ -102,13 +102,13 @@ function buildWhatsAppMessage(order: {
     header = `Oi, eu novamente, Seu pedido teve uma atualização:`
   }
 
-  let body = `${header}\n\n${evento}`
+  let body = `${header}\n${evento}`
 
   if (previsao && isFirstEver) {
-    body += `\n\nPrevisão de entrega: ${previsao}.`
+    body += `\nPrevisão de entrega: ${previsao}.`
   }
 
-  body += `\n\nPara acompanhar o rastreio, basta acessar o link:\n${PORTAL_URL}\nE digitar o seu CPF ou CNPJ.\n\nAgradecemos a preferência. 🙏`
+  body += `\nPara acompanhar o rastreio, basta acessar o link:\n${PORTAL_URL}\n\nE digitar o seu CPF ou CNPJ.\nAgradecemos a preferência. 🙏`
 
   return body
 }
