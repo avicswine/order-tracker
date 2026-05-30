@@ -1,5 +1,5 @@
 import { Client, LocalAuth } from 'whatsapp-web.js'
-import puppeteer from 'puppeteer'
+import { execSync } from 'child_process'
 import QRCode from 'qrcode'
 import path from 'path'
 import fs from 'fs'
@@ -74,15 +74,32 @@ export async function sendMessage(company: WppCompany, phone: string, message: s
   }
 }
 
+function findChromium(): string | undefined {
+  const candidates = [
+    '/usr/bin/google-chrome',
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser',
+    '/run/current-system/sw/bin/chromium',
+    '/nix/var/nix/profiles/default/bin/chromium',
+  ]
+  for (const p of candidates) {
+    if (fs.existsSync(p)) { console.log(`[WhatsApp] Chromium encontrado em: ${p}`); return p }
+  }
+  try {
+    const found = execSync('which chromium chromium-browser google-chrome 2>/dev/null | head -1', { encoding: 'utf8' }).trim()
+    if (found) { console.log(`[WhatsApp] Chromium via which: ${found}`); return found }
+  } catch { /* ignora */ }
+  console.log('[WhatsApp] Chromium não encontrado — usando bundled do puppeteer')
+  return undefined
+}
+
 function createInstance(company: WppCompany): WppInstance {
-  // Usa o Chromium bundled do puppeteer explicitamente para ignorar
-  // PUPPETEER_EXECUTABLE_PATH do ambiente (Railway usa /run/... que pode não existir)
-  const executablePath = puppeteer.executablePath()
+  const executablePath = findChromium()
   const client = new Client({
     authStrategy: new LocalAuth({ dataPath: getAuthPath(company), clientId: company }),
     puppeteer: {
       headless: true,
-      executablePath,
+      ...(executablePath ? { executablePath } : {}),
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
     },
   })
