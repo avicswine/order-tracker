@@ -89,6 +89,16 @@ model User {
   @@map("users")
 }
 
+model WhatsappSession {
+  id        String   @id @default(cuid())
+  company   String   @unique   // "avic" | "agro"
+  creds     Json?              // AuthenticationCreds serializado
+  keys      Json?              // Signal keys (pre-key, session, sender-key, etc.)
+  updatedAt DateTime @updatedAt
+
+  @@map("whatsapp_sessions")
+}
+
 model OrderNotification {
   id         String   @id @default(cuid())
   orderId    String

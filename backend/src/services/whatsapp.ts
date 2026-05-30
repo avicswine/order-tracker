@@ -1,6 +1,5 @@
 import QRCode from 'qrcode'
-import path from 'path'
-import fs from 'fs'
+import { useDBAuthState, clearDBAuthState } from './whatsappAuth'
 
 export type WppCompany = 'avic' | 'agro'
 type WppStatus = 'iniciando' | 'qr' | 'conectando' | 'pronto' | 'desconectado'
@@ -21,10 +20,6 @@ interface WppInstance {
 
 const instances: Partial<Record<WppCompany, WppInstance>> = {}
 
-function getAuthPath(company: WppCompany): string {
-  const base = process.env.WPP_AUTH_PATH ?? path.join(process.cwd(), '.wpp_auth')
-  return path.join(base, company)
-}
 
 export function getStatus(company: WppCompany): { status: WppStatus; qr: string | null; numero: string | null } {
   const inst = instances[company]
@@ -55,11 +50,9 @@ export async function sendMessage(company: WppCompany, phone: string, message: s
   }
 }
 
-function clearAuth(company: WppCompany) {
-  const authPath = getAuthPath(company)
-  try { fs.rmSync(authPath, { recursive: true, force: true }) } catch { /* ignora */ }
-  fs.mkdirSync(authPath, { recursive: true })
-  console.log(`[WhatsApp/${company}] Sessão apagada — novo QR será gerado`)
+async function clearAuth(company: WppCompany) {
+  await clearDBAuthState(company)
+  console.log(`[WhatsApp/${company}] Sessão apagada do banco — novo QR será gerado`)
 }
 
 function formatNumber(raw: string): string {
@@ -70,19 +63,16 @@ function formatNumber(raw: string): string {
 }
 
 async function startInstance(company: WppCompany): Promise<void> {
-  const authPath = getAuthPath(company)
-  fs.mkdirSync(authPath, { recursive: true })
-
   const inst = instances[company]!
   inst.status = 'iniciando'
   inst.sock = null
 
   try {
     const baileys = await importBaileys()
-    const { useMultiFileAuthState, fetchLatestBaileysVersion, makeCacheableSignalKeyStore, DisconnectReason } = baileys
+    const { fetchLatestBaileysVersion, makeCacheableSignalKeyStore, DisconnectReason } = baileys
     const makeWASocket = baileys.default
 
-    const { state, saveCreds } = await useMultiFileAuthState(authPath)
+    const { state, saveCreds } = await useDBAuthState(company)
     const { version } = await fetchLatestBaileysVersion()
     console.log(`[WhatsApp/${company}] Baileys v${version.join('.')} — conectando...`)
 
@@ -139,7 +129,7 @@ async function startInstance(company: WppCompany): Promise<void> {
 
         console.log(`[WhatsApp/${company}] Desconectado (${statusCode}) ${loggedOut ? '— sessão encerrada' : '— reconectando...'}`)
 
-        if (loggedOut) clearAuth(company)
+        if (loggedOut) await clearAuth(company)
 
         if (!inst.reconnecting) {
           inst.reconnecting = true
@@ -188,7 +178,7 @@ export async function logoutInstance(company: WppCompany) {
     try { await inst.sock.logout() } catch { /* ignora */ }
     try { await inst.sock.end(undefined) } catch { /* ignora */ }
   }
-  clearAuth(company)
+  await clearAuth(company)
   if (inst) inst.reconnecting = false
   await startInstance(company)
 }
