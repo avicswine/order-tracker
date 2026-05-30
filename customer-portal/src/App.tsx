@@ -23,6 +23,7 @@ interface Order {
   lastTrackingAt: string | null
   carrierName: string | null
   trackingEvents: TrackingEvent[] | null
+  hasOccurrence?: boolean
 }
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
@@ -76,10 +77,26 @@ function isDelayed(order: Order): boolean {
   return today > est
 }
 
+const OCCURRENCE_KEYWORDS = ['EXTRAVIO', 'AVARIA', 'ROUBO', 'FURTO', 'DANO', 'SINISTRO', 'DIVERGENCIA', 'NAO ENTREGUE', 'ENTREGA NAO', 'RECUSADO', 'DEVOLVIDO', 'ENDERECO', 'AUSENTE', 'CANCELADO', 'PREJUDICADO', 'PROBLEMA', 'IMPEDIDO']
+
+function isOccurrence(text: string): boolean {
+  const t = text.toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+  return OCCURRENCE_KEYWORDS.some(k => t.includes(k))
+}
+
+function formatDateTime(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+}
+
 function OrderCard({ order }: { order: Order }) {
-  const [expanded, setExpanded] = useState(false)
   const delayed = isDelayed(order)
   const events = Array.isArray(order.trackingEvents) ? order.trackingEvents : []
+  const isDeliveredEvent = (desc: string) => {
+    const t = desc.toUpperCase()
+    return t.includes('ENTREGUE') || t.includes('ENTREGA REALIZADA') || t.includes('ENTREGA EFETUADA')
+  }
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -87,7 +104,7 @@ function OrderCard({ order }: { order: Order }) {
       <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
         <div>
           <span className="text-xs text-gray-400 uppercase tracking-wide">NF</span>
-          <p className="font-semibold text-gray-800 text-lg leading-tight">
+          <p className="font-semibold text-gray-800 text-lg leading-tight font-mono">
             {order.nfNumber ? String(parseInt(order.nfNumber, 10)) : order.orderNumber}
           </p>
           {order.carrierName && (
@@ -103,73 +120,92 @@ function OrderCard({ order }: { order: Order }) {
               Entrega em atraso
             </span>
           )}
+          {order.hasOccurrence && (
+            <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-orange-100 text-orange-700">
+              ⚠️ Intercorrencia
+            </span>
+          )}
         </div>
       </div>
 
       {/* Datas e valor */}
-      <div className="grid grid-cols-3 divide-x divide-gray-100 bg-gray-50 text-center text-sm">
-        <div className="px-3 py-3">
-          <p className="text-xs text-gray-400 mb-0.5">Emissao</p>
-          <p className="text-gray-700 font-medium">{formatDate(order.nfIssuedAt)}</p>
+      <div className="grid grid-cols-2 gap-3 bg-gray-50 px-5 py-3 border-b border-gray-100 text-sm">
+        <div>
+          <p className="text-xs text-gray-400 mb-0.5">Emissao da NF</p>
+          <p className="font-medium text-gray-700">{formatDate(order.nfIssuedAt)}</p>
         </div>
-        <div className="px-3 py-3">
+        <div>
+          <p className="text-xs text-gray-400 mb-0.5">Valor da NF</p>
+          <p className="font-medium text-gray-700">{formatCurrency(order.nfValue)}</p>
+        </div>
+        {order.shippedAt && (
+          <div>
+            <p className="text-xs text-gray-400 mb-0.5">Data de Envio</p>
+            <p className="font-medium text-gray-700">{formatDate(order.shippedAt)}</p>
+          </div>
+        )}
+        <div>
           <p className="text-xs text-gray-400 mb-0.5">
-            {order.status === 'DELIVERED' ? 'Entregue em' : 'Previsao'}
+            {order.status === 'DELIVERED' ? 'Entregue em' : 'Previsao de Entrega'}
           </p>
           <p className={`font-medium ${delayed ? 'text-orange-600' : 'text-gray-700'}`}>
             {order.status === 'DELIVERED'
               ? formatDate(order.deliveredAt)
               : formatDate(order.estimatedDelivery)}
+            {delayed && (() => {
+              const today = new Date(); today.setHours(0, 0, 0, 0)
+              const dias = Math.floor((today.getTime() - new Date(order.estimatedDelivery!).setHours(0, 0, 0, 0)) / 86400000)
+              return <span className="ml-1.5 text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded">{dias}d</span>
+            })()}
           </p>
-        </div>
-        <div className="px-3 py-3">
-          <p className="text-xs text-gray-400 mb-0.5">Valor NF</p>
-          <p className="text-gray-700 font-medium">{formatCurrency(order.nfValue)}</p>
         </div>
       </div>
 
-      {/* Ultima ocorrencia */}
-      {order.lastTracking && (
-        <div className="px-5 py-3 border-t border-gray-100">
-          <p className="text-xs text-gray-400 mb-1">Ultima ocorrencia</p>
-          <p className="text-sm text-gray-700">{order.lastTracking}</p>
-          {order.lastTrackingAt && (
-            <p className="text-xs text-gray-400 mt-0.5">
-              Atualizado em {formatDate(order.lastTrackingAt)}
-            </p>
-          )}
-        </div>
-      )}
-
-      {/* Historico expansivel */}
-      {events.length > 0 && (
-        <div className="border-t border-gray-100">
-          <button
-            onClick={() => setExpanded(v => !v)}
-            className="w-full flex items-center justify-between px-5 py-3 text-sm text-blue-600 hover:bg-blue-50 transition-colors"
-          >
-            <span>{expanded ? 'Ocultar historico' : `Ver historico (${events.length} eventos)`}</span>
-            <span className="text-lg leading-none">{expanded ? '▲' : '▼'}</span>
-          </button>
-
-          {expanded && (
-            <div className="px-5 pb-4 space-y-3">
-              {events.map((ev, i) => (
-                <div key={i} className="flex gap-3 text-sm">
+      {/* Rastreamento */}
+      {events.length > 0 ? (
+        <div className="px-5 py-4">
+          <p className="text-xs text-gray-400 uppercase tracking-wide mb-3">Rastreamento</p>
+          <div className="space-y-0 max-h-56 overflow-y-auto">
+            {events.map((ev, i) => {
+              const isFirst = i === 0
+              const isLast = i === events.length - 1
+              const occ = isOccurrence(ev.description)
+              const delivered = isDeliveredEvent(ev.description)
+              const dotColor = occ ? 'bg-orange-400' : delivered ? 'bg-green-500' : isFirst ? 'bg-blue-500' : 'bg-gray-300'
+              return (
+                <div key={i} className="flex gap-3">
                   <div className="flex flex-col items-center">
-                    <div className={`w-2.5 h-2.5 rounded-full mt-0.5 flex-shrink-0 ${i === 0 ? 'bg-blue-500' : 'bg-gray-300'}`} />
-                    {i < events.length - 1 && <div className="w-px flex-1 bg-gray-200 mt-1" />}
+                    <div className={`h-2.5 w-2.5 rounded-full mt-1 flex-shrink-0 ${dotColor}`} />
+                    {!isLast && <div className="w-px flex-1 bg-gray-200 mt-1 mb-0" />}
                   </div>
-                  <div className="pb-3">
-                    <p className="text-gray-700">{ev.description}</p>
+                  <div className={`pb-3 ${isFirst ? '' : 'opacity-75'}`}>
+                    <p className={`text-sm font-medium ${occ ? 'text-orange-700' : delivered ? 'text-green-700' : 'text-gray-800'}`}>
+                      {ev.description}
+                    </p>
                     {ev.date && (
-                      <p className="text-xs text-gray-400 mt-0.5">{formatDate(ev.date)}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">{formatDateTime(ev.date)}</p>
                     )}
                   </div>
                 </div>
-              ))}
-            </div>
+              )
+            })}
+          </div>
+        </div>
+      ) : order.lastTracking ? (
+        <div className={`mx-5 my-4 rounded-lg p-3 ${isOccurrence(order.lastTracking) ? 'bg-orange-50 border border-orange-200' : 'bg-blue-50 border border-blue-100'}`}>
+          <p className={`text-xs font-semibold uppercase tracking-wide mb-1 ${isOccurrence(order.lastTracking) ? 'text-orange-600' : 'text-blue-600'}`}>
+            {isOccurrence(order.lastTracking) ? '⚠️ Intercorrencia' : 'Ultimo Rastreio'}
+          </p>
+          <p className={`text-sm font-medium ${isOccurrence(order.lastTracking) ? 'text-orange-800' : 'text-blue-800'}`}>
+            {order.lastTracking}
+          </p>
+          {order.lastTrackingAt && (
+            <p className="text-xs text-gray-500 mt-0.5">{formatDateTime(order.lastTrackingAt)}</p>
           )}
+        </div>
+      ) : (
+        <div className="px-5 py-4 text-sm text-gray-400 italic">
+          Rastreamento ainda nao disponivel.
         </div>
       )}
     </div>

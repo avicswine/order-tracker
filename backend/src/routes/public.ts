@@ -41,6 +41,7 @@ router.get('/tracking', publicLimiter, async (req: Request, res: Response) => {
     deliveredAt: o.deliveredAt,
     lastTracking: o.lastTracking,
     lastTrackingAt: o.lastTrackingAt,
+    hasOccurrence: o.hasOccurrence,
     carrierName: o.carrier?.name ?? null,
     trackingEvents: o.trackingEvents,
   }))
