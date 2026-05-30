@@ -1,4 +1,5 @@
 import { Client, LocalAuth } from 'whatsapp-web.js'
+import puppeteer from 'puppeteer'
 import QRCode from 'qrcode'
 import path from 'path'
 import fs from 'fs'
@@ -74,12 +75,14 @@ export async function sendMessage(company: WppCompany, phone: string, message: s
 }
 
 function createInstance(company: WppCompany): WppInstance {
-  const execPath = process.env.PUPPETEER_EXECUTABLE_PATH
+  // Usa o Chromium bundled do puppeteer explicitamente para ignorar
+  // PUPPETEER_EXECUTABLE_PATH do ambiente (Railway usa /run/... que pode não existir)
+  const executablePath = puppeteer.executablePath()
   const client = new Client({
     authStrategy: new LocalAuth({ dataPath: getAuthPath(company), clientId: company }),
     puppeteer: {
       headless: true,
-      executablePath: execPath,
+      executablePath,
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
     },
   })
