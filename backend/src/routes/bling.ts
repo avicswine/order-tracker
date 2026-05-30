@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express'
 import axios from 'axios'
 import { prisma } from '../lib/prisma'
+import { TrackingSystem } from '@prisma/client'
 
 const router = Router()
 const publicRouter = Router()
@@ -223,6 +224,11 @@ async function resolveCarrier(companyKey: string, nfId: number, nfNumero: string
         console.log(`[Bling] NF ${nfNumero}: transportadora bloqueada ("${existing.name}") — ignorada`)
         return undefined
       }
+      // Só importa se a transportadora tem API de rastreamento configurada
+      if (existing.trackingSystem === TrackingSystem.NONE) {
+        console.log(`[Bling] NF ${nfNumero}: transportadora "${existing.name}" sem API de rastreamento — ignorada`)
+        return undefined
+      }
       console.log(`[Bling] NF ${nfNumero}: transportadora "${transportador.nome}" vinculada a "${existing.name}"`)
       return existing.id
     }
@@ -245,24 +251,30 @@ async function resolveCarrier(companyKey: string, nfId: number, nfNumero: string
         where: { name: transportador.nome },
       })
       if (existingByName) {
+        if (existingByName.trackingSystem === TrackingSystem.NONE) {
+          console.log(`[Bling] NF ${nfNumero}: transportadora "${existingByName.name}" sem API de rastreamento — ignorada`)
+          return undefined
+        }
         console.log(`[Bling] NF ${nfNumero}: transportadora "${transportador.nome}" vinculada pelo nome (CNPJ diferente: ${cnpjNormalizado})`)
         return existingByName.id
       }
 
       try {
-        // Cria sempre com CNPJ normalizado (só dígitos)
-        const created = await prisma.carrier.create({
+        // Cria o registro para visibilidade no painel, mas não importa a NF ainda
+        // (aguarda configuração do trackingSystem pelo admin)
+        await prisma.carrier.create({
           data: { name: transportador.nome, cnpj: cnpjNormalizado, phone: '' },
         })
-        console.log(`[Bling] NF ${nfNumero}: transportadora "${transportador.nome}" criada automaticamente`)
-        return created.id
+        console.log(`[Bling] NF ${nfNumero}: transportadora "${transportador.nome}" criada (sem API configurada — NF ignorada)`)
+        return undefined
       } catch (createErr: unknown) {
-        // Se outra requisição concorrente já criou, busca e retorna
+        // Se outra requisição concorrente já criou, verifica se tem API antes de retornar
         if (createErr instanceof Error && 'code' in createErr && (createErr as { code: string }).code === 'P2002') {
           const found = await prisma.carrier.findFirst({
             where: { OR: [{ cnpj: cnpjNormalizado }, { cnpj: cnpjRaw }] },
           })
-          return found?.id
+          if (found && found.trackingSystem !== TrackingSystem.NONE) return found.id
+          return undefined
         }
         throw createErr
       }
