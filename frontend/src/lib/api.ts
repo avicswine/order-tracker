@@ -45,7 +45,7 @@ export const ordersApi = {
       : undefined
     return api.get<OrdersResponse>('/orders', { params }).then((r) => r.data)
   },
-  summary: (params?: { shippedStartDate?: string }) => api.get<OrderSummary>('/orders/summary', { params }).then((r) => r.data),
+  summary: (params?: { shippedStartDate?: string; nfStartDate?: string }) => api.get<OrderSummary>('/orders/summary', { params }).then((r) => r.data),
   get: (id: string) => api.get<Order>(`/orders/${id}`).then((r) => r.data),
   create: (data: Partial<Order>) => api.post<Order>('/orders', data).then((r) => r.data),
   update: (id: string, data: Partial<Order>) =>

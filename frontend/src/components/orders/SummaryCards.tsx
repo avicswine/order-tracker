@@ -25,9 +25,15 @@ interface Props {
 
 export function SummaryCards({ filters, onFilter }: Props) {
   const shippedStartDate = filters.shippedStartDate
+  const nfStartDate = filters.nfStartDate
   const { data, isLoading } = useQuery({
-    queryKey: ['orders', 'summary', shippedStartDate],
-    queryFn: () => ordersApi.summary(shippedStartDate ? { shippedStartDate } : undefined),
+    queryKey: ['orders', 'summary', shippedStartDate, nfStartDate],
+    queryFn: () => {
+      const params: { shippedStartDate?: string; nfStartDate?: string } = {}
+      if (shippedStartDate) params.shippedStartDate = shippedStartDate
+      if (nfStartDate) params.nfStartDate = nfStartDate
+      return ordersApi.summary(Object.keys(params).length ? params : undefined)
+    },
   })
 
   const activeKey = getActiveKey(filters)

@@ -94,17 +94,17 @@ export function OrderFiltersBar({ filters, onChange }: Props) {
         />
       </div>
 
-      {/* Filtro por período (shippedAt) */}
+      {/* Filtro por período (nfIssuedAt) */}
       <div className="flex items-end gap-2 flex-wrap">
         {[10, 20, 30, 60, 90].map((days) => {
           const d = new Date()
           d.setDate(d.getDate() - days)
           const dateStr = d.toISOString().slice(0, 10)
-          const active = filters.shippedStartDate === dateStr
+          const active = filters.nfStartDate === dateStr
           return (
             <button
               key={days}
-              onClick={() => onChange({ ...filters, shippedStartDate: active ? undefined : dateStr, page: 1 })}
+              onClick={() => onChange({ ...filters, nfStartDate: active ? undefined : dateStr, page: 1 })}
               className={`text-sm font-medium px-3 py-1.5 rounded-md border transition-colors ${
                 active
                   ? 'bg-blue-600 text-white border-blue-600'
@@ -144,7 +144,7 @@ export function OrderFiltersBar({ filters, onChange }: Props) {
       </div>
 
       {/* Clear */}
-      {(filters.search || filters.status || filters.startDate || filters.endDate || filters.shippedStartDate || filters.senderCnpj || filters.carrierId || filters.nfNumber || filters.delayed || filters.hasOccurrence) && (
+      {(filters.search || filters.status || filters.startDate || filters.endDate || filters.shippedStartDate || filters.nfStartDate || filters.senderCnpj || filters.carrierId || filters.nfNumber || filters.delayed || filters.hasOccurrence) && (
         <button
           className="btn-secondary"
           onClick={() => onChange({ page: 1 })}

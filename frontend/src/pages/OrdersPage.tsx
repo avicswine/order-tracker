@@ -16,7 +16,7 @@ export function OrdersPage() {
   const [filters, setFilters] = useState<OrderFilters>(() => {
     const start = new Date()
     start.setDate(start.getDate() - 20)
-    return { page: 1, sortBy: 'shippedAt', sortOrder: 'desc', shippedStartDate: start.toISOString().slice(0, 10) }
+    return { page: 1, sortBy: 'shippedAt', sortOrder: 'desc', nfStartDate: start.toISOString().slice(0, 10) }
   })
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [showForm, setShowForm] = useState(false)

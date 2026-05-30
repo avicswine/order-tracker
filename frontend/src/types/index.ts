@@ -110,6 +110,7 @@ export interface OrderFilters {
   startDate?: string
   endDate?: string
   shippedStartDate?: string
+  nfStartDate?: string
   search?: string
   nfNumber?: string
   senderCnpj?: string

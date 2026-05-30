@@ -13,6 +13,7 @@ router.get(
     query('startDate').optional().isISO8601(),
     query('endDate').optional().isISO8601(),
     query('shippedStartDate').optional().isISO8601(),
+    query('nfStartDate').optional().isISO8601(),
     query('search').optional().trim(),
     query('nfNumber').optional().trim(),
     query('senderCnpj').optional().trim(),
@@ -73,6 +74,10 @@ router.get(
       where.shippedAt = { gte: new Date(req.query.shippedStartDate as string) }
     }
 
+    if (req.query.nfStartDate) {
+      where.nfIssuedAt = { gte: new Date(req.query.nfStartDate as string) }
+    }
+
     if (String(req.query.delayed) === 'true') {
       const todayStart = new Date()
       todayStart.setHours(0, 0, 0, 0)
@@ -120,6 +125,9 @@ router.get('/summary', async (req: Request, res: Response) => {
     const baseWhere: Record<string, unknown> = {}
     if (req.query.shippedStartDate) {
       baseWhere.shippedAt = { gte: new Date(req.query.shippedStartDate as string) }
+    }
+    if (req.query.nfStartDate) {
+      baseWhere.nfIssuedAt = { gte: new Date(req.query.nfStartDate as string) }
     }
 
     const counts = await prisma.order.groupBy({
