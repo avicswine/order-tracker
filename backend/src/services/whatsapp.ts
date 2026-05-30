@@ -1,21 +1,18 @@
-import makeWASocket, {
-  useMultiFileAuthState,
-  DisconnectReason,
-  fetchLatestBaileysVersion,
-  makeCacheableSignalKeyStore,
-  type WASocket,
-} from '@whiskeysockets/baileys'
-import { Boom } from '@hapi/boom'
 import QRCode from 'qrcode'
 import path from 'path'
 import fs from 'fs'
-import pino from 'pino'
 
 export type WppCompany = 'avic' | 'agro'
 type WppStatus = 'iniciando' | 'qr' | 'conectando' | 'pronto' | 'desconectado'
 
+// Importação dinâmica real (bypassa o require() do CommonJS)
+// Necessário porque @whiskeysockets/baileys é ESM-only
+// eslint-disable-next-line @typescript-eslint/no-implied-eval
+const importBaileys = () => new Function('return import("@whiskeysockets/baileys")')() as Promise<typeof import('@whiskeysockets/baileys')>
+
 interface WppInstance {
-  sock: WASocket | null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  sock: any
   status: WppStatus
   qrDataUrl: string | null
   numero: string | null
@@ -42,12 +39,11 @@ export async function sendMessage(company: WppCompany, phone: string, message: s
   }
 
   const digits = phone.replace(/\D/g, '')
-  const jid = digits.endsWith('@s.whatsapp.net') ? digits : `${digits}@s.whatsapp.net`
+  const jid = `${digits}@s.whatsapp.net`
 
   try {
-    // Verifica se número existe no WhatsApp
     const results = await inst.sock.onWhatsApp(digits)
-    const result = results?.[0]
+    const result = Array.isArray(results) ? results[0] : null
     if (!result?.exists) {
       return { ok: false, error: 'Número não encontrado no WhatsApp' }
     }
@@ -56,93 +52,6 @@ export async function sendMessage(company: WppCompany, phone: string, message: s
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     return { ok: false, error: msg }
-  }
-}
-
-async function startInstance(company: WppCompany): Promise<void> {
-  const authPath = getAuthPath(company)
-  fs.mkdirSync(authPath, { recursive: true })
-
-  const inst = instances[company]!
-  inst.status = 'iniciando'
-  inst.sock = null
-
-  try {
-    const { state, saveCreds } = await useMultiFileAuthState(authPath)
-    const { version } = await fetchLatestBaileysVersion()
-    console.log(`[WhatsApp/${company}] Usando Baileys v${version.join('.')}`)
-
-    const sock = makeWASocket({
-      version,
-      auth: {
-        creds: state.creds,
-        keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' })),
-      },
-      printQRInTerminal: false,
-      logger: pino({ level: 'silent' }),
-      browser: ['OrderTracker', 'Chrome', '120.0.0'],
-    })
-
-    inst.sock = sock
-
-    sock.ev.on('creds.update', saveCreds)
-
-    sock.ev.on('connection.update', async (update) => {
-      const { connection, lastDisconnect, qr } = update
-
-      if (qr) {
-        inst.status = 'qr'
-        inst.qrDataUrl = await QRCode.toDataURL(qr)
-        console.log(`[WhatsApp/${company}] QR gerado — escaneie para conectar`)
-      }
-
-      if (connection === 'connecting') {
-        if (inst.status !== 'qr') inst.status = 'conectando'
-        console.log(`[WhatsApp/${company}] Conectando…`)
-      }
-
-      if (connection === 'open') {
-        inst.status = 'pronto'
-        inst.qrDataUrl = null
-        const num = sock.user?.id?.split(':')[0] ?? null
-        inst.numero = num ? formatNumber(num) : null
-        console.log(`[WhatsApp/${company}] ✅ Conectado — ${inst.numero ?? 'número desconhecido'}`)
-      }
-
-      if (connection === 'close') {
-        inst.status = 'desconectado'
-        inst.qrDataUrl = null
-        inst.numero = null
-
-        const reason = (lastDisconnect?.error as Boom)?.output?.statusCode
-        const loggedOut = reason === DisconnectReason.loggedOut
-
-        console.log(`[WhatsApp/${company}] Desconectado — motivo: ${reason} ${loggedOut ? '(deslogado)' : '(reconectando)'}`)
-
-        if (loggedOut) {
-          // Limpa sessão e reinicia para mostrar novo QR
-          clearAuth(company)
-        }
-
-        if (!inst.reconnecting) {
-          inst.reconnecting = true
-          setTimeout(async () => {
-            inst.reconnecting = false
-            await startInstance(company)
-          }, 3000)
-        }
-      }
-    })
-  } catch (err) {
-    console.error(`[WhatsApp/${company}] Erro ao iniciar:`, err instanceof Error ? err.message : err)
-    inst.status = 'desconectado'
-    if (!inst.reconnecting) {
-      inst.reconnecting = true
-      setTimeout(async () => {
-        inst.reconnecting = false
-        await startInstance(company)
-      }, 10_000)
-    }
   }
 }
 
@@ -158,6 +67,100 @@ function formatNumber(raw: string): string {
   if (n.length === 13) return `+${n.slice(0,2)} (${n.slice(2,4)}) ${n.slice(4,9)}-${n.slice(9)}`
   if (n.length === 12) return `+${n.slice(0,2)} (${n.slice(2,4)}) ${n.slice(4,8)}-${n.slice(8)}`
   return `+${n}`
+}
+
+async function startInstance(company: WppCompany): Promise<void> {
+  const authPath = getAuthPath(company)
+  fs.mkdirSync(authPath, { recursive: true })
+
+  const inst = instances[company]!
+  inst.status = 'iniciando'
+  inst.sock = null
+
+  try {
+    const baileys = await importBaileys()
+    const { useMultiFileAuthState, fetchLatestBaileysVersion, makeCacheableSignalKeyStore, DisconnectReason } = baileys
+    const makeWASocket = baileys.default
+
+    const { state, saveCreds } = await useMultiFileAuthState(authPath)
+    const { version } = await fetchLatestBaileysVersion()
+    console.log(`[WhatsApp/${company}] Baileys v${version.join('.')} — conectando...`)
+
+    // pino silent para não poluir os logs
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const pino = require('pino')
+    const logger = pino({ level: 'silent' })
+
+    const sock = makeWASocket({
+      version,
+      auth: {
+        creds: state.creds,
+        keys: makeCacheableSignalKeyStore(state.keys, logger),
+      },
+      printQRInTerminal: false,
+      logger,
+      browser: ['OrderTracker', 'Chrome', '120.0.0'],
+    })
+
+    inst.sock = sock
+
+    sock.ev.on('creds.update', saveCreds)
+
+    sock.ev.on('connection.update', async (update: { connection?: string; lastDisconnect?: { error?: unknown }; qr?: string }) => {
+      const { connection, lastDisconnect, qr } = update
+
+      if (qr) {
+        inst.status = 'qr'
+        inst.qrDataUrl = await QRCode.toDataURL(qr)
+        console.log(`[WhatsApp/${company}] QR gerado — escaneie para conectar`)
+      }
+
+      if (connection === 'connecting' && inst.status !== 'qr') {
+        inst.status = 'conectando'
+      }
+
+      if (connection === 'open') {
+        inst.status = 'pronto'
+        inst.qrDataUrl = null
+        const num = sock.user?.id?.split(':')[0] ?? null
+        inst.numero = num ? formatNumber(num) : null
+        console.log(`[WhatsApp/${company}] ✅ Conectado — ${inst.numero ?? 'número desconhecido'}`)
+      }
+
+      if (connection === 'close') {
+        inst.status = 'desconectado'
+        inst.qrDataUrl = null
+        inst.numero = null
+
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { Boom } = require('@hapi/boom')
+        const statusCode = (lastDisconnect?.error instanceof Boom) ? (lastDisconnect.error as InstanceType<typeof Boom>).output.statusCode : 0
+        const loggedOut = statusCode === DisconnectReason.loggedOut
+
+        console.log(`[WhatsApp/${company}] Desconectado (${statusCode}) ${loggedOut ? '— sessão encerrada' : '— reconectando...'}`)
+
+        if (loggedOut) clearAuth(company)
+
+        if (!inst.reconnecting) {
+          inst.reconnecting = true
+          setTimeout(async () => {
+            inst.reconnecting = false
+            await startInstance(company)
+          }, loggedOut ? 1000 : 5000)
+        }
+      }
+    })
+  } catch (err) {
+    console.error(`[WhatsApp/${company}] Erro ao iniciar:`, err instanceof Error ? err.message : err)
+    inst.status = 'desconectado'
+    if (!inst.reconnecting) {
+      inst.reconnecting = true
+      setTimeout(async () => {
+        inst.reconnecting = false
+        await startInstance(company)
+      }, 10_000)
+    }
+  }
 }
 
 export function initWhatsApp() {
