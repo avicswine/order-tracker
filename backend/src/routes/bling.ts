@@ -319,7 +319,7 @@ export async function runBlingSync(limite?: number, onlyCompany?: string, onProg
       // Carrega nfNumbers já existentes para esta empresa em memória (evita N consultas ao banco)
       const existingOrders = await prisma.order.findMany({
         where: { senderCnpj: company.cnpj },
-        select: { id: true, nfNumber: true, customerPhone: true },
+        select: { id: true, nfNumber: true, customerPhone: true, recipientCnpj: true },
       })
       const existingMap = new Map(existingOrders.map(o => [o.nfNumber, o]))
 
@@ -339,10 +339,14 @@ export async function runBlingSync(limite?: number, onlyCompany?: string, onProg
           const existing = existingMap.get(String(nf.numero))
 
           if (existing) {
-            // Preenche customerPhone se ainda não está salvo
+            // Preenche campos que ainda não estão salvos
             const phone = nf.contato?.telefone?.replace(/\D/g, '') || null
-            if (phone && !existing.customerPhone) {
-              await prisma.order.update({ where: { id: existing.id }, data: { customerPhone: phone } })
+            const recipientCnpj = (nf.contato?.numeroDocumento ?? nf.destinatario?.numeroDocumento)?.replace(/\D/g, '') || null
+            const updates: Record<string, unknown> = {}
+            if (phone && !existing.customerPhone) updates.customerPhone = phone
+            if (recipientCnpj && !existing.recipientCnpj) updates.recipientCnpj = recipientCnpj
+            if (Object.keys(updates).length > 0) {
+              await prisma.order.update({ where: { id: existing.id }, data: updates })
             }
             ignorados++
             runningIgnorados++
@@ -371,7 +375,7 @@ export async function runBlingSync(limite?: number, onlyCompany?: string, onProg
               nfValue: nf.valor ?? null,
               nfIssuedAt: nf.dataEmissao ? new Date(nf.dataEmissao) : null,
               senderCnpj: company.cnpj,
-              recipientCnpj: nf.destinatario?.numeroDocumento?.replace(/\D/g, '') ?? null,
+              recipientCnpj: (nf.contato?.numeroDocumento ?? nf.destinatario?.numeroDocumento)?.replace(/\D/g, '') ?? null,
               carrierId,
               statusHistory: { create: { status: 'PENDING', note: `Importado do Bling (${company.name})` } },
             },
@@ -708,7 +712,7 @@ router.post('/backfill-recipient-cnpj', async (_req: Request, res: Response) => 
         if (nfes.length === 0) break
         for (const nf of nfes) {
           const numSemZero = String(parseInt(String(nf.numero), 10))
-          const docRaw = nf.destinatario?.numeroDocumento?.replace(/\D/g, '')
+          const docRaw = (nf.contato?.numeroDocumento ?? nf.destinatario?.numeroDocumento)?.replace(/\D/g, '')
           if (nfNumbersNeeded.has(numSemZero) && docRaw) {
             cnpjMap[`${numSemZero}|${company.cnpj}`] = docRaw
           }
@@ -752,7 +756,7 @@ interface BlingNFe {
   numero: number
   valor?: number
   dataEmissao?: string
-  contato?: { nome?: string; email?: string; telefone?: string }
+  contato?: { nome?: string; email?: string; telefone?: string; numeroDocumento?: string }
   destinatario?: { numeroDocumento?: string; nome?: string }
   transportador?: { nome?: string; cpfCnpj?: string }
 }
