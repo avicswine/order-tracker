@@ -505,6 +505,31 @@ router.get('/debug/pedido/:id', async (req: Request, res: Response) => {
   }
 })
 
+// GET /api/bling/debug/find/:numero - acha NF por número paginando e retorna id+linkDanfe
+router.get('/debug/find/:numero', async (req: Request, res: Response) => {
+  const connected = Object.keys(COMPANIES).filter((key) => !!tokens[key])
+  if (connected.length === 0) return res.status(401).json({ error: 'Não conectado' })
+  const alvo = String(parseInt(req.params.numero, 10))
+  const dataInicio = new Date(); dataInicio.setDate(dataInicio.getDate() - 365)
+  const dataInicioStr = dataInicio.toISOString().slice(0, 10)
+  for (const companyKey of connected) {
+    let pagina = 1
+    while (true) {
+      const data = (await blingGet(companyKey, `/nfe?pagina=${pagina}&limite=100&dataEmissaoInicial=${dataInicioStr}`)) as BlingListResponse
+      const nfes = data?.data ?? []
+      if (nfes.length === 0) break
+      const found = nfes.find(n => String(parseInt(String(n.numero), 10)) === alvo)
+      if (found?.id) {
+        const detail = (await blingGet(companyKey, `/nfe/${found.id}`)) as BlingNFeDetailResponse
+        return res.json({ companyKey, id: found.id, numero: found.numero, linkDanfe: detail?.data?.linkDanfe ?? null, paginaEncontrada: pagina })
+      }
+      if (nfes.length < 100) break
+      pagina++
+    }
+  }
+  res.json({ error: 'NF não encontrada na paginação', alvo })
+})
+
 // GET /api/bling/debug - testa a API do Bling e retorna resposta bruta
 router.get('/debug', async (_req: Request, res: Response) => {
   const connectedCompanies = Object.keys(COMPANIES).filter((key) => !!tokens[key])
