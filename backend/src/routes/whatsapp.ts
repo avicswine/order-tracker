@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express'
 import { getStatus, restartInstance, logoutInstance, sendMessage, type WppCompany } from '../services/whatsapp'
 import { prisma } from '../lib/prisma'
-import { notifyOrderUpdate } from '../services/notifier'
+import { notifyOrderUpdate, notifyFaturado } from '../services/notifier'
 
 const router = Router()
 
@@ -95,7 +95,6 @@ router.post('/testar-faturado', async (req: Request, res: Response) => {
   const hash = crypto.createHash('sha256').update(`${order.id}:FATURADO`).digest('hex').slice(0, 16)
   await prisma.orderNotification.deleteMany({ where: { orderId: order.id, eventHash: hash } })
 
-  const { notifyFaturado } = await import('../services/notifier')
   await notifyFaturado({
     ...order,
     customerPhone: phoneOverride ?? order.customerPhone,
