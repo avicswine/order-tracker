@@ -1,10 +1,11 @@
 # STATUS — Order Tracker
 
-Última atualização: 2026-03-16 (sessão 15)
+Última atualização: 2026-05-31 (sessão 16)
 
 ## Estado atual
 Aplicação funcional com autenticação JWT (ADMIN/VIEWER), em produção no Railway.
-Sync automático do Bling + rastreamento roda na inicialização do backend e a cada 2h.
+Sync automático do Bling + rastreamento roda na inicialização e a cada 2h.
+Notificações automáticas por WhatsApp (AVIC/AGRO) e email (Resend) a cada atualização de rastreio.
 URL produção: https://order-tracker-production-4189.up.railway.app/
 URL customizada (pendente — Railway plano não suporta domínio custom): https://rastreio.avicswine.com.br
   - DNS configurado corretamente (CNAME + TXT propagados)
@@ -174,6 +175,42 @@ Resultado do `review-dates.mjs`:
 - **13 NFs com enviado = sábado 14/03:** Atual Cargas, Azurelog, Mengue — provavelmente NF emitida hoje (normal) ou data de registro da transportadora. AVIC-NF-009036 tem 15/02 (domingo) — suspeito
 - **17 NFs sem data de envio:** transportadoras sem API (B. Transportes, Leomar, Mengue sem sistema, TRD sem dados)
 - **11 NFs com previsão vencida:** maioria Braspress — precisam de sync para atualizar status ou confirmar ocorrência
+
+## Implementado (sessão 16)
+
+### Correção crítica — banco resetado
+- Banco de dados havia sido resetado: todas as transportadoras perderam `trackingSystem`
+- Restauradas via API: SSW (Azurelog, B.Transportes, Mengue), BRASPRESS, RODONAVES, ATUAL_CARGAS, SAO_MIGUEL, SENIOR/tck (TRD)
+- `recipientCnpj` estava null (453 pedidos) → backfill executado via `/api/bling/backfill-recipient-cnpj`
+- Bug corrigido: campo era `destinatario.numeroDocumento` (inexistente na listagem) — corrigido para `contato.numeroDocumento`
+
+### Filtros e importação
+- Filtro padrão de pedidos trocado de `shippedAt` para `nfIssuedAt` (pedidos novos aparecem mesmo sem rastreio)
+- Bling sync corrigido: só importa NFs de transportadoras com `trackingSystem != NONE`
+
+### Portal do cliente
+- `recipientCnpj` populado — clientes conseguem buscar por CPF/CNPJ
+- Visual alinhado ao modal "ver detalhes" do admin
+
+### Notificações WhatsApp + Email
+- Baileys (sem Chromium) integrado com 2 instâncias: AVIC e AGRO
+- Sessão salva no banco (backup dos arquivos do Baileys) — sobrevive a restarts
+- Número do celular: usar formato SEM o 9 extra (ex: `554991885757`, não `5549991885757`)
+- Gmail fallback via Resend (`no-reply@avicswine.com.br` — domínio verificado)
+- Templates: despacho, atualização, mesmo dia ("Oi eu novamente"), entregue 🎉
+- Formatação automática do texto: "CÓDIGO - Descrição"
+- Página /logs: histórico de todas as notificações enviadas
+- Endpoints de teste: `POST /api/whatsapp/testar-notificacao`, `POST /api/whatsapp/simular-sequencia`
+
+### Variáveis Railway necessárias
+| Variável | Valor |
+|---|---|
+| `RESEND_API_KEY` | re_xxxx... |
+| `EMAIL_FROM` | no-reply@avicswine.com.br |
+| `PORTAL_URL` | https://order-tracker-production-4189.up.railway.app/portal/ |
+
+### Senha admin
+- `admin@avicswine.com.br` tem senha `temp_diag_2026` (alterada para diagnóstico) — redefinir
 
 ## Pendências para próxima sessão
 
