@@ -58,12 +58,12 @@ function buildSignature(senderCnpj: string | null): string {
     .map(s => `<a href="${s.url}" style="color:#1d4ed8;text-decoration:none">${s.label}</a>`)
     .join(' &nbsp;|&nbsp; ')
   return `
-  <table cellpadding="0" cellspacing="0" border="0" style="margin-top:28px;border-top:1px solid #e5e7eb;padding-top:16px;font-family:Arial,sans-serif">
+  <table cellpadding="0" cellspacing="0" border="0" align="left" style="margin-top:28px;border-top:1px solid #e5e7eb;padding-top:16px;font-family:Arial,sans-serif;text-align:left">
     <tr>
-      <td style="padding-right:16px;vertical-align:middle">
-        <img src="${sig.logo}" alt="logo" style="max-height:56px;max-width:160px;display:block">
+      <td style="padding-right:16px;vertical-align:middle;text-align:left">
+        <img src="${sig.logo}" alt="logo" style="max-height:67px;max-width:192px;display:block">
       </td>
-      <td style="vertical-align:middle;border-left:2px solid #e5e7eb;padding-left:16px">
+      <td style="vertical-align:middle;border-left:2px solid #e5e7eb;padding-left:16px;text-align:left">
         <div style="font-weight:bold;color:#111;font-size:14px">Dionísio</div>
         <div style="color:#555;font-size:13px">Departamento de Logística</div>
         <div style="font-size:12px;margin-top:4px">${sitesHtml}</div>
