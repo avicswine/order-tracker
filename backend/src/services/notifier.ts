@@ -220,7 +220,7 @@ export async function notifyFaturado(order: {
   if (await alreadyNotified(order.id, eventHash)) return
 
   const nf = order.nfNumber ? String(parseInt(order.nfNumber, 10)) : order.orderNumber
-  const linkLine = order.linkDanfe ? `\n\n📄 Consulte sua Nota Fiscal:\n${order.linkDanfe}` : ''
+  const linkLine = order.linkDanfe ? `\n\n📄 Segue o link da sua Nota Fiscal:\n${order.linkDanfe}` : ''
 
   const primeiroNome = order.customerName.split(' ')[0]
   const wppMessage = `*FATURADO* 🧾\nOlá, ${primeiroNome}!\n\nSeu pedido NF ${nf} foi faturado.${linkLine}\n\nAgradecemos a preferência. 🙏`
