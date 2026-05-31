@@ -81,6 +81,30 @@ router.post('/testar-notificacao', async (req: Request, res: Response) => {
   res.json({ ok: true, orderNumber, lastTracking: order.lastTracking, phoneUsed: phoneOverride ?? order.customerPhone })
 })
 
+// POST /api/whatsapp/testar-faturado — simula notificação FATURADO
+router.post('/testar-faturado', async (req: Request, res: Response) => {
+  const { orderNumber, phoneOverride, emailOverride } = req.body as { orderNumber: string; phoneOverride?: string; emailOverride?: string }
+  if (!orderNumber) return res.status(400).json({ error: 'Informe o orderNumber.' })
+
+  const order = await prisma.order.findUnique({ where: { orderNumber } })
+  if (!order) return res.status(404).json({ error: 'Pedido não encontrado.' })
+
+  // Remove notificação anterior para forçar reenvio
+  await prisma.orderNotification.deleteMany({ where: { orderId: order.id, eventHash: 'FATURADO_HASH' } })
+  const crypto = await import('crypto')
+  const hash = crypto.createHash('sha256').update(`${order.id}:FATURADO`).digest('hex').slice(0, 16)
+  await prisma.orderNotification.deleteMany({ where: { orderId: order.id, eventHash: hash } })
+
+  const { notifyFaturado } = await import('../services/notifier')
+  await notifyFaturado({
+    ...order,
+    customerPhone: phoneOverride ?? order.customerPhone,
+    customerEmail: emailOverride ?? order.customerEmail,
+  })
+
+  res.json({ ok: true, orderNumber, phone: phoneOverride ?? order.customerPhone, email: emailOverride ?? order.customerEmail })
+})
+
 // POST /api/whatsapp/simular-sequencia
 // Simula 4 mensagens reais com delays de 60s: despacho → update → update(mesmo dia) → entregue
 // Body: { orderNumber, phoneOverride, emailOverride }
