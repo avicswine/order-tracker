@@ -44,6 +44,7 @@ model Order {
   lastTrackingAt    DateTime?
   trackingEvents    Json?
   hasOccurrence     Boolean   @default(false)
+  linkDanfe         String?       // URL do DANFE no Bling (para envio na notificação FATURADO)
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
   statusHistory     StatusHistory[]

@@ -104,35 +104,30 @@ function buildWhatsAppMessage(order: {
   customerName: string
   estimatedDelivery: Date | null
   lastTracking: string | null
-  lastTrackingAt: Date | null
 }, isFirstToday: boolean, isFirstEver: boolean): string {
-  const nf = order.nfNumber ? String(parseInt(order.nfNumber, 10)) : order.orderNumber
   const evento = formatTrackingText(order.lastTracking ?? '')
   const previsao = order.estimatedDelivery ? formatDate(order.estimatedDelivery) : null
   const delivered = isDeliveryEvent(evento)
 
-  let header: string
+  const rodape = `\nPara acompanhar o rastreio, basta acessar o link:\n${PORTAL_URL}\n\nE digitar o seu CPF ou CNPJ.\nAgradecemos a preferência. 🙏`
+
   if (delivered) {
-    header = `Olá! Passando para avisar que sua encomenda foi entregue 🎉`
-  } else if (isFirstEver) {
-    header = `Olá, tudo bem? Temos boas notícias!\n\nSeu pedido foi despachado:`
-  } else if (isFirstToday) {
-    header = `Olá, tudo bem? Seu pedido teve uma atualização:`
-  } else {
-    header = `Oi, eu novamente, Seu pedido teve uma atualização:`
+    return `*ENTREGUE* ✅\nOlá! Passando para avisar que sua encomenda foi entregue.\n\n${evento}${rodape}`
   }
 
-  let body = delivered
-    ? `${header}\n\n${evento}`
-    : `${header}\n${evento}`
-
-  if (previsao && isFirstEver && !delivered) {
-    body += `\nPrevisão de entrega: ${previsao}.`
+  if (isFirstEver) {
+    // Primeiro evento de rastreio = CT-e emitido = ENVIADO
+    let body = `*ENVIADO* 🚚\nOlá, tudo bem? Seu pedido foi despachado!\n\n${evento}`
+    if (previsao) body += `\n\n📅 Previsão de entrega: ${previsao}.`
+    body += rodape
+    return body
   }
 
-  body += `\nPara acompanhar o rastreio, basta acessar o link:\n${PORTAL_URL}\n\nE digitar o seu CPF ou CNPJ.\nAgradecemos a preferência. 🙏`
+  if (isFirstToday) {
+    return `Olá, tudo bem? Seu pedido teve uma atualização:\n${evento}${rodape}`
+  }
 
-  return body
+  return `Oi, eu novamente, Seu pedido teve uma atualização:\n${evento}${rodape}`
 }
 
 function buildEmailHtml(order: {
@@ -141,25 +136,22 @@ function buildEmailHtml(order: {
   customerName: string
   estimatedDelivery: Date | null
   lastTracking: string | null
-  lastTrackingAt: Date | null
 }, isFirstEver: boolean): string {
   const nf = order.nfNumber ? String(parseInt(order.nfNumber, 10)) : order.orderNumber
   const evento = formatTrackingText(order.lastTracking ?? '')
   const previsao = order.estimatedDelivery ? formatDate(order.estimatedDelivery) : null
   const delivered = isDeliveryEvent(evento)
 
-  const titulo = delivered ? 'Sua encomenda foi entregue! 🎉' : isFirstEver ? 'Seu pedido foi despachado!' : 'Atualização do seu pedido'
+  const titulo = delivered ? 'Entregue ✅' : isFirstEver ? 'Enviado 🚚' : 'Atualização do pedido'
   const borderColor = delivered ? '#16a34a' : '#1d4ed8'
 
-  return `
-<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html>
 <body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#333">
   <h2 style="color:${borderColor}">${titulo}</h2>
   <p>Olá, ${order.customerName}!</p>
   <div style="background:#f1f5f9;border-left:4px solid ${borderColor};padding:12px 16px;margin:16px 0;border-radius:4px">
-    <strong>NF ${nf}</strong><br>
-    ${evento}
+    <strong>NF ${nf}</strong><br>${evento}
   </div>
   ${previsao && isFirstEver && !delivered ? `<p>📅 <strong>Previsão de entrega:</strong> ${previsao}</p>` : ''}
   <p>Para acompanhar o rastreio, acesse:<br>
@@ -169,6 +161,85 @@ function buildEmailHtml(order: {
   <p style="color:#64748b;font-size:13px">Agradecemos a preferência.</p>
 </body>
 </html>`
+}
+
+// ─── Helpers de envio ───────────────────────────────────────────────────────
+
+async function dispatch(
+  orderId: string,
+  eventHash: string,
+  subject: string,
+  wppMessage: string,
+  emailHtml: string,
+  contact: { phone: string | null; email: string | null; senderCnpj: string | null },
+  eventText?: string
+): Promise<void> {
+  const phone = contact.phone?.replace(/\D/g, '') ?? ''
+  const wppCompany = contact.senderCnpj ? SENDER_TO_WPP[contact.senderCnpj.replace(/\D/g, '')] : undefined
+  let notified = false
+
+  if (phone && isMobilePhone(phone) && wppCompany) {
+    const wppNumber = toWhatsAppNumber(phone)
+    const result = await sendMessage(wppCompany, wppNumber, wppMessage)
+    if (result.ok) {
+      await saveNotification(orderId, eventHash, 'WHATSAPP', true, wppNumber, eventText)
+      notified = true
+    } else {
+      await saveNotification(orderId, eventHash, 'WHATSAPP', false, wppNumber, eventText, result.error)
+    }
+  }
+
+  if (!notified && contact.email) {
+    const result = await sendEmail(contact.email, subject, emailHtml)
+    if (result.ok) {
+      await saveNotification(orderId, eventHash, 'EMAIL', true, contact.email, eventText)
+    } else {
+      await saveNotification(orderId, eventHash, 'EMAIL', false, contact.email, eventText, result.error)
+    }
+  }
+}
+
+// ─── FATURADO ───────────────────────────────────────────────────────────────
+
+export async function notifyFaturado(order: {
+  id: string
+  orderNumber: string
+  nfNumber: string | null
+  customerName: string
+  customerEmail: string | null
+  customerPhone: string | null
+  senderCnpj: string | null
+  linkDanfe: string | null
+  nfIssuedAt: Date | null
+}): Promise<void> {
+  const eventHash = hashEvent(order.id, 'FATURADO')
+  if (await alreadyNotified(order.id, eventHash)) return
+
+  const nf = order.nfNumber ? String(parseInt(order.nfNumber, 10)) : order.orderNumber
+  const linkLine = order.linkDanfe ? `\n\n📄 Consulte sua Nota Fiscal:\n${order.linkDanfe}` : ''
+
+  const wppMessage = `*FATURADO* 🧾\nOlá, ${order.customerName}!\n\nSeu pedido NF ${nf} foi faturado.${linkLine}\n\nPara acompanhar a entrega:\n${PORTAL_URL}\nDigite seu CPF ou CNPJ.\nAgradecemos a preferência. 🙏`
+
+  const emailHtml = `<!DOCTYPE html>
+<html>
+<body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#333">
+  <h2 style="color:#7c3aed">Faturado 🧾</h2>
+  <p>Olá, ${order.customerName}!</p>
+  <p>Seu pedido <strong>NF ${nf}</strong> foi faturado.</p>
+  ${order.linkDanfe ? `<p>📄 <a href="${order.linkDanfe}" style="color:#7c3aed">Consulte sua Nota Fiscal aqui</a></p>` : ''}
+  <p>Para acompanhar a entrega:<br>
+    <a href="${PORTAL_URL}" style="color:#1d4ed8">${PORTAL_URL}</a><br>
+    Digite seu CPF ou CNPJ.
+  </p>
+  <p style="color:#64748b;font-size:13px">Agradecemos a preferência.</p>
+</body>
+</html>`
+
+  await dispatch(order.id, eventHash, `Pedido faturado — NF ${nf}`, wppMessage, emailHtml,
+    { phone: order.customerPhone, email: order.customerEmail, senderCnpj: order.senderCnpj },
+    'FATURADO'
+  )
+  console.log(`[Notifier] 🧾 FATURADO → ${order.orderNumber}`)
 }
 
 export async function notifyOrderUpdate(order: {
@@ -186,60 +257,34 @@ export async function notifyOrderUpdate(order: {
   if (!order.lastTracking) return
 
   const eventHash = hashEvent(order.id, order.lastTracking)
-
-  // Deduplicação: já notificou esse evento?
   if (await alreadyNotified(order.id, eventHash)) return
 
   const alreadySentToday = await sentToday(order.id)
-
-  // Verifica se é o primeiro evento já enviado (nunca houve notificação com sucesso)
   const anyPrior = await prisma.orderNotification.count({ where: { orderId: order.id, success: true } })
   const isFirstEver = anyPrior === 0
 
-  // Se é o primeiro contato E o evento já é de entrega → pedido já estava entregue
-  // quando começamos a rastrear. Não faz sentido avisar o cliente agora.
-  if (isFirstEver && isDeliveryEvent(order.lastTracking ?? '')) {
-    console.log(`[Notifier] ℹ️ ${order.orderNumber}: já entregue na primeira detecção — notificação ignorada`)
+  // Pedido já entregue na primeira detecção → não notifica
+  if (isFirstEver && isDeliveryEvent(order.lastTracking)) {
+    console.log(`[Notifier] ℹ️ ${order.orderNumber}: já entregue na primeira detecção — ignorado`)
     return
   }
 
-  const message = buildWhatsAppMessage(order, !alreadySentToday, isFirstEver)
-  const subject = isFirstEver ? `Pedido despachado — NF ${order.nfNumber ?? order.orderNumber}` : `Atualização do pedido — NF ${order.nfNumber ?? order.orderNumber}`
+  const nf = order.nfNumber ? String(parseInt(order.nfNumber, 10)) : order.orderNumber
+  const delivered = isDeliveryEvent(order.lastTracking)
+  const subject = delivered
+    ? `Entregue ✅ — NF ${nf}`
+    : isFirstEver
+      ? `Enviado 🚚 — NF ${nf}`
+      : `Atualização do pedido — NF ${nf}`
 
-  const phone = order.customerPhone?.replace(/\D/g, '') ?? ''
-  const wppCompany = order.senderCnpj ? SENDER_TO_WPP[order.senderCnpj.replace(/\D/g, '')] : undefined
+  const wppMessage = buildWhatsAppMessage(order, !alreadySentToday, isFirstEver)
+  const emailHtml = buildEmailHtml(order, isFirstEver)
 
-  let notified = false
+  await dispatch(order.id, eventHash, subject, wppMessage, emailHtml,
+    { phone: order.customerPhone, email: order.customerEmail, senderCnpj: order.senderCnpj },
+    order.lastTracking
+  )
 
-  // Tenta WhatsApp primeiro
-  if (phone && isMobilePhone(phone) && wppCompany) {
-    const wppNumber = toWhatsAppNumber(phone)
-    const result = await sendMessage(wppCompany, wppNumber, message)
-    if (result.ok) {
-      await saveNotification(order.id, eventHash, 'WHATSAPP', true, wppNumber, order.lastTracking ?? undefined)
-      console.log(`[Notifier] ✅ WhatsApp (${wppCompany}) → ${wppNumber} | ${order.orderNumber}`)
-      notified = true
-    } else {
-      console.warn(`[Notifier] ⚠️ WhatsApp falhou (${result.error}) — tentando email...`)
-      await saveNotification(order.id, eventHash, 'WHATSAPP', false, wppNumber, order.lastTracking ?? undefined, result.error)
-    }
-  }
-
-  // Fallback: email
-  if (!notified && order.customerEmail) {
-    const html = buildEmailHtml(order, isFirstEver)
-    const result = await sendEmail(order.customerEmail, subject, html)
-    if (result.ok) {
-      await saveNotification(order.id, eventHash, 'EMAIL', true, order.customerEmail, order.lastTracking ?? undefined)
-      console.log(`[Notifier] ✅ Email → ${order.customerEmail} | ${order.orderNumber}`)
-    } else {
-      await saveNotification(order.id, eventHash, 'EMAIL', false, order.customerEmail, order.lastTracking ?? undefined, result.error)
-      console.warn(`[Notifier] ❌ Email falhou: ${result.error}`)
-    }
-    return
-  }
-
-  if (!notified) {
-    console.log(`[Notifier] ℹ️ Sem contato (phone/email) para ${order.orderNumber} — notificação ignorada`)
-  }
+  const tag = delivered ? '✅ ENTREGUE' : isFirstEver ? '🚚 ENVIADO' : '📦 Atualização'
+  console.log(`[Notifier] ${tag} → ${order.orderNumber}`)
 }

@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express'
 import axios from 'axios'
 import { prisma } from '../lib/prisma'
 import { TrackingSystem } from '@prisma/client'
+import { notifyFaturado } from '../services/notifier'
 
 const router = Router()
 const publicRouter = Router()
@@ -203,11 +204,17 @@ async function blingGet(companyKey: string, path: string, retries = 5): Promise<
   }
 }
 
+interface ResolveCarrierResult {
+  carrierId: string
+  linkDanfe: string | null
+}
+
 // Busca e vincula transportadora de uma NF pelo ID interno do Bling
-async function resolveCarrier(companyKey: string, nfId: number, nfNumero: string): Promise<string | undefined> {
+async function resolveCarrier(companyKey: string, nfId: number, nfNumero: string): Promise<ResolveCarrierResult | undefined> {
   try {
     const detail = (await blingGet(companyKey, `/nfe/${nfId}`)) as BlingNFeDetailResponse
     const transportador = detail?.data?.transporte?.transportador
+    const linkDanfe = detail?.data?.linkDanfe ?? null
     if (!transportador?.numeroDocumento) return undefined
 
     const cnpjRaw = transportador.numeroDocumento
@@ -230,7 +237,7 @@ async function resolveCarrier(companyKey: string, nfId: number, nfNumero: string
         return undefined
       }
       console.log(`[Bling] NF ${nfNumero}: transportadora "${transportador.nome}" vinculada a "${existing.name}"`)
-      return existing.id
+      return { carrierId: existing.id, linkDanfe }
     }
     if (transportador.nome) {
       // Ignora envios do Mercado Livre — não há rastreio disponível
@@ -256,7 +263,7 @@ async function resolveCarrier(companyKey: string, nfId: number, nfNumero: string
           return undefined
         }
         console.log(`[Bling] NF ${nfNumero}: transportadora "${transportador.nome}" vinculada pelo nome (CNPJ diferente: ${cnpjNormalizado})`)
-        return existingByName.id
+        return { carrierId: existingByName.id, linkDanfe }
       }
 
       try {
@@ -273,7 +280,7 @@ async function resolveCarrier(companyKey: string, nfId: number, nfNumero: string
           const found = await prisma.carrier.findFirst({
             where: { OR: [{ cnpj: cnpjNormalizado }, { cnpj: cnpjRaw }] },
           })
-          if (found && found.trackingSystem !== TrackingSystem.NONE) return found.id
+          if (found && found.trackingSystem !== TrackingSystem.NONE) return { carrierId: found.id, linkDanfe }
           return undefined
         }
         throw createErr
@@ -355,17 +362,17 @@ export async function runBlingSync(limite?: number, onlyCompany?: string, onProg
           }
 
           await new Promise((r) => setTimeout(r, 200)) // delay reduzido — retry automático em caso de 429
-          const carrierId = await resolveCarrier(companyKey, nf.id, String(nf.numero))
+          const resolved = await resolveCarrier(companyKey, nf.id, String(nf.numero))
 
           // Sem transportadora rastreável → ignora (ex: Mercado Envios, sem transporte)
-          if (!carrierId) {
+          if (!resolved) {
             ignorados++
             runningIgnorados++
             onProgress?.({ company: company.name, criados: runningCriados, ignorados: runningIgnorados, currentNf: String(nf.numero) })
             continue
           }
 
-          await prisma.order.create({
+          const newOrder = await prisma.order.create({
             data: {
               orderNumber: `${company.code}-NF-${nf.numero}`,
               customerName: nf.contato?.nome ?? 'Cliente não informado',
@@ -376,10 +383,24 @@ export async function runBlingSync(limite?: number, onlyCompany?: string, onProg
               nfIssuedAt: nf.dataEmissao ? new Date(nf.dataEmissao) : null,
               senderCnpj: company.cnpj,
               recipientCnpj: (nf.contato?.numeroDocumento ?? nf.destinatario?.numeroDocumento)?.replace(/\D/g, '') ?? null,
-              carrierId,
+              carrierId: resolved.carrierId,
+              linkDanfe: resolved.linkDanfe,
               statusHistory: { create: { status: 'PENDING', note: `Importado do Bling (${company.name})` } },
             },
           })
+
+          // Notifica cliente: pedido FATURADO (fire-and-forget)
+          notifyFaturado({
+            id: newOrder.id,
+            orderNumber: newOrder.orderNumber,
+            nfNumber: newOrder.nfNumber,
+            customerName: newOrder.customerName,
+            customerEmail: newOrder.customerEmail,
+            customerPhone: newOrder.customerPhone,
+            senderCnpj: newOrder.senderCnpj,
+            linkDanfe: resolved.linkDanfe,
+            nfIssuedAt: newOrder.nfIssuedAt,
+          }).catch(err => console.error(`[Notifier] Erro ao notificar FATURADO ${newOrder.orderNumber}:`, err))
 
           criados++
           runningCriados++
@@ -568,10 +589,10 @@ router.post('/enrich', async (_req: Request, res: Response) => {
     const entry = nfMap[numSemZero]
     if (!entry) { semDados++; continue }
 
-    const carrierId = await resolveCarrier(entry.companyKey, entry.blingId, String(order.nfNumber))
-    if (!carrierId) { semDados++; continue }
+    const resolved = await resolveCarrier(entry.companyKey, entry.blingId, String(order.nfNumber))
+    if (!resolved) { semDados++; continue }
 
-    await prisma.order.update({ where: { id: order.id }, data: { carrierId } })
+    await prisma.order.update({ where: { id: order.id }, data: { carrierId: resolved.carrierId, linkDanfe: resolved.linkDanfe } })
     atualizados++
 
     // Pausa para respeitar o rate limit do Bling
@@ -772,6 +793,8 @@ interface BlingNFeDetailResponse {
     }
     valorNota?: number
     dataEmissao?: string
+    linkDanfe?: string
+    linkPDF?: string
   }
 }
 
