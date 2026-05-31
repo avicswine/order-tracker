@@ -35,4 +35,12 @@ router.get('/', async (req: Request, res: Response) => {
   })
 })
 
+// DELETE /api/notifications?recipient=XXX — remove logs por destinatário (limpeza de testes)
+router.delete('/', async (req: Request, res: Response) => {
+  const recipient = req.query.recipient as string | undefined
+  if (!recipient) return res.status(400).json({ error: 'Informe o recipient.' })
+  const result = await prisma.orderNotification.deleteMany({ where: { recipient } })
+  res.json({ ok: true, removidos: result.count, recipient })
+})
+
 export default router
