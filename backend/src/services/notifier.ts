@@ -222,19 +222,16 @@ export async function notifyFaturado(order: {
   const nf = order.nfNumber ? String(parseInt(order.nfNumber, 10)) : order.orderNumber
   const linkLine = order.linkDanfe ? `\n\n📄 Consulte sua Nota Fiscal:\n${order.linkDanfe}` : ''
 
-  const wppMessage = `*FATURADO* 🧾\nOlá, ${order.customerName}!\n\nSeu pedido NF ${nf} foi faturado.${linkLine}\n\nPara acompanhar a entrega:\n${PORTAL_URL}\nDigite seu CPF ou CNPJ.\nAgradecemos a preferência. 🙏`
+  const primeiroNome = order.customerName.split(' ')[0]
+  const wppMessage = `*FATURADO* 🧾\nOlá, ${primeiroNome}!\n\nSeu pedido NF ${nf} foi faturado.${linkLine}\n\nAgradecemos a preferência. 🙏`
 
   const emailHtml = `<!DOCTYPE html>
 <html>
 <body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#333">
   <h2 style="color:#7c3aed">Faturado 🧾</h2>
-  <p>Olá, ${order.customerName}!</p>
+  <p>Olá, ${primeiroNome}!</p>
   <p>Seu pedido <strong>NF ${nf}</strong> foi faturado.</p>
   ${order.linkDanfe ? `<p>📄 <a href="${order.linkDanfe}" style="color:#7c3aed">Consulte sua Nota Fiscal aqui</a></p>` : ''}
-  <p>Para acompanhar a entrega:<br>
-    <a href="${PORTAL_URL}" style="color:#1d4ed8">${PORTAL_URL}</a><br>
-    Digite seu CPF ou CNPJ.
-  </p>
   <p style="color:#64748b;font-size:13px">Agradecemos a preferência.</p>
 </body>
 </html>`
