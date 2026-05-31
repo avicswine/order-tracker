@@ -1,5 +1,6 @@
 import QRCode from 'qrcode'
-import { useDBAuthState, clearDBAuthState } from './whatsappAuth'
+import path from 'path'
+import fs from 'fs'
 
 export type WppCompany = 'avic' | 'agro'
 type WppStatus = 'iniciando' | 'qr' | 'conectando' | 'pronto' | 'desconectado'
@@ -52,9 +53,11 @@ export async function sendMessage(company: WppCompany, phone: string, message: s
   }
 }
 
-async function clearAuth(company: WppCompany) {
-  await clearDBAuthState(company)
-  console.log(`[WhatsApp/${company}] Sessão apagada do banco — novo QR será gerado`)
+function clearAuth(company: WppCompany) {
+  const p = getAuthPath(company)
+  try { fs.rmSync(p, { recursive: true, force: true }) } catch { /* ignora */ }
+  fs.mkdirSync(p, { recursive: true })
+  console.log(`[WhatsApp/${company}] Sessão apagada — novo QR será gerado`)
 }
 
 function formatNumber(raw: string): string {
@@ -64,6 +67,14 @@ function formatNumber(raw: string): string {
   return `+${n}`
 }
 
+function getAuthPath(company: WppCompany): string {
+  // /tmp sobrevive dentro da mesma instância Railway mas é perdido em restarts
+  const base = process.env.WPP_AUTH_PATH ?? '/tmp/.wpp_auth'
+  const p = path.join(base, company)
+  fs.mkdirSync(p, { recursive: true })
+  return p
+}
+
 async function startInstance(company: WppCompany): Promise<void> {
   const inst = instances[company]!
   inst.status = 'iniciando'
@@ -71,10 +82,10 @@ async function startInstance(company: WppCompany): Promise<void> {
 
   try {
     const baileys = await importBaileys()
-    const { fetchLatestBaileysVersion, makeCacheableSignalKeyStore, DisconnectReason } = baileys
+    const { useMultiFileAuthState, fetchLatestBaileysVersion, makeCacheableSignalKeyStore, DisconnectReason } = baileys
     const makeWASocket = baileys.default
 
-    const { state, saveCreds } = await useDBAuthState(company)
+    const { state, saveCreds } = await useMultiFileAuthState(getAuthPath(company))
     const { version } = await fetchLatestBaileysVersion()
     console.log(`[WhatsApp/${company}] Baileys v${version.join('.')} — conectando...`)
 
@@ -131,7 +142,7 @@ async function startInstance(company: WppCompany): Promise<void> {
 
         console.log(`[WhatsApp/${company}] Desconectado (${statusCode}) ${loggedOut ? '— sessão encerrada' : '— reconectando...'}`)
 
-        if (loggedOut) await clearAuth(company)
+        if (loggedOut) clearAuth(company)
 
         if (!inst.reconnecting) {
           inst.reconnecting = true
@@ -180,7 +191,7 @@ export async function logoutInstance(company: WppCompany) {
     try { await inst.sock.logout() } catch { /* ignora */ }
     try { await inst.sock.end(undefined) } catch { /* ignora */ }
   }
-  await clearAuth(company)
+  clearAuth(company)
   if (inst) inst.reconnecting = false
   await startInstance(company)
 }

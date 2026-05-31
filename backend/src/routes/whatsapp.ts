@@ -57,7 +57,7 @@ router.post('/testar', async (req: Request, res: Response) => {
 // POST /api/whatsapp/testar-notificacao — simula notificação real de um pedido
 // Body: { orderNumber: "AVIC-NF-010595", phoneOverride: "554991885757" }
 router.post('/testar-notificacao', async (req: Request, res: Response) => {
-  const { orderNumber, phoneOverride } = req.body as { orderNumber: string; phoneOverride?: string }
+  const { orderNumber, phoneOverride, emailOverride } = req.body as { orderNumber: string; phoneOverride?: string; emailOverride?: string }
   if (!orderNumber) return res.status(400).json({ error: 'Informe o orderNumber.' })
 
   const order = await prisma.order.findUnique({
