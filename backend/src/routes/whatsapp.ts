@@ -75,6 +75,7 @@ router.post('/testar-notificacao', async (req: Request, res: Response) => {
   await notifyOrderUpdate({
     ...order,
     customerPhone: phoneOverride ?? order.customerPhone,
+    customerEmail: emailOverride ?? order.customerEmail,
   })
 
   res.json({ ok: true, orderNumber, lastTracking: order.lastTracking, phoneUsed: phoneOverride ?? order.customerPhone })
