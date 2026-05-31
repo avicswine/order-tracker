@@ -272,8 +272,14 @@ export async function notifyOrderUpdate(order: {
     return
   }
 
-  const nf = order.nfNumber ? String(parseInt(order.nfNumber, 10)) : order.orderNumber
+  // Só notifica ENVIADO (primeiro evento) e ENTREGUE — intermediários são ignorados
   const delivered = isDeliveryEvent(order.lastTracking)
+  if (!isFirstEver && !delivered) {
+    console.log(`[Notifier] ℹ️ ${order.orderNumber}: evento intermediário — ignorado`)
+    return
+  }
+
+  const nf = order.nfNumber ? String(parseInt(order.nfNumber, 10)) : order.orderNumber
   const subject = delivered
     ? `Entregue ✅ — NF ${nf}`
     : isFirstEver
