@@ -696,6 +696,49 @@ router.post('/backfill-nf-values', async (_req: Request, res: Response) => {
   res.json({ message: 'Backfill concluído', atualizados, semDados, total: ordersToFill.length })
 })
 
+// POST /api/bling/backfill-link-danfe - preenche linkDanfe nos pedidos sem o link
+router.post('/backfill-link-danfe', async (req: Request, res: Response) => {
+  const connectedCompanies = Object.keys(COMPANIES).filter((key) => !!tokens[key])
+  if (connectedCompanies.length === 0) return res.status(401).json({ error: 'Nenhuma empresa conectada.' })
+
+  const cnpjToKey: Record<string, string> = {}
+  for (const [key, c] of Object.entries(COMPANIES)) cnpjToKey[c.cnpj] = key
+
+  // Limite opcional via body para teste (ex: { orderNumber: "AVIC-NF-010566" })
+  const orderNumber = (req.body as { orderNumber?: string }).orderNumber
+  const where = orderNumber
+    ? { orderNumber }
+    : { linkDanfe: null, nfNumber: { not: null }, senderCnpj: { not: null } }
+
+  const orders = await prisma.order.findMany({
+    where, select: { id: true, nfNumber: true, senderCnpj: true, orderNumber: true },
+    take: orderNumber ? 1 : 500,
+  })
+
+  let atualizados = 0, semDados = 0
+  for (const order of orders) {
+    const companyKey = order.senderCnpj ? cnpjToKey[order.senderCnpj] : undefined
+    if (!companyKey || !order.nfNumber) { semDados++; continue }
+    try {
+      // Busca a NF pelo número para obter o ID interno do Bling
+      const numSemZero = String(parseInt(order.nfNumber, 10))
+      const list = (await blingGet(companyKey, `/nfe?numero=${numSemZero}&limite=5`)) as BlingListResponse
+      const found = (list?.data ?? []).find(n => String(parseInt(String(n.numero), 10)) === numSemZero)
+      if (!found?.id) { semDados++; continue }
+      const detail = (await blingGet(companyKey, `/nfe/${found.id}`)) as BlingNFeDetailResponse
+      const linkDanfe = detail?.data?.linkDanfe ?? null
+      if (!linkDanfe) { semDados++; continue }
+      await prisma.order.update({ where: { id: order.id }, data: { linkDanfe } })
+      atualizados++
+      await new Promise((r) => setTimeout(r, 400))
+    } catch {
+      semDados++
+    }
+  }
+
+  res.json({ message: 'Backfill linkDanfe concluído', atualizados, semDados, total: orders.length })
+})
+
 // POST /api/bling/backfill-recipient-cnpj - preenche recipientCnpj nos pedidos existentes
 // destinatario.numeroDocumento já vem na listagem — sem chamadas extras
 router.post('/backfill-recipient-cnpj', async (_req: Request, res: Response) => {
