@@ -193,7 +193,7 @@ async function dispatch(
   }
 
   if (!notified && contact.email) {
-    const result = await sendEmail(contact.email, subject, emailHtml)
+    const result = await sendEmail(contact.email, subject, emailHtml, contact.senderCnpj)
     if (result.ok) {
       await saveNotification(orderId, eventHash, 'EMAIL', true, contact.email, eventText)
     } else {

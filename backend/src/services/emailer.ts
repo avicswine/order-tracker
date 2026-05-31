@@ -10,12 +10,29 @@ function getClient(): Resend {
   return client
 }
 
-const FROM = process.env.EMAIL_FROM ?? 'no-reply@avicswine.com.br'
+// Remetente por empresa (CNPJ só dígitos → { from, nome })
+const SENDERS: Record<string, { email: string; nome: string }> = {
+  '47715256000149': { email: 'no-reply@avicswine.com.br', nome: 'Rastreamento Avic' },
+  '54695386000122': { email: 'no-reply@agrogranja.com.br', nome: 'Rastreamento Agrogranja' },
+}
 
-export async function sendEmail(to: string, subject: string, html: string): Promise<{ ok: boolean; error?: string }> {
+const DEFAULT_SENDER = { email: process.env.EMAIL_FROM ?? 'no-reply@avicswine.com.br', nome: 'Rastreamento' }
+
+export async function sendEmail(
+  to: string,
+  subject: string,
+  html: string,
+  senderCnpj?: string | null
+): Promise<{ ok: boolean; error?: string }> {
   try {
     const resend = getClient()
-    const { error } = await resend.emails.send({ from: `Rastreamento AVIC <${FROM}>`, to, subject, html })
+    const sender = (senderCnpj && SENDERS[senderCnpj.replace(/\D/g, '')]) || DEFAULT_SENDER
+    const { error } = await resend.emails.send({
+      from: `${sender.nome} <${sender.email}>`,
+      to,
+      subject,
+      html,
+    })
     if (error) throw new Error(error.message)
     return { ok: true }
   } catch (err) {
