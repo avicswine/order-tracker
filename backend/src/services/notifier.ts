@@ -117,7 +117,8 @@ function buildWhatsAppMessage(order: {
 
   if (isFirstEver) {
     // Primeiro evento de rastreio = CT-e emitido = ENVIADO
-    let body = `*ENVIADO* 🚚\nOlá, tudo bem? Seu pedido foi despachado!\n\n${evento}`
+    // Texto 100% nosso (não expõe o evento técnico cru da transportadora)
+    let body = `*ENVIADO* 🚚\nOlá, ${order.customerName.split(' ')[0]}! Seu pedido foi despachado e já está a caminho. 📦`
     if (previsao) body += `\n\n📅 Previsão de entrega: ${previsao}.`
     body += rodape
     return body
@@ -154,9 +155,7 @@ function buildEmailHtml(order: {
   ${delivered
     ? `<p>Sua encomenda chegou ao destino.</p>
   <p>Esperamos que tudo esteja conforme o pedido. Qualquer dúvida, estamos à disposição.</p>`
-    : `<div style="background:#f1f5f9;border-left:4px solid ${borderColor};padding:12px 16px;margin:16px 0;border-radius:4px">
-    <strong>NF ${nf}</strong><br>${evento}
-  </div>
+    : `<p>Seu pedido <strong>NF ${nf}</strong> foi despachado e já está a caminho. 📦</p>
   ${previsao && isFirstEver ? `<p>📅 <strong>Previsão de entrega:</strong> ${previsao}</p>` : ''}
   <p>Para acompanhar o rastreio:<br>
     <a href="${PORTAL_URL}" style="color:#1d4ed8">${PORTAL_URL}</a><br>
