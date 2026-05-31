@@ -105,9 +105,15 @@ export function formatPhone(value: string) {
     .slice(0, 15)
 }
 
-// Insere " - " entre o código do evento (CAIXA ALTA) e a descrição
-// Ex: "SAIDA DE UNIDADESaida da unidade X" → "SAIDA DE UNIDADE - Saida da unidade X"
+// Insere " - " onde uma palavra toda em MAIÚSCULAS se concatena diretamente com a próxima
+// Ex: "SAIDA DE UNIDADESaida" → "SAIDA DE UNIDADE - Saida"
+// Ex: "MERCADORIA ENTREGUECTRC ENTREGUE" → "MERCADORIA ENTREGUE - CTRC ENTREGUE"
+// Ex: "(SSWMOBILE) Comprovante" → "(SSWMOBILE) - Comprovante"
 export function formatTrackingText(text: string | null | undefined): string {
   if (!text) return ''
-  return text.replace(/([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ])([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ][a-záéíóúàâêôãõç])/, '$1 - $2')
+  return text
+    // Separador 1: palavra ≥3 maiúsculas concatenada diretamente com próxima palavra
+    .replace(/([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ]{3,})([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ(0-9])/, '$1 - $2')
+    // Separador 2: ) seguido de espaço + Palavra com inicial maiúscula
+    .replace(/\)\s+([A-Z][a-záéíóúàâêôãõç])/, ') - $1')
 }

@@ -81,7 +81,9 @@ const OCCURRENCE_KEYWORDS = ['EXTRAVIO', 'AVARIA', 'ROUBO', 'FURTO', 'DANO', 'SI
 
 function formatTrackingText(text: string | null | undefined): string {
   if (!text) return ''
-  return text.replace(/([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ])([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ][a-záéíóúàâêôãõç])/, '$1 - $2')
+  return text
+    .replace(/([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ]{3,})([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ(0-9])/, '$1 - $2')
+    .replace(/\)\s+([A-Z][a-záéíóúàâêôãõç])/, ') - $1')
 }
 
 function isOccurrence(text: string): boolean {

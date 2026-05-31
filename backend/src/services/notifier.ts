@@ -9,7 +9,9 @@ const PORTAL_URL = process.env.PORTAL_URL ?? 'https://order-tracker-production-4
 // Ex: "SAIDA DE UNIDADESaida da unidade X" → "SAIDA DE UNIDADE - Saida da unidade X"
 export function formatTrackingText(text: string): string {
   if (!text) return text
-  return text.replace(/([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ])([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ][a-záéíóúàâêôãõç])/, '$1 - $2')
+  return text
+    .replace(/([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ]{3,})([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ(0-9])/, '$1 - $2')
+    .replace(/\)\s+([A-Z][a-záéíóúàâêôãõç])/, ') - $1')
 }
 
 // Verifica se o evento é de entrega
