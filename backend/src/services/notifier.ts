@@ -196,6 +196,13 @@ export async function notifyOrderUpdate(order: {
   const anyPrior = await prisma.orderNotification.count({ where: { orderId: order.id, success: true } })
   const isFirstEver = anyPrior === 0
 
+  // Se é o primeiro contato E o evento já é de entrega → pedido já estava entregue
+  // quando começamos a rastrear. Não faz sentido avisar o cliente agora.
+  if (isFirstEver && isDeliveryEvent(order.lastTracking ?? '')) {
+    console.log(`[Notifier] ℹ️ ${order.orderNumber}: já entregue na primeira detecção — notificação ignorada`)
+    return
+  }
+
   const message = buildWhatsAppMessage(order, !alreadySentToday, isFirstEver)
   const subject = isFirstEver ? `Pedido despachado — NF ${order.nfNumber ?? order.orderNumber}` : `Atualização do pedido — NF ${order.nfNumber ?? order.orderNumber}`
 
