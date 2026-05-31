@@ -4,7 +4,7 @@ import { ordersApi } from '../../lib/api'
 import { Modal } from '../ui/Modal'
 import { StatusBadge } from '../ui/Badge'
 import { Spinner } from '../ui/Spinner'
-import { formatDate, formatDateTime, STATUS_LABELS, SENDER_COMPANIES, isOccurrenceEvent } from '../../lib/utils'
+import { formatDate, formatDateTime, STATUS_LABELS, SENDER_COMPANIES, isOccurrenceEvent, formatTrackingText } from '../../lib/utils'
 import { useAuth } from '../../contexts/AuthContext'
 import type { Order, OrderStatus, TrackingEvent } from '../../types'
 
@@ -159,7 +159,7 @@ export function OrderDetailModal({ order, onClose }: Props) {
                       </div>
                       <div className={`pb-3 ${isFirst ? '' : 'opacity-75'}`}>
                         <p className={`text-sm font-medium ${isOccurrence ? 'text-orange-700' : isDelivery ? 'text-green-700' : 'text-gray-800'}`}>
-                          {event.description}
+                          {formatTrackingText(event.description)}
                         </p>
                         {event.date && (
                           <p className="text-xs text-gray-400 mt-0.5">{formatDateTime(event.date)}</p>
@@ -176,7 +176,7 @@ export function OrderDetailModal({ order, onClose }: Props) {
                 {isOccurrenceEvent(data.lastTracking) ? '⚠️ Intercorrência' : 'Último Rastreio'}
               </p>
               <p className={`text-sm font-medium ${isOccurrenceEvent(data.lastTracking) ? 'text-orange-800' : 'text-blue-800'}`}>
-                {data.lastTracking}
+                {formatTrackingText(data.lastTracking)}
               </p>
               {data.lastTrackingAt && (
                 <p className="text-xs text-gray-500 mt-0.5">{formatDateTime(data.lastTrackingAt)}</p>

@@ -104,3 +104,10 @@ export function formatPhone(value: string) {
     .replace(/(\d{4,5})(\d{4})$/, '$1-$2')
     .slice(0, 15)
 }
+
+// Insere " - " entre o código do evento (CAIXA ALTA) e a descrição
+// Ex: "SAIDA DE UNIDADESaida da unidade X" → "SAIDA DE UNIDADE - Saida da unidade X"
+export function formatTrackingText(text: string | null | undefined): string {
+  if (!text) return ''
+  return text.replace(/([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ])([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ][a-záéíóúàâêôãõç])/, '$1 - $2')
+}

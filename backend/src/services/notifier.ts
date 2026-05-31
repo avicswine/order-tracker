@@ -5,6 +5,19 @@ import { sendEmail } from './emailer'
 
 const PORTAL_URL = process.env.PORTAL_URL ?? 'https://order-tracker-production-4189.up.railway.app/portal/'
 
+// Insere " - " entre o código do evento (CAIXA ALTA) e a descrição
+// Ex: "SAIDA DE UNIDADESaida da unidade X" → "SAIDA DE UNIDADE - Saida da unidade X"
+export function formatTrackingText(text: string): string {
+  if (!text) return text
+  return text.replace(/([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ])([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ][a-záéíóúàâêôãõç])/, '$1 - $2')
+}
+
+// Verifica se o evento é de entrega
+function isDeliveryEvent(text: string): boolean {
+  const t = text.toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+  return t.includes('ENTREGUE') || t.includes('ENTREGA REALIZADA') || t.includes('ENTREGA EFETUADA') || t.includes('MERCADORIA ENTREGUE')
+}
+
 // CNPJ das empresas → instância WhatsApp
 const SENDER_TO_WPP: Record<string, WppCompany> = {
   '47715256000149': 'avic',     // AVIC
@@ -92,11 +105,14 @@ function buildWhatsAppMessage(order: {
   lastTrackingAt: Date | null
 }, isFirstToday: boolean, isFirstEver: boolean): string {
   const nf = order.nfNumber ? String(parseInt(order.nfNumber, 10)) : order.orderNumber
-  const evento = order.lastTracking ?? ''
+  const evento = formatTrackingText(order.lastTracking ?? '')
   const previsao = order.estimatedDelivery ? formatDate(order.estimatedDelivery) : null
+  const delivered = isDeliveryEvent(evento)
 
   let header: string
-  if (isFirstEver) {
+  if (delivered) {
+    header = `Olá! Passando para avisar que sua encomenda foi entregue 🎉`
+  } else if (isFirstEver) {
     header = `Olá, tudo bem? Temos boas notícias!\n\nSeu pedido foi despachado:`
   } else if (isFirstToday) {
     header = `Olá, tudo bem? Seu pedido teve uma atualização:`
@@ -104,9 +120,11 @@ function buildWhatsAppMessage(order: {
     header = `Oi, eu novamente, Seu pedido teve uma atualização:`
   }
 
-  let body = `${header}\n${evento}`
+  let body = delivered
+    ? `${header}\n\n${evento}`
+    : `${header}\n${evento}`
 
-  if (previsao && isFirstEver) {
+  if (previsao && isFirstEver && !delivered) {
     body += `\nPrevisão de entrega: ${previsao}.`
   }
 
@@ -124,24 +142,24 @@ function buildEmailHtml(order: {
   lastTrackingAt: Date | null
 }, isFirstEver: boolean): string {
   const nf = order.nfNumber ? String(parseInt(order.nfNumber, 10)) : order.orderNumber
-  const evento = order.lastTracking ?? ''
-  const dataEvento = formatDateTime(order.lastTrackingAt)
+  const evento = formatTrackingText(order.lastTracking ?? '')
   const previsao = order.estimatedDelivery ? formatDate(order.estimatedDelivery) : null
+  const delivered = isDeliveryEvent(evento)
 
-  const titulo = isFirstEver ? 'Seu pedido foi despachado!' : 'Atualização do seu pedido'
+  const titulo = delivered ? 'Sua encomenda foi entregue! 🎉' : isFirstEver ? 'Seu pedido foi despachado!' : 'Atualização do seu pedido'
+  const borderColor = delivered ? '#16a34a' : '#1d4ed8'
 
   return `
 <!DOCTYPE html>
 <html>
 <body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#333">
-  <h2 style="color:#1d4ed8">${titulo}</h2>
+  <h2 style="color:${borderColor}">${titulo}</h2>
   <p>Olá, ${order.customerName}!</p>
-  <div style="background:#f1f5f9;border-left:4px solid #1d4ed8;padding:12px 16px;margin:16px 0;border-radius:4px">
+  <div style="background:#f1f5f9;border-left:4px solid ${borderColor};padding:12px 16px;margin:16px 0;border-radius:4px">
     <strong>NF ${nf}</strong><br>
     ${evento}
-    ${dataEvento !== '—' ? `<br><small style="color:#64748b">${dataEvento}</small>` : ''}
   </div>
-  ${previsao && isFirstEver ? `<p>📅 <strong>Previsão de entrega:</strong> ${previsao}</p>` : ''}
+  ${previsao && isFirstEver && !delivered ? `<p>📅 <strong>Previsão de entrega:</strong> ${previsao}</p>` : ''}
   <p>Para acompanhar o rastreio, acesse:<br>
     <a href="${PORTAL_URL}" style="color:#1d4ed8">${PORTAL_URL}</a><br>
     e digite o seu CPF ou CNPJ.

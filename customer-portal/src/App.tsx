@@ -79,6 +79,11 @@ function isDelayed(order: Order): boolean {
 
 const OCCURRENCE_KEYWORDS = ['EXTRAVIO', 'AVARIA', 'ROUBO', 'FURTO', 'DANO', 'SINISTRO', 'DIVERGENCIA', 'NAO ENTREGUE', 'ENTREGA NAO', 'RECUSADO', 'DEVOLVIDO', 'ENDERECO', 'AUSENTE', 'CANCELADO', 'PREJUDICADO', 'PROBLEMA', 'IMPEDIDO']
 
+function formatTrackingText(text: string | null | undefined): string {
+  if (!text) return ''
+  return text.replace(/([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ])([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ][a-záéíóúàâêôãõç])/, '$1 - $2')
+}
+
 function isOccurrence(text: string): boolean {
   const t = text.toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
   return OCCURRENCE_KEYWORDS.some(k => t.includes(k))
@@ -180,7 +185,7 @@ function OrderCard({ order }: { order: Order }) {
                   </div>
                   <div className={`pb-3 ${isFirst ? '' : 'opacity-75'}`}>
                     <p className={`text-sm font-medium ${occ ? 'text-orange-700' : delivered ? 'text-green-700' : 'text-gray-800'}`}>
-                      {ev.description}
+                      {formatTrackingText(ev.description)}
                     </p>
                     {ev.date && (
                       <p className="text-xs text-gray-400 mt-0.5">{formatDateTime(ev.date)}</p>
@@ -197,7 +202,7 @@ function OrderCard({ order }: { order: Order }) {
             {isOccurrence(order.lastTracking) ? '⚠️ Intercorrencia' : 'Ultimo Rastreio'}
           </p>
           <p className={`text-sm font-medium ${isOccurrence(order.lastTracking) ? 'text-orange-800' : 'text-blue-800'}`}>
-            {order.lastTracking}
+            {formatTrackingText(order.lastTracking)}
           </p>
           {order.lastTrackingAt && (
             <p className="text-xs text-gray-500 mt-0.5">{formatDateTime(order.lastTrackingAt)}</p>
