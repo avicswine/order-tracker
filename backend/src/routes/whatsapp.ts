@@ -80,4 +80,66 @@ router.post('/testar-notificacao', async (req: Request, res: Response) => {
   res.json({ ok: true, orderNumber, lastTracking: order.lastTracking, phoneUsed: phoneOverride ?? order.customerPhone })
 })
 
+// POST /api/whatsapp/simular-sequencia
+// Simula 4 mensagens reais com delays de 60s: despacho → update → update(mesmo dia) → entregue
+// Body: { orderNumber, phoneOverride, emailOverride }
+router.post('/simular-sequencia', async (req: Request, res: Response) => {
+  const { orderNumber, phoneOverride, emailOverride } = req.body as {
+    orderNumber: string
+    phoneOverride?: string
+    emailOverride?: string
+  }
+  if (!orderNumber) return res.status(400).json({ error: 'Informe o orderNumber.' })
+
+  const order = await prisma.order.findUnique({
+    where: { orderNumber },
+    include: { carrier: { select: { name: true } } },
+  })
+  if (!order) return res.status(404).json({ error: 'Pedido não encontrado.' })
+
+  type StoredEvent = { date: string | null; description: string }
+  const events: StoredEvent[] = Array.isArray(order.trackingEvents)
+    ? (order.trackingEvents as StoredEvent[]).slice().reverse() // mais antigo primeiro
+    : []
+
+  if (events.length < 2) return res.status(400).json({ error: 'Pedido sem eventos suficientes para simular.' })
+
+  // Apaga todas as notificações existentes para forçar isFirstEver=true
+  await prisma.orderNotification.deleteMany({ where: { orderId: order.id } })
+
+  const base = {
+    ...order,
+    customerPhone: phoneOverride ?? order.customerPhone,
+    customerEmail: emailOverride ?? order.customerEmail,
+  }
+
+  // Sequência: primeiro evento (despacho), 2 intermediários, último (entregue)
+  const seq = [
+    events[0],                                    // 1. Despacho
+    events[Math.floor(events.length / 2)],        // 2. Meio (update)
+    events[Math.floor(events.length * 3 / 4)],   // 3. Avançado (Oi eu novamente)
+    events[events.length - 1],                    // 4. Entregue
+  ]
+
+  res.json({ ok: true, mensagens: seq.map(e => e.description), delays: ['agora', '60s', '120s', '180s'] })
+
+  // Dispara cada mensagem com delay — fire-and-forget
+  for (let i = 0; i < seq.length; i++) {
+    const ev = seq[i]
+    setTimeout(async () => {
+      try {
+        // Remove notificação anterior desse evento para permitir reenvio
+        const crypto = await import('crypto')
+        const hash = crypto.createHash('sha256').update(`${order.id}:${ev.description}`).digest('hex').slice(0, 16)
+        await prisma.orderNotification.deleteMany({ where: { orderId: order.id, eventHash: hash } })
+
+        await notifyOrderUpdate({ ...base, lastTracking: ev.description, lastTrackingAt: ev.date ? new Date(ev.date) : new Date() })
+        console.log(`[Simulação] Mensagem ${i + 1}/4 enviada: ${ev.description.slice(0, 60)}`)
+      } catch (err) {
+        console.error(`[Simulação] Erro na mensagem ${i + 1}:`, err)
+      }
+    }, i * 60_000) // 0s, 60s, 120s, 180s
+  }
+})
+
 export default router
