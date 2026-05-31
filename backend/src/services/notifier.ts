@@ -112,7 +112,7 @@ function buildWhatsAppMessage(order: {
   const rodape = `\nPara acompanhar o rastreio, basta acessar o link:\n${PORTAL_URL}\n\nE digitar o seu CPF ou CNPJ.\nAgradecemos a preferência. 🙏`
 
   if (delivered) {
-    return `*ENTREGUE* ✅\nOlá! Passando para avisar que sua encomenda foi entregue.\n\n${evento}${rodape}`
+    return `*ENTREGUE* ✅\nOlá, ${order.customerName.split(' ')[0]}! Que ótima notícia! 🎉\n\nSua encomenda chegou ao destino.\n\n${evento}\n\nEsperamos que tudo esteja conforme o pedido. Qualquer dúvida, estamos à disposição.\n\nAgradecemos a preferência! 🙏${rodape}`
   }
 
   if (isFirstEver) {
@@ -142,23 +142,26 @@ function buildEmailHtml(order: {
   const previsao = order.estimatedDelivery ? formatDate(order.estimatedDelivery) : null
   const delivered = isDeliveryEvent(evento)
 
-  const titulo = delivered ? 'Entregue ✅' : isFirstEver ? 'Enviado 🚚' : 'Atualização do pedido'
+  const titulo = delivered ? 'Encomenda entregue! ✅' : isFirstEver ? 'Pedido enviado 🚚' : 'Atualização do pedido'
   const borderColor = delivered ? '#16a34a' : '#1d4ed8'
+  const primeiroNome = order.customerName.split(' ')[0]
 
   return `<!DOCTYPE html>
 <html>
 <body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#333">
   <h2 style="color:${borderColor}">${titulo}</h2>
-  <p>Olá, ${order.customerName}!</p>
+  <p>Olá, ${primeiroNome}${delivered ? '! Que ótima notícia! 🎉' : '!'}</p>
+  ${delivered ? '<p>Sua encomenda chegou ao destino.</p>' : ''}
   <div style="background:#f1f5f9;border-left:4px solid ${borderColor};padding:12px 16px;margin:16px 0;border-radius:4px">
     <strong>NF ${nf}</strong><br>${evento}
   </div>
   ${previsao && isFirstEver && !delivered ? `<p>📅 <strong>Previsão de entrega:</strong> ${previsao}</p>` : ''}
-  <p>Para acompanhar o rastreio, acesse:<br>
+  ${delivered ? '<p>Esperamos que tudo esteja conforme o pedido. Qualquer dúvida, estamos à disposição.</p>' : ''}
+  <p>Para consultar o histórico do pedido:<br>
     <a href="${PORTAL_URL}" style="color:#1d4ed8">${PORTAL_URL}</a><br>
-    e digite o seu CPF ou CNPJ.
+    Digite seu CPF ou CNPJ.
   </p>
-  <p style="color:#64748b;font-size:13px">Agradecemos a preferência.</p>
+  <p style="color:#64748b;font-size:13px">Agradecemos a preferência! 🙏</p>
 </body>
 </html>`
 }
