@@ -34,7 +34,6 @@ export async function sendMessage(company: WppCompany, phone: string, message: s
   }
 
   const digits = phone.replace(/\D/g, '')
-  const jid = `${digits}@s.whatsapp.net`
 
   try {
     const results = await inst.sock.onWhatsApp(digits)
@@ -42,6 +41,9 @@ export async function sendMessage(company: WppCompany, phone: string, message: s
     if (!result?.exists) {
       return { ok: false, error: 'Número não encontrado no WhatsApp' }
     }
+    // Usa o JID retornado pelo onWhatsApp (mais confiável que construir manualmente)
+    const jid = result.jid ?? `${digits}@s.whatsapp.net`
+    console.log(`[WhatsApp] Enviando para JID: ${jid}`)
     await inst.sock.sendMessage(jid, { text: message })
     return { ok: true }
   } catch (err) {
