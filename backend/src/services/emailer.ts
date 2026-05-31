@@ -1,22 +1,30 @@
 import { Resend } from 'resend'
 
-let client: Resend | null = null
-
-function getClient(): Resend {
-  if (client) return client
-  const apiKey = process.env.RESEND_API_KEY
-  if (!apiKey) throw new Error('RESEND_API_KEY não configurada')
-  client = new Resend(apiKey)
-  return client
+// Configuração de remetente por empresa (CNPJ só dígitos)
+// Cada empresa tem sua própria conta/API key no Resend
+interface SenderConfig {
+  apiKeyEnv: string
+  email: string
+  nome: string
 }
 
-// Remetente por empresa (CNPJ só dígitos → { from, nome })
-const SENDERS: Record<string, { email: string; nome: string }> = {
-  '47715256000149': { email: 'no-reply@avicswine.com.br', nome: 'Rastreamento Avic' },
-  '54695386000122': { email: 'no-reply@agrogranja.com.br', nome: 'Rastreamento Agrogranja' },
+const SENDERS: Record<string, SenderConfig> = {
+  '47715256000149': { apiKeyEnv: 'RESEND_API_KEY',      email: 'no-reply@avicswine.com.br',  nome: 'Rastreamento Avic' },
+  '54695386000122': { apiKeyEnv: 'RESEND_API_KEY_AGRO', email: 'no-reply@agrogranja.com.br', nome: 'Rastreamento Agrogranja' },
 }
 
-const DEFAULT_SENDER = { email: process.env.EMAIL_FROM ?? 'no-reply@avicswine.com.br', nome: 'Rastreamento' }
+// Fallback: usa a conta da AVIC
+const DEFAULT_SENDER: SenderConfig = { apiKeyEnv: 'RESEND_API_KEY', email: process.env.EMAIL_FROM ?? 'no-reply@avicswine.com.br', nome: 'Rastreamento' }
+
+// Cache de clients por API key (evita recriar a cada envio)
+const clients: Record<string, Resend> = {}
+
+function getClient(apiKeyEnv: string): Resend {
+  const apiKey = process.env[apiKeyEnv]
+  if (!apiKey) throw new Error(`${apiKeyEnv} não configurada`)
+  if (!clients[apiKey]) clients[apiKey] = new Resend(apiKey)
+  return clients[apiKey]
+}
 
 export async function sendEmail(
   to: string,
@@ -24,9 +32,9 @@ export async function sendEmail(
   html: string,
   senderCnpj?: string | null
 ): Promise<{ ok: boolean; error?: string }> {
+  const sender = (senderCnpj && SENDERS[senderCnpj.replace(/\D/g, '')]) || DEFAULT_SENDER
   try {
-    const resend = getClient()
-    const sender = (senderCnpj && SENDERS[senderCnpj.replace(/\D/g, '')]) || DEFAULT_SENDER
+    const resend = getClient(sender.apiKeyEnv)
     const { error } = await resend.emails.send({
       from: `${sender.nome} <${sender.email}>`,
       to,
@@ -37,7 +45,7 @@ export async function sendEmail(
     return { ok: true }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    console.error('[Email] Erro ao enviar:', msg)
+    console.error(`[Email] Erro ao enviar (${sender.email}):`, msg)
     return { ok: false, error: msg }
   }
 }
