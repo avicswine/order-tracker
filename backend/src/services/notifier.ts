@@ -195,7 +195,7 @@ function buildEmailHtml(order: {
 
   return `<!DOCTYPE html>
 <html>
-<body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#333">
+<body style="font-family:Arial,sans-serif;max-width:600px;margin:0;padding:20px;color:#333;text-align:left">
   <h2 style="color:${borderColor}">${titulo}</h2>
   <p>Olá, ${primeiroNome}${delivered ? '! Que ótima notícia! 🎉' : '!'}</p>
   ${delivered
@@ -273,7 +273,7 @@ export async function notifyFaturado(order: {
 
   const emailHtml = `<!DOCTYPE html>
 <html>
-<body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#333">
+<body style="font-family:Arial,sans-serif;max-width:600px;margin:0;padding:20px;color:#333;text-align:left">
   <h2 style="color:#7c3aed">Faturado 🧾</h2>
   <p>Olá, ${primeiroNome}!</p>
   <p>Seu pedido <strong>NF ${nf}</strong> foi faturado.</p>
