@@ -1,6 +1,7 @@
 import QRCode from 'qrcode'
 import path from 'path'
 import fs from 'fs'
+import { restoreSessionFromDb, backupSessionToDb, clearSessionFromDb } from './whatsappSession'
 
 export type WppCompany = 'avic' | 'agro'
 type WppStatus = 'iniciando' | 'qr' | 'conectando' | 'pronto' | 'desconectado'
@@ -57,6 +58,7 @@ function clearAuth(company: WppCompany) {
   const p = getAuthPath(company)
   try { fs.rmSync(p, { recursive: true, force: true }) } catch { /* ignora */ }
   fs.mkdirSync(p, { recursive: true })
+  clearSessionFromDb(company).catch(() => { /* ignora */ })
   console.log(`[WhatsApp/${company}] Sessão apagada — novo QR será gerado`)
 }
 
@@ -81,11 +83,23 @@ async function startInstance(company: WppCompany): Promise<void> {
   inst.sock = null
 
   try {
+    const authDir = getAuthPath(company)
+
+    // Tenta restaurar sessão do banco antes de inicializar
+    await restoreSessionFromDb(company, authDir)
+
     const baileys = await importBaileys()
     const { useMultiFileAuthState, fetchLatestBaileysVersion, makeCacheableSignalKeyStore, DisconnectReason } = baileys
     const makeWASocket = baileys.default
 
-    const { state, saveCreds } = await useMultiFileAuthState(getAuthPath(company))
+    const { state, saveCreds: baileySaveCreds } = await useMultiFileAuthState(authDir)
+
+    // Envolve saveCreds para também fazer backup no banco
+    const saveCreds = async () => {
+      await baileySaveCreds()
+      await backupSessionToDb(company, authDir)
+    }
+
     const { version } = await fetchLatestBaileysVersion()
     console.log(`[WhatsApp/${company}] Baileys v${version.join('.')} — conectando...`)
 

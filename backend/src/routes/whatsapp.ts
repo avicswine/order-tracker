@@ -139,7 +139,7 @@ router.post('/simular-sequencia', async (req: Request, res: Response) => {
       } catch (err) {
         console.error(`[Simulação] Erro na mensagem ${i + 1}:`, err)
       }
-    }, i * 60_000) // 0s, 60s, 120s, 180s
+    }, i * 25_000) // 0s, 25s, 50s, 75s
   }
 })
 

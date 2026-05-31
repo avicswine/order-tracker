@@ -90,10 +90,8 @@ model User {
 }
 
 model WhatsappSession {
-  id        String   @id @default(cuid())
-  company   String   @unique   // "avic" | "agro"
-  creds     Json?              // AuthenticationCreds serializado
-  keys      Json?              // Signal keys (pre-key, session, sender-key, etc.)
+  company   String   @id      // "avic" | "agro"
+  files     String            // JSON.stringify({ filename: content }) — cópia exata dos arquivos do Baileys
   updatedAt DateTime @updatedAt
 
   @@map("whatsapp_sessions")
