@@ -27,6 +27,51 @@ const SENDER_TO_WPP: Record<string, WppCompany> = {
   // Equipage não tem WhatsApp — vai por email
 }
 
+// Assinatura de email por empresa (logo + sites)
+interface CompanySignature {
+  logo: string
+  sites: { label: string; url: string }[]
+}
+
+const COMPANY_SIGNATURE: Record<string, CompanySignature> = {
+  '47715256000149': { // AVIC
+    logo: 'https://cdn.awsli.com.br/2599/2599142/arquivos/logo-jpg.png',
+    sites: [
+      { label: 'avicventiladores.com.br', url: 'http://avicventiladores.com.br' },
+      { label: 'avicswine.com.br', url: 'http://avicswine.com.br' },
+    ],
+  },
+  '54695386000122': { // AGROGRANJA
+    logo: 'https://cdn.awsli.com.br/2599/2599142/arquivos/logomarca.jpg',
+    sites: [{ label: 'agrogranja.com.br', url: 'http://agrogranja.com.br' }],
+  },
+  '56633474000125': { // EQUIPAGE
+    logo: 'https://cdn.awsli.com.br/2599/2599142/arquivos/logo-jpg.jpg',
+    sites: [{ label: 'equipageimport.com.br', url: 'http://equipageimport.com.br' }],
+  },
+}
+
+function buildSignature(senderCnpj: string | null): string {
+  const sig = senderCnpj ? COMPANY_SIGNATURE[senderCnpj.replace(/\D/g, '')] : undefined
+  if (!sig) return ''
+  const sitesHtml = sig.sites
+    .map(s => `<a href="${s.url}" style="color:#1d4ed8;text-decoration:none">${s.label}</a>`)
+    .join(' &nbsp;|&nbsp; ')
+  return `
+  <table cellpadding="0" cellspacing="0" border="0" style="margin-top:28px;border-top:1px solid #e5e7eb;padding-top:16px;font-family:Arial,sans-serif">
+    <tr>
+      <td style="padding-right:16px;vertical-align:middle">
+        <img src="${sig.logo}" alt="logo" style="max-height:56px;max-width:160px;display:block">
+      </td>
+      <td style="vertical-align:middle;border-left:2px solid #e5e7eb;padding-left:16px">
+        <div style="font-weight:bold;color:#111;font-size:14px">Dionísio</div>
+        <div style="color:#555;font-size:13px">Departamento de Logística</div>
+        <div style="font-size:12px;margin-top:4px">${sitesHtml}</div>
+      </td>
+    </tr>
+  </table>`
+}
+
 // Valida celular brasileiro: DDD (2 dígitos) + 9 + 8 dígitos = 11 dígitos
 // Aceita também o formato antigo sem o 9 (10 dígitos), mas celulares SP/RJ sempre têm 9
 function isMobilePhone(digits: string): boolean {
@@ -135,6 +180,7 @@ function buildEmailHtml(order: {
   orderNumber: string
   nfNumber: string | null
   customerName: string
+  senderCnpj: string | null
   estimatedDelivery: Date | null
   lastTracking: string | null
 }, isFirstEver: boolean): string {
@@ -162,6 +208,7 @@ function buildEmailHtml(order: {
     Digite seu CPF ou CNPJ.
   </p>`}
   <p style="color:#64748b;font-size:13px">Agradecemos a preferência! 🙏</p>
+  ${buildSignature(order.senderCnpj)}
 </body>
 </html>`
 }
@@ -232,6 +279,7 @@ export async function notifyFaturado(order: {
   <p>Seu pedido <strong>NF ${nf}</strong> foi faturado.</p>
   ${order.linkDanfe ? `<p>📄 <a href="${order.linkDanfe}" style="color:#7c3aed">Consulte sua Nota Fiscal aqui</a></p>` : ''}
   <p style="color:#64748b;font-size:13px">Agradecemos a preferência.</p>
+  ${buildSignature(order.senderCnpj)}
 </body>
 </html>`
 
