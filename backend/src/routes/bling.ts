@@ -714,18 +714,41 @@ router.post('/backfill-link-danfe', async (req: Request, res: Response) => {
     where, select: { id: true, nfNumber: true, senderCnpj: true, orderNumber: true },
     take: orderNumber ? 1 : 500,
   })
+  if (orders.length === 0) return res.json({ message: 'Nada para preencher', atualizados: 0, semDados: 0, total: 0 })
+
+  // Mapa numero→blingId paginando a listagem por empresa (mesmo método do backfill-recipient)
+  const nfNumbersNeeded = new Set(orders.map(o => String(parseInt(o.nfNumber!, 10))))
+  const idMap: Record<string, number> = {} // chave: `${numSemZero}|${cnpj}`
+  const dataInicio = new Date(); dataInicio.setDate(dataInicio.getDate() - 365)
+  const dataInicioStr = dataInicio.toISOString().slice(0, 10)
+
+  for (const companyKey of connectedCompanies) {
+    const company = COMPANIES[companyKey]
+    let pagina = 1
+    while (true) {
+      try {
+        const data = (await blingGet(companyKey, `/nfe?pagina=${pagina}&limite=100&dataEmissaoInicial=${dataInicioStr}`)) as BlingListResponse
+        const nfes = data?.data ?? []
+        if (nfes.length === 0) break
+        for (const nf of nfes) {
+          const num = String(parseInt(String(nf.numero), 10))
+          if (nfNumbersNeeded.has(num) && nf.id) idMap[`${num}|${company.cnpj}`] = nf.id
+        }
+        if (nfes.length < 100) break
+        pagina++
+        await new Promise((r) => setTimeout(r, 300))
+      } catch { break }
+    }
+  }
 
   let atualizados = 0, semDados = 0
   for (const order of orders) {
+    const num = String(parseInt(order.nfNumber!, 10))
     const companyKey = order.senderCnpj ? cnpjToKey[order.senderCnpj] : undefined
-    if (!companyKey || !order.nfNumber) { semDados++; continue }
+    const blingId = idMap[`${num}|${order.senderCnpj}`]
+    if (!companyKey || !blingId) { semDados++; continue }
     try {
-      // Busca a NF pelo número para obter o ID interno do Bling
-      const numSemZero = String(parseInt(order.nfNumber, 10))
-      const list = (await blingGet(companyKey, `/nfe?numero=${numSemZero}&limite=5`)) as BlingListResponse
-      const found = (list?.data ?? []).find(n => String(parseInt(String(n.numero), 10)) === numSemZero)
-      if (!found?.id) { semDados++; continue }
-      const detail = (await blingGet(companyKey, `/nfe/${found.id}`)) as BlingNFeDetailResponse
+      const detail = (await blingGet(companyKey, `/nfe/${blingId}`)) as BlingNFeDetailResponse
       const linkDanfe = detail?.data?.linkDanfe ?? null
       if (!linkDanfe) { semDados++; continue }
       await prisma.order.update({ where: { id: order.id }, data: { linkDanfe } })
