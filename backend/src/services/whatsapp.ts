@@ -35,22 +35,55 @@ export async function sendMessage(company: WppCompany, phone: string, message: s
     return { ok: false, error: `WhatsApp ${company} não está conectado (status: ${inst?.status ?? 'não iniciado'})` }
   }
 
-  const digits = phone.replace(/\D/g, '')
+  // Gera os dois formatos possíveis: com e sem o dígito 9 extra (migração BR)
+  const candidates = normalizeBrPhone(phone)
 
   try {
-    const results = await inst.sock.onWhatsApp(digits)
-    const result = Array.isArray(results) ? results[0] : null
-    if (!result?.exists) {
-      return { ok: false, error: 'Número não encontrado no WhatsApp' }
+    // Tenta cada formato até achar um que existe no WhatsApp
+    for (const candidate of candidates) {
+      const results = await inst.sock.onWhatsApp(candidate)
+      const result = Array.isArray(results) ? results[0] : null
+      if (result?.exists) {
+        const jid = result.jid ?? `${candidate}@s.whatsapp.net`
+        await inst.sock.sendMessage(jid, { text: message })
+        return { ok: true }
+      }
     }
-    // Usa o JID retornado pelo onWhatsApp (mais confiável que construir manualmente)
-    const jid = result.jid ?? `${digits}@s.whatsapp.net`
-    console.log(`[WhatsApp] Enviando para JID: ${jid}`)
-    await inst.sock.sendMessage(jid, { text: message })
-    return { ok: true }
+    return { ok: false, error: 'Número não encontrado no WhatsApp' }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     return { ok: false, error: msg }
+  }
+}
+
+/**
+ * Gera os dois formatos brasileiros de um número de celular:
+ * novo (com 9) e antigo (sem 9), ambos com código de país 55.
+ *
+ * Exemplos:
+ *   "554991885757"  → ["554991885757",  "5549991885757"]  (antigo → tenta novo também)
+ *   "5549991885757" → ["5549991885757", "554991885757"]   (novo → tenta antigo também)
+ *   "49991885757"   → ["5549991885757", "554991885757"]
+ *   "4991885757"    → ["554991885757",  "5549991885757"]
+ */
+function normalizeBrPhone(raw: string): string[] {
+  const d = raw.replace(/\D/g, '')
+
+  // Remove código de país se presente
+  let local = d.startsWith('55') && d.length > 11 ? d.slice(2) : d
+
+  // Precisa de pelo menos DDD (2) + número (8 ou 9)
+  if (local.length < 10 || local.length > 11) return [`55${local}`]
+
+  const ddd = local.slice(0, 2)
+  const num = local.slice(2) // 8 ou 9 dígitos
+
+  if (num.length === 8) {
+    // Formato antigo: adiciona 9 para gerar o novo
+    return [`55${ddd}${num}`, `55${ddd}9${num}`]
+  } else {
+    // num.length === 9 — formato novo (começa com 9): remove para gerar o antigo
+    return [`55${ddd}${num}`, `55${ddd}${num.slice(1)}`]
   }
 }
 

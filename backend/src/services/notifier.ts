@@ -72,15 +72,14 @@ function buildSignature(senderCnpj: string | null): string {
   </table>`
 }
 
-// Valida celular brasileiro: DDD (2 dígitos) + 9 + 8 dígitos = 11 dígitos
-// Aceita também o formato antigo sem o 9 (10 dígitos), mas celulares SP/RJ sempre têm 9
+// Valida celular brasileiro — aceita ambos os formatos (com ou sem dígito 9 extra)
+// A normalização dos dois formatos é feita no sendMessage via normalizeBrPhone
 function isMobilePhone(digits: string): boolean {
   if (!digits) return false
   const d = digits.replace(/\D/g, '')
-  // Com código do país 55: 55 + 11 dígitos = 13; sem: 11 dígitos
   const local = d.startsWith('55') ? d.slice(2) : d
-  if (local.length === 11) return local[2] === '9'   // DDD + 9XXXXXXXX
-  if (local.length === 10) return true               // DDD + 8 dígitos (celular antigo)
+  if (local.length === 11) return true  // DDD + 9 + 8 dígitos (formato novo)
+  if (local.length === 10) return true  // DDD + 8 dígitos (formato antigo sem 9)
   return false
 }
 
