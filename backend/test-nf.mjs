@@ -2,28 +2,16 @@
  * railway run node backend/test-nf.mjs
  */
 import { PrismaClient } from '@prisma/client'
-import { createCipheriv, createHash, randomBytes } from 'crypto'
 
 const prisma = new PrismaClient()
-const SM_APP_KEY = 'Sx8AHhuIpDZYfY5GlzOzrlG1fYlhl4HD'
-const SM_API_URL = process.env.SM_PROXY_URL || 'https://srv.expressosaomiguel.com.br:40490/api-portal-cliente/tracks'
 
-function smCreateToken() {
-  const payload = JSON.stringify({ message: 'esm_decripter', expired_in: new Date(Date.now() + 5 * 60 * 1000).toISOString() })
-  const salt = randomBytes(8)
-  let derived = Buffer.alloc(0), block = Buffer.alloc(0)
-  while (derived.length < 48) {
-    const h = createHash('md5'); h.update(block); h.update(Buffer.from(SM_APP_KEY, 'utf8')); h.update(salt)
-    block = h.digest(); derived = Buffer.concat([derived, block])
-  }
-  const key = derived.subarray(0, 32), iv = derived.subarray(32, 48)
-  const c = createCipheriv('aes-256-cbc', key, iv)
-  const enc = Buffer.concat([c.update(payload, 'utf8'), c.final()])
-  return Buffer.concat([Buffer.from('Salted__'), salt, enc]).toString('base64')
-}
+const ATUAL_LOGIN_URL = 'https://cliente.atualcargas.com.br/api/cadastro/login'
+const ATUAL_LIST_URL  = 'https://cliente.atualcargas.com.br/api/rastreamento/senha/lista-encomendas'
+const ATUAL_DOCUMENT  = process.env.ATUAL_CARGAS_DOCUMENT ?? '47715256000149'
+const ATUAL_PASSWORD  = process.env.ATUAL_CARGAS_PASSWORD ?? '925196'
 
 const order = await prisma.order.findFirst({
-  where: { nfNumber: { in: ['3039', '003039'] }, senderCnpj: { contains: '54695386' } },
+  where: { nfNumber: { in: ['9116', '009116'] }, orderNumber: { startsWith: 'AVIC' } },
   include: { carrier: true },
 })
 
@@ -37,30 +25,100 @@ console.log('Status:', order.status)
 console.log('Carrier:', order.carrier?.name, '|', order.carrier?.trackingSystem)
 console.log('lastTracking:', order.lastTracking)
 console.log('senderCnpj:', order.senderCnpj)
-console.log('recipientCnpj:', order.recipientCnpj)
+console.log('nfNumber:', order.nfNumber)
 
-if (order.carrier?.trackingSystem === 'SAO_MIGUEL') {
-  const cnpj = order.senderCnpj?.replace(/\D/g, '') ?? ''
-  const nf = String(parseInt(order.nfNumber ?? '0', 10))
-  console.log(`\nTestando SM API: CNPJ=${cnpj} NF=${nf}`)
+const cnpj = order.senderCnpj?.replace(/\D/g, '') ?? ''
+const nfBusca = String(parseInt(order.nfNumber ?? '0', 10))
+console.log(`\nCNPJ limpo: ${cnpj}`)
+console.log(`NF buscada: ${nfBusca}`)
 
-  const token = smCreateToken()
-  const res = await fetch(SM_API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json; charset=UTF-8',
-      'Authorization': `Bearer ${token}`,
-      'Origin': 'https://portaldocliente.expressosaomiguel.com.br',
-      'Referer': 'https://portaldocliente.expressosaomiguel.com.br/',
-    },
-    body: JSON.stringify({ cpfcnpj: cnpj, numberdocument: nf, serie: '', documentType: 'NFE' }),
+// Login
+console.log('\nFazendo login na Atual Cargas...')
+const loginRes = await fetch(ATUAL_LOGIN_URL, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ document: ATUAL_DOCUMENT, password: ATUAL_PASSWORD }),
+  signal: AbortSignal.timeout(15000),
+})
+console.log('Login HTTP:', loginRes.status)
+
+if (!loginRes.ok) {
+  console.log('Erro no login:', await loginRes.text())
+  process.exit(1)
+}
+
+const setCookie = loginRes.headers.get('set-cookie') ?? ''
+const match = setCookie.match(/painel-cliente\/iron-session=([^;]+)/)
+if (!match) {
+  console.log('Cookie não encontrado. set-cookie:', setCookie.substring(0, 200))
+  process.exit(1)
+}
+const cookie = `painel-cliente/iron-session=${match[1]}`
+console.log('Login OK')
+
+// Busca lista por CNPJ remetente
+const url = new URL(ATUAL_LIST_URL)
+url.searchParams.set('cnpj', cnpj)
+url.searchParams.set('tipo', 'remetente')
+console.log(`\nBuscando lista: ${url.toString()}`)
+
+const listRes = await fetch(url.toString(), {
+  headers: { Cookie: cookie },
+  signal: AbortSignal.timeout(15000),
+})
+console.log('Lista HTTP:', listRes.status)
+
+if (!listRes.ok) {
+  console.log('Erro na lista:', await listRes.text())
+  process.exit(1)
+}
+
+const data = await listRes.json()
+const list = data.encomendasList ?? []
+console.log(`Total de encomendas retornadas: ${list.length}`)
+
+if (list.length > 0) {
+  console.log('\nPrimeiras 5 encomendas (campo notaFiscal):')
+  list.slice(0, 5).forEach((e, i) => {
+    console.log(`  [${i}] notaFiscal="${e.notaFiscal}" situacao="${e.situacao}" titulo="${e.tituloOcorrencia}"`)
+  })
+}
+
+// Tenta encontrar NF 3167
+const found = list.find((e) => {
+  const partes = (e.notaFiscal ?? '').trim().split(/\s+/)
+  const nfNum = String(parseInt(partes[partes.length - 1] ?? '0', 10))
+  return nfNum === nfBusca
+})
+
+if (found) {
+  console.log('\n✅ NF encontrada:')
+  console.log(JSON.stringify(found, null, 2))
+} else {
+  console.log(`\n❌ NF ${nfBusca} NÃO encontrada na lista`)
+  console.log('\nTentando busca por destinatário...')
+  const url2 = new URL(ATUAL_LIST_URL)
+  url2.searchParams.set('cnpj', cnpj)
+  url2.searchParams.set('tipo', 'destinatario')
+  const listRes2 = await fetch(url2.toString(), {
+    headers: { Cookie: cookie },
     signal: AbortSignal.timeout(15000),
   })
-  const text = await res.text()
-  console.log('HTTP:', res.status)
-  console.log('Resposta:', text.substring(0, 500))
-} else {
-  console.log('\nNão é São Miguel — carrier diferente, não testei API')
+  const data2 = await listRes2.json()
+  const list2 = data2.encomendasList ?? []
+  console.log(`Total como destinatário: ${list2.length}`)
+  const found2 = list2.find((e) => {
+    const partes = (e.notaFiscal ?? '').trim().split(/\s+/)
+    const nfNum = String(parseInt(partes[partes.length - 1] ?? '0', 10))
+    return nfNum === nfBusca
+  })
+  if (found2) {
+    console.log('✅ Encontrada como DESTINATÁRIO:')
+    console.log(JSON.stringify(found2, null, 2))
+    console.log('\n⚠️  A query usa tipo=remetente mas a NF está registrada como destinatário!')
+  } else {
+    console.log('❌ Não encontrada como destinatário também')
+  }
 }
 
 await prisma.$disconnect()

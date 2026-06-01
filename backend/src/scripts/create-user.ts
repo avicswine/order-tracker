@@ -20,7 +20,7 @@ async function main() {
 
   const hashed = await bcrypt.hash(password, 12)
   const user = await prisma.user.create({
-    data: { name, email, password: hashed, role: userRole },
+    data: { name, email, password: hashed, role: userRole, active: true },
     select: { id: true, name: true, email: true, role: true },
   })
 
