@@ -889,5 +889,27 @@ interface BlingNFeDetailResponse {
   }
 }
 
+// POST /api/bling/cleanup-none-carriers
+// Remove pedidos PENDING com transportadoras sem API (trackingSystem=NONE) e sem eventos de rastreio
+router.post('/cleanup-none-carriers', async (_req: Request, res: Response) => {
+  const { TrackingSystem } = await import('@prisma/client')
+  const pedidos = await prisma.order.findMany({
+    where: {
+      status: 'PENDING',
+      lastTracking: null,
+      carrier: { trackingSystem: TrackingSystem.NONE },
+    },
+    select: { id: true, orderNumber: true },
+  })
+
+  if (pedidos.length === 0) return res.json({ message: 'Nenhum pedido para limpar.', removidos: 0 })
+
+  const ids = pedidos.map(p => p.id)
+  await prisma.order.deleteMany({ where: { id: { in: ids } } })
+
+  console.log(`[Cleanup] ${pedidos.length} pedidos PENDING sem rastreio removidos (carriers NONE)`)
+  res.json({ message: 'Limpeza concluída', removidos: pedidos.length, exemplos: pedidos.slice(0, 5).map(p => p.orderNumber) })
+})
+
 export { publicRouter as blingPublicRouter }
 export default router
