@@ -911,5 +911,41 @@ router.post('/cleanup-none-carriers', async (_req: Request, res: Response) => {
   res.json({ message: 'Limpeza concluída', removidos: pedidos.length, exemplos: pedidos.slice(0, 5).map(p => p.orderNumber) })
 })
 
+// POST /api/bling/mark-old-pending-delivered
+// Marca como DELIVERED pedidos PENDING sem rastreio emitidos antes de uma data de corte
+router.post('/mark-old-pending-delivered', async (req: Request, res: Response) => {
+  const cutoffStr = (req.body as { cutoff?: string }).cutoff ?? '2026-04-01'
+  const cutoff = new Date(cutoffStr)
+
+  const orders = await prisma.order.findMany({
+    where: {
+      status: 'PENDING',
+      lastTracking: null,
+      shippedAt: null,
+      nfIssuedAt: { lt: cutoff },
+    },
+    select: { id: true, orderNumber: true, nfIssuedAt: true },
+  })
+
+  if (orders.length === 0) return res.json({ message: 'Nenhum pedido para marcar.', marcados: 0 })
+
+  for (const order of orders) {
+    await prisma.order.update({
+      where: { id: order.id },
+      data: {
+        status: 'DELIVERED',
+        deliveredAt: new Date(),
+        lastTracking: 'Marcado como entregue (NF antiga sem dados de rastreio disponíveis)',
+        statusHistory: {
+          create: { status: 'DELIVERED', note: `NF emitida em ${order.nfIssuedAt?.toLocaleDateString('pt-BR')} — marcada automaticamente após 60+ dias sem rastreio` }
+        }
+      }
+    })
+  }
+
+  console.log(`[Admin] ${orders.length} pedidos antigos marcados como ENTREGUE (corte: ${cutoffStr})`)
+  res.json({ message: 'Concluído', marcados: orders.length, cutoff: cutoffStr, exemplos: orders.slice(0, 5).map(o => o.orderNumber) })
+})
+
 export { publicRouter as blingPublicRouter }
 export default router
