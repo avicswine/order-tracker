@@ -888,7 +888,7 @@ export async function trackSaoMiguel(
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
     },
     body: JSON.stringify({ cpfcnpj: usarCnpj, numberdocument: nf, serie: '', documentType: 'NFE' }),
-    signal: AbortSignal.timeout(15000),
+    signal: AbortSignal.timeout(30000),
   })
 
   if (!response.ok) {
