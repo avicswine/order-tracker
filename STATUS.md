@@ -1,6 +1,6 @@
 # STATUS — Order Tracker
 
-Última atualização: 2026-05-31 (sessão 16)
+Última atualização: 2026-06-01 (sessão 16 — revisão final)
 
 ## Estado atual
 Aplicação funcional com autenticação JWT (ADMIN/VIEWER), em produção no Railway.
