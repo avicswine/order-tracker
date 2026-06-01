@@ -18,6 +18,7 @@ interface WppInstance {
   qrDataUrl: string | null
   numero: string | null
   reconnecting: boolean
+  reconnectAttempts: number
 }
 
 const instances: Partial<Record<WppCompany, WppInstance>> = {}
@@ -133,7 +134,15 @@ async function startInstance(company: WppCompany): Promise<void> {
       await backupSessionToDb(company, authDir)
     }
 
-    const { version } = await fetchLatestBaileysVersion()
+    // Versão fixa evita chamada HTTP ao GitHub em cada reconexão
+    // (fetchLatestBaileysVersion pode falhar/rate-limit e causar drop)
+    let version: [number, number, number] = [2, 3000, 1015901307]
+    try {
+      const fetched = await fetchLatestBaileysVersion()
+      version = fetched.version
+    } catch {
+      console.warn(`[WhatsApp/${company}] fetchLatestBaileysVersion falhou — usando versão fallback`)
+    }
     console.log(`[WhatsApp/${company}] Baileys v${version.join('.')} — conectando...`)
 
     // pino silent para não poluir os logs
@@ -149,7 +158,13 @@ async function startInstance(company: WppCompany): Promise<void> {
       },
       printQRInTerminal: false,
       logger,
-      browser: ['OrderTracker', 'Chrome', '120.0.0'],
+      browser: ['Ubuntu', 'Chrome', '120.0.0'],
+      syncFullHistory: false,
+      markOnlineOnConnect: false,
+      keepAliveIntervalMs: 30_000,
+      connectTimeoutMs: 60_000,
+      // Evita drops por pedidos de retry de mensagens sem store
+      getMessage: async () => undefined,
     })
 
     inst.sock = sock
@@ -172,6 +187,7 @@ async function startInstance(company: WppCompany): Promise<void> {
       if (connection === 'open') {
         inst.status = 'pronto'
         inst.qrDataUrl = null
+        inst.reconnectAttempts = 0
         const num = sock.user?.id?.split(':')[0] ?? null
         inst.numero = num ? formatNumber(num) : null
         console.log(`[WhatsApp/${company}] ✅ Conectado — ${inst.numero ?? 'número desconhecido'}`)
@@ -193,10 +209,14 @@ async function startInstance(company: WppCompany): Promise<void> {
 
         if (!inst.reconnecting) {
           inst.reconnecting = true
+          if (!loggedOut) inst.reconnectAttempts++
+          // Backoff exponencial: 5s, 10s, 20s, 40s... máx 120s
+          const delay = loggedOut ? 1000 : Math.min(5000 * Math.pow(2, inst.reconnectAttempts - 1), 120_000)
+          console.log(`[WhatsApp/${company}] Reconectando em ${delay / 1000}s (tentativa ${inst.reconnectAttempts})`)
           setTimeout(async () => {
             inst.reconnecting = false
             await startInstance(company)
-          }, loggedOut ? 1000 : 5000)
+          }, delay)
         }
       }
     })
@@ -205,10 +225,12 @@ async function startInstance(company: WppCompany): Promise<void> {
     inst.status = 'desconectado'
     if (!inst.reconnecting) {
       inst.reconnecting = true
+      inst.reconnectAttempts++
+      const delay = Math.min(5000 * Math.pow(2, inst.reconnectAttempts - 1), 120_000)
       setTimeout(async () => {
         inst.reconnecting = false
         await startInstance(company)
-      }, 10_000)
+      }, delay)
     }
   }
 }
@@ -216,7 +238,7 @@ async function startInstance(company: WppCompany): Promise<void> {
 export function initWhatsApp() {
   console.log('[WhatsApp] Iniciando instâncias AVIC e AGRO (Baileys)...')
   for (const company of ['avic', 'agro'] as WppCompany[]) {
-    instances[company] = { sock: null, status: 'iniciando', qrDataUrl: null, numero: null, reconnecting: false }
+    instances[company] = { sock: null, status: 'iniciando', qrDataUrl: null, numero: null, reconnecting: false, reconnectAttempts: 0 }
     startInstance(company).catch(err =>
       console.error(`[WhatsApp/${company}] Falha ao iniciar:`, err?.message)
     )
