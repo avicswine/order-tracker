@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express'
 import { prisma } from '../lib/prisma'
-import { notifyOrderUpdate } from '../services/notifier'
+import { notifyBatchEnviado } from '../services/notifier'
 
 const router = Router()
 
@@ -55,7 +55,11 @@ router.post('/batch-enviado', async (_req: Request, res: Response) => {
       lastTracking: { not: null },
       notifications: { none: { success: true } },
     },
-    include: { carrier: { select: { name: true } } },
+    select: {
+      id: true, orderNumber: true, nfNumber: true,
+      customerName: true, customerEmail: true, customerPhone: true,
+      senderCnpj: true, shippedAt: true, estimatedDelivery: true,
+    },
   })
 
   res.json({ message: `Disparando ENVIADO para ${orders.length} pedidos...`, total: orders.length })
@@ -65,9 +69,8 @@ router.post('/batch-enviado', async (_req: Request, res: Response) => {
     let enviados = 0, pulados = 0
     for (const order of orders) {
       try {
-        await notifyOrderUpdate(order)
+        await notifyBatchEnviado(order)
         enviados++
-        // Pequeno delay para não sobrecarregar o WhatsApp
         await new Promise(r => setTimeout(r, 500))
       } catch (err) {
         pulados++

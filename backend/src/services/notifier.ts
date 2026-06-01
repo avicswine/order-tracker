@@ -341,3 +341,62 @@ export async function notifyOrderUpdate(order: {
   const tag = delivered ? '✅ ENTREGUE' : isFirstEver ? '🚚 ENVIADO' : '📦 Atualização'
   console.log(`[Notifier] ${tag} → ${order.orderNumber}`)
 }
+
+// ─── BATCH ENVIADO (uso único) ───────────────────────────────────────────────
+// Mensagem especial para pedidos IN_TRANSIT que nunca foram notificados.
+// Inclui data real do envio (shippedAt = emissão do CT-e) e previsão.
+export async function notifyBatchEnviado(order: {
+  id: string
+  orderNumber: string
+  nfNumber: string | null
+  customerName: string
+  customerEmail: string | null
+  customerPhone: string | null
+  senderCnpj: string | null
+  shippedAt: Date | null
+  estimatedDelivery: Date | null
+}): Promise<void> {
+  // Deduplicação — usa hash fixo para esse batch
+  const eventHash = hashEvent(order.id, 'BATCH_ENVIADO')
+  const already = await prisma.orderNotification.findUnique({
+    where: { orderId_eventHash: { orderId: order.id, eventHash } },
+  })
+  if (already) return
+
+  const nf = order.nfNumber ? String(parseInt(order.nfNumber, 10)) : order.orderNumber
+  const primeiroNome = order.customerName.split(' ')[0]
+  const dataEnvio = order.shippedAt ? formatDate(order.shippedAt) : null
+  const previsao = order.estimatedDelivery ? formatDate(order.estimatedDelivery) : null
+  const rodape = `\nPara acompanhar o rastreio, basta acessar o link:\n${PORTAL_URL}\n\nE digitar o seu CPF ou CNPJ.\nAgradecemos a preferência. 🙏`
+
+  const linhaEnvio = dataEnvio
+    ? `Seu pedido NF ${nf} foi enviado no dia ${dataEnvio}.`
+    : `Seu pedido NF ${nf} já está a caminho.`
+
+  const wppMessage = `*ENVIADO* 🚚\nOlá, ${primeiroNome}!\n\n${linhaEnvio}${previsao ? `\n\n📅 Previsão de entrega: ${previsao}.` : ''}${rodape}`
+
+  const emailHtml = `<!DOCTYPE html>
+<html>
+<body style="font-family:Arial,sans-serif;max-width:600px;margin:0;padding:20px;color:#333;text-align:left">
+  <h2 style="color:#111">Pedido enviado 🚚</h2>
+  <p>Olá, ${primeiroNome}!</p>
+  <p>${linhaEnvio}</p>
+  ${previsao ? `<p>📅 <strong>Previsão de entrega:</strong> ${previsao}</p>` : ''}
+  <p>Para acompanhar o rastreio:<br>
+    <a href="${PORTAL_URL}" style="color:#1d4ed8">${PORTAL_URL}</a><br>
+    Digite seu CPF ou CNPJ.
+  </p>
+  <p style="color:#64748b;font-size:13px">Agradecemos a preferência! 🙏</p>
+  ${buildSignature(order.senderCnpj)}
+</body>
+</html>`
+
+  const subject = `Seu pedido foi enviado — NF ${nf}`
+
+  await dispatch(
+    order.id, eventHash, subject, wppMessage, emailHtml,
+    { phone: order.customerPhone, email: order.customerEmail, senderCnpj: order.senderCnpj },
+    'BATCH_ENVIADO'
+  )
+  console.log(`[Notifier] 🚚 BATCH_ENVIADO → ${order.orderNumber}${dataEnvio ? ` (enviado em ${dataEnvio})` : ''}`)
+}
