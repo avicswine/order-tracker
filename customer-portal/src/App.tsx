@@ -27,7 +27,7 @@ interface Order {
 }
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
-  PENDING: 'Pendente',
+  PENDING: 'Faturado',
   IN_TRANSIT: 'Em Trânsito',
   DELIVERED: 'Entregue',
   CANCELLED: 'Cancelado',

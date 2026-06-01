@@ -45,7 +45,7 @@ export function formatDateTime(date: string | null | undefined) {
 }
 
 export const STATUS_LABELS: Record<OrderStatus, string> = {
-  PENDING: 'Pendente',
+  PENDING: 'Faturado',
   IN_TRANSIT: 'Em Trânsito',
   DELIVERED: 'Entregue',
   CANCELLED: 'Cancelado',

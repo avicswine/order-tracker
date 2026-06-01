@@ -336,7 +336,7 @@ export function RankingPage() {
                   <td className="px-4 py-3">
                     <p className="font-medium text-gray-900">{row.carrierName}</p>
                     <p className="text-xs text-gray-400 mt-0.5">
-                      {row.pending} pendente{row.pending !== 1 ? 's' : ''} · {row.inTransit} em trânsito · {row.cancelled} cancelado{row.cancelled !== 1 ? 's' : ''}
+                      {row.pending} faturado{row.pending !== 1 ? 's' : ''} · {row.inTransit} em trânsito · {row.cancelled} cancelado{row.cancelled !== 1 ? 's' : ''}
                     </p>
                   </td>
                   <td className="px-4 py-3 text-right font-semibold text-gray-900">{row.total}</td>

@@ -5,7 +5,7 @@ import type { OrderFilters } from '../../types'
 
 const cards: { key: string; label: string; color: string; bg: string; ring: string; icon: string }[] = [
   { key: 'TOTAL',      label: 'Total de Pedidos', color: 'text-gray-700',   bg: 'bg-gray-100',   ring: 'ring-gray-400',   icon: '📦' },
-  { key: 'PENDING',    label: 'Pendentes',         color: 'text-yellow-700', bg: 'bg-yellow-50',  ring: 'ring-yellow-400', icon: '⏳' },
+  { key: 'PENDING',    label: 'Faturados',          color: 'text-yellow-700', bg: 'bg-yellow-50',  ring: 'ring-yellow-400', icon: '🧾' },
   { key: 'IN_TRANSIT', label: 'Em Trânsito',       color: 'text-blue-700',   bg: 'bg-blue-50',    ring: 'ring-blue-400',   icon: '🚚' },
   { key: 'DELIVERED',  label: 'Entregues',          color: 'text-green-700',  bg: 'bg-green-50',   ring: 'ring-green-400',  icon: '✅' },
   { key: 'CANCELLED',  label: 'Cancelados',         color: 'text-red-700',    bg: 'bg-red-50',     ring: 'ring-red-400',    icon: '❌' },
