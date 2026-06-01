@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express'
 import { prisma } from '../lib/prisma'
+import { notifyOrderUpdate } from '../services/notifier'
 
 const router = Router()
 
@@ -41,6 +42,40 @@ router.delete('/', async (req: Request, res: Response) => {
   if (!recipient) return res.status(400).json({ error: 'Informe o recipient.' })
   const result = await prisma.orderNotification.deleteMany({ where: { recipient } })
   res.json({ ok: true, removidos: result.count, recipient })
+})
+
+// POST /api/notifications/batch-enviado
+// Envia notificação ENVIADO para todos os pedidos IN_TRANSIT sem notificação prévia.
+// A deduplicação garante que cada pedido recebe apenas uma vez.
+router.post('/batch-enviado', async (_req: Request, res: Response) => {
+  // Busca IN_TRANSIT sem nenhuma notificação bem-sucedida
+  const orders = await prisma.order.findMany({
+    where: {
+      status: 'IN_TRANSIT',
+      lastTracking: { not: null },
+      notifications: { none: { success: true } },
+    },
+    include: { carrier: { select: { name: true } } },
+  })
+
+  res.json({ message: `Disparando ENVIADO para ${orders.length} pedidos...`, total: orders.length })
+
+  // Fire-and-forget — processa em background sem bloquear a resposta
+  setImmediate(async () => {
+    let enviados = 0, pulados = 0
+    for (const order of orders) {
+      try {
+        await notifyOrderUpdate(order)
+        enviados++
+        // Pequeno delay para não sobrecarregar o WhatsApp
+        await new Promise(r => setTimeout(r, 500))
+      } catch (err) {
+        pulados++
+        console.error(`[BatchEnviado] Erro em ${order.orderNumber}:`, err instanceof Error ? err.message : err)
+      }
+    }
+    console.log(`[BatchEnviado] Concluído: ${enviados} enviados, ${pulados} erros de ${orders.length} pedidos`)
+  })
 })
 
 export default router

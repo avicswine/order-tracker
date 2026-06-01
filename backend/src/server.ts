@@ -15,6 +15,7 @@ import whatsappRouter from './routes/whatsapp'
 import notificationsRouter from './routes/notifications'
 import { requireAuth } from './middleware/auth'
 import { initWhatsApp, destroyAll } from './services/whatsapp'
+import { prisma } from './lib/prisma'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -93,6 +94,35 @@ app.listen(Number(PORT), '0.0.0.0', () => {
     console.log(`[Cron] Rastreamento concluído — atualizados: ${tracking.atualizados}, erros: ${tracking.erros}, total: ${tracking.total}`)
   })
   console.log('[Cron] Sync automático agendado a cada 2 horas (Bling + rastreamento)')
+
+  // Notificação ENVIADO às 08:00 — avisa clientes com pedido IN_TRANSIT sem notificação prévia
+  cron.schedule('0 8 * * *', async () => {
+    console.log('[Cron] Disparando batch ENVIADO para pedidos IN_TRANSIT...')
+    try {
+      const { notifyOrderUpdate } = await import('./services/notifier')
+      const orders = await prisma.order.findMany({
+        where: {
+          status: 'IN_TRANSIT',
+          lastTracking: { not: null },
+          notifications: { none: { success: true } },
+        },
+        include: { carrier: { select: { name: true } } },
+      })
+      console.log(`[Cron] Batch ENVIADO: ${orders.length} pedidos para notificar`)
+      let enviados = 0
+      for (const order of orders) {
+        try {
+          await notifyOrderUpdate(order)
+          enviados++
+          await new Promise(r => setTimeout(r, 500))
+        } catch { /* ignora erros individuais */ }
+      }
+      console.log(`[Cron] Batch ENVIADO concluído: ${enviados}/${orders.length}`)
+    } catch (err) {
+      console.error('[Cron] Erro no batch ENVIADO:', err instanceof Error ? err.message : err)
+    }
+  }, { timezone: 'America/Sao_Paulo' })
+  console.log('[Cron] Batch ENVIADO agendado para 08:00 (America/Sao_Paulo)')
 })
 
 export default app
