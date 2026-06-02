@@ -65,4 +65,23 @@ router.get('/me', requireAuth, async (req: Request, res: Response) => {
   res.json(user)
 })
 
+// PATCH /api/auth/reset-password — altera senha de qualquer usuário (só ADMIN)
+router.patch('/reset-password', requireAuth, [
+  body('email').isEmail(),
+  body('newPassword').isLength({ min: 6 }),
+], async (req: Request, res: Response) => {
+  if (req.user?.role !== 'ADMIN') return res.status(403).json({ error: 'Apenas admin' })
+  const errors = validationResult(req)
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() })
+
+  const { email, newPassword } = req.body as { email: string; newPassword: string }
+  const hashed = await bcrypt.hash(newPassword, 12)
+  const user = await prisma.user.update({
+    where: { email },
+    data: { password: hashed, active: true },
+    select: { id: true, name: true, email: true, role: true },
+  })
+  res.json({ ok: true, user })
+})
+
 export default router
