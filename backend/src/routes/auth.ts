@@ -76,9 +76,10 @@ router.patch('/reset-password', requireAuth, [
 
   const { email, newPassword } = req.body as { email: string; newPassword: string }
   const hashed = await bcrypt.hash(newPassword, 12)
-  const user = await prisma.user.update({
+  const user = await prisma.user.upsert({
     where: { email },
-    data: { password: hashed, active: true },
+    update: { password: hashed, active: true },
+    create: { name: email.split('@')[0], email, password: hashed, role: 'VIEWER', active: true },
     select: { id: true, name: true, email: true, role: true },
   })
   res.json({ ok: true, user })
