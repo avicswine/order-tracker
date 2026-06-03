@@ -246,6 +246,15 @@ export function initWhatsApp() {
   }
 }
 
+export async function stopInstance(company: WppCompany) {
+  const inst = instances[company]
+  if (inst?.sock) {
+    try { await inst.sock.end(undefined) } catch { /* ignora */ }
+    inst.sock = null
+  }
+  if (inst) { inst.status = 'desconectado'; inst.reconnecting = true }
+}
+
 export async function restartInstance(company: WppCompany) {
   const inst = instances[company]
   if (inst?.sock) {

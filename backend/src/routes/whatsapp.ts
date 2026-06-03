@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express'
-import { getStatus, restartInstance, logoutInstance, sendMessage, type WppCompany } from '../services/whatsapp'
+import { getStatus, restartInstance, logoutInstance, sendMessage, stopInstance, type WppCompany } from '../services/whatsapp'
 import { prisma } from '../lib/prisma'
 import { notifyOrderUpdate, notifyFaturado } from '../services/notifier'
 
@@ -26,6 +26,17 @@ router.get('/status/:company', (req: Request, res: Response) => {
   const company = parseCompany(req.params.company)
   if (!company) return res.status(400).json({ error: 'Empresa inválida. Use avic ou agro.' })
   res.json(getStatus(company))
+})
+
+// POST /api/whatsapp/limpar-sessao/:company — apaga sessão do banco e para instância
+router.post('/limpar-sessao/:company', async (req: Request, res: Response) => {
+  const company = parseCompany(req.params.company)
+  if (!company) return res.status(400).json({ error: 'Empresa inválida.' })
+  await stopInstance(company)
+  // Apaga do banco diretamente
+  await prisma.whatsappSession.deleteMany({ where: { company } })
+  console.log(`[WhatsApp/${company}] Sessão removida do banco — instância parada`)
+  res.json({ ok: true, message: `Sessão ${company} removida. Reinicie manualmente quando pronto.` })
 })
 
 // POST /api/whatsapp/reiniciar/:company
