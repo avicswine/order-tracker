@@ -130,7 +130,9 @@ async function startInstance(company: WppCompany): Promise<void> {
     const { state, saveCreds: baileySaveCreds } = await useMultiFileAuthState(authDir)
 
     // Envolve saveCreds para também fazer backup no banco
+    // Só salva se o sock ainda está ativo (evita salvar sessão inválida após logout/stop)
     const saveCreds = async () => {
+      if (inst.sock === null) return  // Instância foi parada — não salvar
       await baileySaveCreds()
       await backupSessionToDb(company, authDir)
     }
@@ -248,27 +250,35 @@ export function initWhatsApp() {
 
 export async function stopInstance(company: WppCompany) {
   const inst = instances[company]
-  if (inst?.sock) {
-    try { await inst.sock.end(undefined) } catch { /* ignora */ }
-    inst.sock = null
+  if (inst) {
+    const sock = inst.sock
+    inst.sock = null            // Nulifica ANTES do end para bloquear eventos pós-close
+    inst.reconnecting = true
+    inst.status = 'desconectado'
+    if (sock) try { await sock.end(undefined) } catch { /* ignora */ }
   }
-  if (inst) { inst.status = 'desconectado'; inst.reconnecting = true }
 }
 
 export async function restartInstance(company: WppCompany) {
   const inst = instances[company]
-  if (inst?.sock) {
-    try { await inst.sock.end(undefined) } catch { /* ignora */ }
+  if (inst) {
+    const sock = inst.sock
+    inst.sock = null            // Bloqueia backups de sessão disparados pelo end()
+    inst.reconnecting = false
+    if (sock) try { await sock.end(undefined) } catch { /* ignora */ }
   }
-  if (inst) inst.reconnecting = false
   await startInstance(company)
 }
 
 export async function logoutInstance(company: WppCompany) {
   const inst = instances[company]
-  if (inst?.sock) {
-    try { await inst.sock.logout() } catch { /* ignora */ }
-    try { await inst.sock.end(undefined) } catch { /* ignora */ }
+  if (inst) {
+    const sock = inst.sock
+    inst.sock = null            // Bloqueia backups de sessão disparados pelo logout/end
+    if (sock) {
+      try { await sock.logout() } catch { /* ignora */ }
+      try { await sock.end(undefined) } catch { /* ignora */ }
+    }
   }
   await clearAuth(company)
   if (inst) inst.reconnecting = false
