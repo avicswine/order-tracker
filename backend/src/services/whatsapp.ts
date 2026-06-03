@@ -88,11 +88,12 @@ function normalizeBrPhone(raw: string): string[] {
   }
 }
 
-function clearAuth(company: WppCompany) {
+async function clearAuth(company: WppCompany) {
   const p = getAuthPath(company)
   try { fs.rmSync(p, { recursive: true, force: true }) } catch { /* ignora */ }
   fs.mkdirSync(p, { recursive: true })
-  clearSessionFromDb(company).catch(() => { /* ignora */ })
+  // Aguarda a limpeza do banco ANTES de iniciar nova instância (evita race condition)
+  await clearSessionFromDb(company).catch(() => { /* ignora */ })
   console.log(`[WhatsApp/${company}] Sessão apagada — novo QR será gerado`)
 }
 
@@ -205,7 +206,7 @@ async function startInstance(company: WppCompany): Promise<void> {
 
         console.log(`[WhatsApp/${company}] Desconectado (${statusCode}) ${loggedOut ? '— sessão encerrada' : '— reconectando...'}`)
 
-        if (loggedOut) clearAuth(company)
+        if (loggedOut) await clearAuth(company)
 
         if (!inst.reconnecting) {
           inst.reconnecting = true
@@ -260,7 +261,7 @@ export async function logoutInstance(company: WppCompany) {
     try { await inst.sock.logout() } catch { /* ignora */ }
     try { await inst.sock.end(undefined) } catch { /* ignora */ }
   }
-  clearAuth(company)
+  await clearAuth(company)
   if (inst) inst.reconnecting = false
   await startInstance(company)
 }
