@@ -505,6 +505,21 @@ router.get('/debug/pedido/:id', async (req: Request, res: Response) => {
   }
 })
 
+// GET /api/bling/debug/lojas - lista as lojas/canais de venda do Bling
+router.get('/debug/lojas', async (_req: Request, res: Response) => {
+  const connected = Object.keys(COMPANIES).filter((key) => !!tokens[key])
+  if (connected.length === 0) return res.status(401).json({ error: 'Não conectado' })
+  const result: Record<string, unknown> = {}
+  for (const companyKey of connected) {
+    try {
+      result[companyKey] = await blingGet(companyKey, '/lojas')
+    } catch (err) {
+      result[companyKey] = { error: String(err) }
+    }
+  }
+  res.json(result)
+})
+
 // GET /api/bling/debug/find/:numero - acha NF por número paginando e retorna id+linkDanfe
 router.get('/debug/find/:numero', async (req: Request, res: Response) => {
   const connected = Object.keys(COMPANIES).filter((key) => !!tokens[key])
