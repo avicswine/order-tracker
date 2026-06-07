@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express'
 import { prisma } from '../lib/prisma'
-import { notifyBatchEnviado } from '../services/notifier'
+import { notifyBatchEnviado, notifyFaturado } from '../services/notifier'
 
 const router = Router()
 
@@ -78,6 +78,40 @@ router.post('/batch-enviado', async (_req: Request, res: Response) => {
       }
     }
     console.log(`[BatchEnviado] Concluído: ${enviados} enviados, ${pulados} erros de ${orders.length} pedidos`)
+  })
+})
+
+// POST /api/notifications/batch-faturado
+// Envia notificação FATURADO para pedidos com NF (status PENDING/Faturado)
+// que ainda não receberam o FATURADO com sucesso.
+router.post('/batch-faturado', async (_req: Request, res: Response) => {
+  const orders = await prisma.order.findMany({
+    where: {
+      status: 'PENDING',
+      nfNumber: { not: null },
+    },
+    select: {
+      id: true, orderNumber: true, nfNumber: true,
+      customerName: true, customerEmail: true, customerPhone: true,
+      senderCnpj: true, linkDanfe: true, nfIssuedAt: true,
+    },
+  })
+
+  res.json({ message: `Disparando FATURADO para até ${orders.length} pedidos...`, total: orders.length })
+
+  setImmediate(async () => {
+    let enviados = 0, pulados = 0
+    for (const order of orders) {
+      try {
+        await notifyFaturado(order)  // dedup interno (success:true) já pula quem recebeu
+        enviados++
+        await new Promise(r => setTimeout(r, 500))
+      } catch (err) {
+        pulados++
+        console.error(`[BatchFaturado] Erro em ${order.orderNumber}:`, err instanceof Error ? err.message : err)
+      }
+    }
+    console.log(`[BatchFaturado] Concluído: ${enviados} processados, ${pulados} erros de ${orders.length} pedidos`)
   })
 })
 
