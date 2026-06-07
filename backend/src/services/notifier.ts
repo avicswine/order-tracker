@@ -116,10 +116,11 @@ async function sentToday(orderId: string): Promise<boolean> {
   return count > 0
 }
 
-// Verifica se esse evento já foi notificado (deduplicação)
+// Verifica se esse evento já foi notificado COM SUCESSO (deduplicação)
+// Falhas não bloqueiam — permite reenvio quando o WhatsApp voltar a conectar
 async function alreadyNotified(orderId: string, eventHash: string): Promise<boolean> {
-  const existing = await prisma.orderNotification.findUnique({
-    where: { orderId_eventHash: { orderId, eventHash } },
+  const existing = await prisma.orderNotification.findFirst({
+    where: { orderId, eventHash, success: true },
   })
   return !!existing
 }
@@ -133,12 +134,16 @@ async function saveNotification(
   eventText?: string,
   error?: string
 ) {
+  // upsert: se já existe registro (ex: falha anterior), sobrescreve — permite que
+  // um reenvio bem-sucedido substitua um registro de falha
   try {
-    await prisma.orderNotification.create({
-      data: { orderId, eventHash, channel, success, recipient: recipient ?? null, eventText: eventText ?? null, error: error ?? null },
+    await prisma.orderNotification.upsert({
+      where: { orderId_eventHash: { orderId, eventHash } },
+      update: { channel, success, recipient: recipient ?? null, eventText: eventText ?? null, error: error ?? null, sentAt: new Date() },
+      create: { orderId, eventHash, channel, success, recipient: recipient ?? null, eventText: eventText ?? null, error: error ?? null },
     })
   } catch {
-    // @@unique pode dar conflito em paralelo — ignora
+    // conflito em paralelo — ignora
   }
 }
 
@@ -356,10 +361,10 @@ export async function notifyBatchEnviado(order: {
   shippedAt: Date | null
   estimatedDelivery: Date | null
 }): Promise<void> {
-  // Deduplicação — usa hash fixo para esse batch
+  // Deduplicação — só pula se já enviou COM SUCESSO (falhas permitem reenvio)
   const eventHash = hashEvent(order.id, 'BATCH_ENVIADO')
-  const already = await prisma.orderNotification.findUnique({
-    where: { orderId_eventHash: { orderId: order.id, eventHash } },
+  const already = await prisma.orderNotification.findFirst({
+    where: { orderId: order.id, eventHash, success: true },
   })
   if (already) return
 
