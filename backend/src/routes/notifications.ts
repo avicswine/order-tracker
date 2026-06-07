@@ -84,11 +84,16 @@ router.post('/batch-enviado', async (_req: Request, res: Response) => {
 // POST /api/notifications/batch-faturado
 // Envia notificação FATURADO para pedidos com NF (status PENDING/Faturado)
 // que ainda não receberam o FATURADO com sucesso.
-router.post('/batch-faturado', async (_req: Request, res: Response) => {
+// Apenas NFs emitidas a partir de 01/06/2026 (configurável via body.cutoff).
+router.post('/batch-faturado', async (req: Request, res: Response) => {
+  const cutoffStr = (req.body as { cutoff?: string }).cutoff ?? '2026-06-01'
+  const cutoff = new Date(cutoffStr)
+
   const orders = await prisma.order.findMany({
     where: {
       status: 'PENDING',
       nfNumber: { not: null },
+      nfIssuedAt: { gte: cutoff },
     },
     select: {
       id: true, orderNumber: true, nfNumber: true,
@@ -97,7 +102,7 @@ router.post('/batch-faturado', async (_req: Request, res: Response) => {
     },
   })
 
-  res.json({ message: `Disparando FATURADO para até ${orders.length} pedidos...`, total: orders.length })
+  res.json({ message: `Disparando FATURADO (NFs desde ${cutoffStr}) para até ${orders.length} pedidos...`, total: orders.length })
 
   setImmediate(async () => {
     let enviados = 0, pulados = 0
