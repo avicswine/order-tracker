@@ -9,11 +9,23 @@ import path from 'path'
 
 export async function restoreSessionFromDb(company: string, authDir: string): Promise<boolean> {
   try {
+    // Se o disco local JÁ tem creds (pareamento/sessão em andamento), NÃO restaura do banco.
+    // Isso evita sobrescrever a sessão nova após o evento 515 (restart required pós-scan).
+    if (fs.existsSync(path.join(authDir, 'creds.json'))) {
+      console.log(`[WhatsApp/${company}] Sessão local presente — não restaura do banco`)
+      return false
+    }
+
     const session = await prisma.whatsappSession.findUnique({ where: { company } })
     if (!session?.files) return false
 
     const files = JSON.parse(session.files) as Record<string, string>
-    if (Object.keys(files).length === 0) return false
+    // Sessão de 1 arquivo (só creds, sem keys) é incompleta → ignora para não gerar loop 401
+    if (Object.keys(files).length <= 1) {
+      console.log(`[WhatsApp/${company}] Sessão no banco incompleta (${Object.keys(files).length} arquivo) — ignorada`)
+      await prisma.whatsappSession.deleteMany({ where: { company } })
+      return false
+    }
 
     fs.mkdirSync(authDir, { recursive: true })
     for (const [filename, content] of Object.entries(files)) {
@@ -31,6 +43,9 @@ export async function restoreSessionFromDb(company: string, authDir: string): Pr
 export async function backupSessionToDb(company: string, authDir: string): Promise<void> {
   try {
     const filenames = fs.readdirSync(authDir).filter(f => f.endsWith('.json'))
+    // Não salva sessão incompleta (só creds, sem keys) — evita lixo que causa loop 401
+    if (filenames.length <= 1) return
+
     const files: Record<string, string> = {}
     for (const filename of filenames) {
       files[filename] = fs.readFileSync(path.join(authDir, filename), 'utf-8')
