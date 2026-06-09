@@ -47,12 +47,15 @@ router.delete('/', async (req: Request, res: Response) => {
 // POST /api/notifications/batch-enviado
 // Envia notificação ENVIADO para todos os pedidos IN_TRANSIT sem notificação prévia.
 // A deduplicação garante que cada pedido recebe apenas uma vez.
-router.post('/batch-enviado', async (_req: Request, res: Response) => {
-  // Busca IN_TRANSIT sem nenhuma notificação bem-sucedida
+router.post('/batch-enviado', async (req: Request, res: Response) => {
+  const cutoffStr = (req.body as { cutoff?: string }).cutoff ?? '2026-06-01'
+  const cutoff = new Date(cutoffStr)
+  // Busca IN_TRANSIT sem nenhuma notificação bem-sucedida (NFs desde o corte)
   const orders = await prisma.order.findMany({
     where: {
       status: 'IN_TRANSIT',
       lastTracking: { not: null },
+      nfIssuedAt: { gte: cutoff },
       notifications: { none: { success: true } },
     },
     select: {
