@@ -1157,9 +1157,13 @@ export async function trackModular(
     'Referer': 'https://www.modular.com.br/rastrear',
   }
 
+  // Usa proxy Cloudflare quando configurado (contorna bloqueio de IP do datacenter).
+  // O Worker repassa o caminho para www.modular.com.br.
+  const base = process.env.MODULAR_PROXY_URL || 'https://www.modular.com.br'
+
   // 1) Lista a nota (captcha = soma; passamos os dois campos iguais para validar)
   const listaBody = `dados[nfs]=${nf}&dados[cnpjcpf]=${cnpj}&dados[captchasum1]=10&dados[captcha1]=10`
-  const listaRes = await fetch('https://www.modular.com.br/rastrear/listar', {
+  const listaRes = await fetch(`${base}/rastrear/listar`, {
     method: 'POST', headers, body: listaBody, signal: AbortSignal.timeout(20000),
   })
   if (!listaRes.ok) return { status: null, lastEvent: `Erro: HTTP ${listaRes.status}` }
@@ -1172,7 +1176,7 @@ export async function trackModular(
 
   // 2) Busca o histórico de posições
   const posBody = `dados[filialorigem]=${nota.Filial_Origem ?? ''}&dados[controle]=${nota.Controle}&dados[captchasum1]=10&dados[captcha1]=10`
-  const posRes = await fetch('https://www.modular.com.br/rastrear/listar/posicao', {
+  const posRes = await fetch(`${base}/rastrear/listar/posicao`, {
     method: 'POST', headers, body: posBody, signal: AbortSignal.timeout(20000),
   })
 
