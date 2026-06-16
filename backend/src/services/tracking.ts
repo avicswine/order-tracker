@@ -1151,6 +1151,10 @@ export async function trackModular(
     'User-Agent': MODULAR_UA,
     'X-Requested-With': 'XMLHttpRequest',
     'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+    'Accept': 'application/json, text/javascript, */*; q=0.01',
+    'Accept-Language': 'pt-BR,pt;q=0.9',
+    'Origin': 'https://www.modular.com.br',
+    'Referer': 'https://www.modular.com.br/rastrear',
   }
 
   // 1) Lista a nota (captcha = soma; passamos os dois campos iguais para validar)
