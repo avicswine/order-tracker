@@ -134,5 +134,6 @@ enum TrackingSystem {
   ATUAL_CARGAS
   RODONAVES
   BRASPRESS
+  MODULAR
   NONE
 }

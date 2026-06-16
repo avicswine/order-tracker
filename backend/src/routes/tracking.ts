@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express'
 import { prisma } from '../lib/prisma'
-import { trackSSW, trackSenior, trackWithPuppeteer, trackSaoMiguel, trackAtualCargas, trackRodonaves, trackBraspress } from '../services/tracking'
+import { trackSSW, trackSenior, trackWithPuppeteer, trackSaoMiguel, trackAtualCargas, trackRodonaves, trackBraspress, trackModular } from '../services/tracking'
 import { OrderStatus, TrackingSystem, Prisma } from '@prisma/client'
 import { notifyOrderUpdate } from '../services/notifier'
 
@@ -62,6 +62,8 @@ export async function runTrackingSync(onProgress?: ProgressCallback, systems?: T
         result = await trackRodonaves(cnpj, nf)
       } else if (carrier.trackingSystem === TrackingSystem.BRASPRESS) {
         result = await trackBraspress(cnpj, nf, carrier.trackingIdentifier)
+      } else if (carrier.trackingSystem === TrackingSystem.MODULAR) {
+        result = await trackModular(cnpj, nf)
       } else {
         return
       }

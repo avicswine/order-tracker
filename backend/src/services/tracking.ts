@@ -1108,3 +1108,90 @@ function extractLastEventFromText(text: string): string | null {
 
   return lastEvent
 }
+
+// --- Modular Cargas ---
+// API pública (sem autenticação real — o "captcha" é uma soma client-side que controlamos).
+// 1) /rastrear/listar  → nota + Controle + Filial_Origem + previsão
+// 2) /rastrear/listar/posicao → histórico de eventos
+const MODULAR_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+
+function modularMapStatus(localizacao: string, descricao: string, entrega: string): OrderStatus | null {
+  if (entrega && entrega.trim() !== '') return OrderStatus.DELIVERED
+  const t = (localizacao + ' ' + descricao).toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+  if (t.includes('ENTREGUE') || t.includes('ENTREGA REALIZADA') || t.includes('ENTREGA EFETUADA')) return OrderStatus.DELIVERED
+  if (t.includes('DEVOLV') || t.includes('RECUSAD') || t.includes('RETORNO')) return OrderStatus.CANCELLED
+  return OrderStatus.IN_TRANSIT
+}
+
+interface ModularNota {
+  Controle?: string
+  Filial_Origem?: string
+  Nota_Fiscal?: string
+  Serie?: string
+  PrevisaoEntrega?: string
+  Entrega?: string
+  Localizacao?: string
+  Descricao?: string
+}
+interface ModularPosicao {
+  Data_Inicial?: string
+  Localizacao?: string
+  Descricao?: string
+  Operacao?: string
+}
+
+export async function trackModular(
+  senderCnpj: string,
+  nfNumber: string
+): Promise<TrackingResult> {
+  const cnpj = senderCnpj.replace(/\D/g, '')
+  const nf = String(parseInt(nfNumber, 10))
+
+  const headers = {
+    'User-Agent': MODULAR_UA,
+    'X-Requested-With': 'XMLHttpRequest',
+    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+  }
+
+  // 1) Lista a nota (captcha = soma; passamos os dois campos iguais para validar)
+  const listaBody = `dados[nfs]=${nf}&dados[cnpjcpf]=${cnpj}&dados[captchasum1]=10&dados[captcha1]=10`
+  const listaRes = await fetch('https://www.modular.com.br/rastrear/listar', {
+    method: 'POST', headers, body: listaBody, signal: AbortSignal.timeout(20000),
+  })
+  if (!listaRes.ok) return { status: null, lastEvent: `Erro: HTTP ${listaRes.status}` }
+
+  const listaData = await listaRes.json() as { notas?: ModularNota[] }
+  const nota = listaData.notas?.[0]
+  if (!nota?.Controle) return { status: null, lastEvent: null }
+
+  const estimatedDelivery = parseBrDate(nota.PrevisaoEntrega)
+
+  // 2) Busca o histórico de posições
+  const posBody = `dados[filialorigem]=${nota.Filial_Origem ?? ''}&dados[controle]=${nota.Controle}&dados[captchasum1]=10&dados[captcha1]=10`
+  const posRes = await fetch('https://www.modular.com.br/rastrear/listar/posicao', {
+    method: 'POST', headers, body: posBody, signal: AbortSignal.timeout(20000),
+  })
+
+  let posicoes: ModularPosicao[] = []
+  if (posRes.ok) {
+    const posData = await posRes.json() as { posicao?: ModularPosicao[] }
+    posicoes = posData.posicao ?? []
+  }
+
+  // Eventos em ordem cronológica (mais antigo → mais recente, como vêm da API)
+  const events: TrackingEvent[] = posicoes.map((p) => ({
+    date: parseBrDate(p.Data_Inicial),
+    description: p.Descricao ?? '',
+  }))
+
+  const ultimo = posicoes[posicoes.length - 1]
+  const lastEvent = ultimo?.Descricao ?? nota.Descricao ?? null
+  const shippedAt = events.length > 0 ? events[0].date : null
+  const status = modularMapStatus(nota.Localizacao ?? '', lastEvent ?? '', nota.Entrega ?? '')
+  const hasOccurrence = events.some((e) => detectOccurrence(e.description))
+
+  // events ordenados do mais recente para o mais antigo (padrão usado no app)
+  const eventsDesc = [...events].reverse()
+
+  return { status, lastEvent, shippedAt, estimatedDelivery, hasOccurrence, events: eventsDesc, raw: { nota, posicoes } }
+}
