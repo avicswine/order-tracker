@@ -98,7 +98,12 @@ export function OrderTable({ orders, isLoading, onViewDetails, meta, onPageChang
           </thead>
           <tbody className="divide-y divide-gray-100">
             {orders.map((order) => (
-              <tr key={order.id} className="hover:bg-gray-50 transition-colors">
+              <tr
+                key={order.id}
+                className="border-b border-gray-100 hover:bg-blue-50 transition-colors cursor-pointer"
+                onClick={() => onViewDetails(order)}
+                title="Ver detalhes"
+              >
                 <td className="py-3 pr-4 font-mono font-medium text-gray-900">{order.nfNumber ?? '—'}</td>
                 <td className="py-3 pr-4">
                   {order.senderCnpj ? (() => {
