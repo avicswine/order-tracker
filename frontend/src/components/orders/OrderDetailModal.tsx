@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ordersApi } from '../../lib/api'
+import { ordersApi, carriersApi } from '../../lib/api'
 import { Modal } from '../ui/Modal'
 import { StatusBadge } from '../ui/Badge'
 import { Spinner } from '../ui/Spinner'
@@ -21,11 +21,27 @@ export function OrderDetailModal({ order, onClose }: Props) {
   const qc = useQueryClient()
   const [newStatus, setNewStatus] = useState<OrderStatus | ''>('')
   const [note, setNote] = useState('')
+  const [newCarrierId, setNewCarrierId] = useState('')
 
   const { data, isLoading } = useQuery({
     queryKey: ['order', order?.id],
     queryFn: () => ordersApi.get(order!.id),
     enabled: !!order?.id,
+  })
+
+  const { data: carriers } = useQuery({
+    queryKey: ['carriers'],
+    queryFn: carriersApi.list,
+    enabled: isAdmin && !!order?.id,
+  })
+
+  const carrierMutation = useMutation({
+    mutationFn: (carrierId: string) => ordersApi.update(order!.id, { carrierId }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['orders'] })
+      qc.invalidateQueries({ queryKey: ['order', order?.id] })
+      setNewCarrierId('')
+    },
   })
 
   const mutation = useMutation({
@@ -240,6 +256,42 @@ export function OrderDetailModal({ order, onClose }: Props) {
               </div>
               {mutation.isError && (
                 <p className="text-xs text-red-600">Erro ao atualizar status. Tente novamente.</p>
+              )}
+            </div>
+          )}
+
+          {/* Trocar transportadora */}
+          {isAdmin && (
+            <div className="rounded-lg border border-dashed border-gray-300 p-4 space-y-3">
+              <h3 className="text-sm font-semibold text-gray-700">Trocar Transportadora</h3>
+              <p className="text-xs text-gray-500">
+                Atual: <strong>{data.carrier?.name ?? 'A definir'}</strong>. Use quando a transportadora real
+                for diferente da que está na NF — o rastreio passa a usar a nova.
+              </p>
+              <div className="flex gap-3">
+                <select
+                  className="input"
+                  value={newCarrierId}
+                  onChange={(e) => setNewCarrierId(e.target.value)}
+                >
+                  <option value="">Selecionar transportadora...</option>
+                  {carriers?.filter((c) => c.active && c.id !== data.carrierId).map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+                <button
+                  className="btn-primary whitespace-nowrap"
+                  disabled={!newCarrierId || carrierMutation.isPending}
+                  onClick={() => newCarrierId && carrierMutation.mutate(newCarrierId)}
+                >
+                  {carrierMutation.isPending ? <Spinner className="h-4 w-4" /> : 'Trocar'}
+                </button>
+              </div>
+              {carrierMutation.isError && (
+                <p className="text-xs text-red-600">Erro ao trocar transportadora. Tente novamente.</p>
+              )}
+              {carrierMutation.isSuccess && (
+                <p className="text-xs text-green-600">Transportadora atualizada. Rode "Atualizar Status" ou aguarde o próximo sync para rastrear.</p>
               )}
             </div>
           )}
