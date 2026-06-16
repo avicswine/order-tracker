@@ -85,4 +85,22 @@ router.patch('/reset-password', requireAuth, [
   res.json({ ok: true, user })
 })
 
+// PATCH /api/auth/set-role — altera o papel de um usuário (só ADMIN)
+router.patch('/set-role', requireAuth, [
+  body('email').isEmail(),
+  body('role').isIn(['ADMIN', 'VIEWER']),
+], async (req: Request, res: Response) => {
+  if (req.user?.role !== 'ADMIN') return res.status(403).json({ error: 'Apenas admin' })
+  const errors = validationResult(req)
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() })
+
+  const { email, role } = req.body as { email: string; role: 'ADMIN' | 'VIEWER' }
+  const user = await prisma.user.update({
+    where: { email },
+    data: { role },
+    select: { id: true, name: true, email: true, role: true },
+  })
+  res.json({ ok: true, user })
+})
+
 export default router
