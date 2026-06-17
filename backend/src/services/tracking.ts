@@ -1147,49 +1147,67 @@ export async function trackModular(
   const cnpj = senderCnpj.replace(/\D/g, '')
   const nf = String(parseInt(nfNumber, 10))
 
-  const headers = {
-    'User-Agent': MODULAR_UA,
-    'X-Requested-With': 'XMLHttpRequest',
-    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-    'Accept': 'application/json, text/javascript, */*; q=0.01',
-    'Accept-Language': 'pt-BR,pt;q=0.9',
-    'Origin': 'https://www.modular.com.br',
-    'Referer': 'https://www.modular.com.br/rastrear',
-  }
-
-  // Usa proxy Cloudflare quando configurado (contorna bloqueio de IP do datacenter).
-  // O Worker repassa o caminho para www.modular.com.br. Remove barra final para evitar //.
-  const base = (process.env.MODULAR_PROXY_URL || 'https://www.modular.com.br').replace(/\/+$/, '')
-  console.log(`[Modular] base=${base} (proxy=${!!process.env.MODULAR_PROXY_URL})`)
-
-  // 1) Lista a nota (captcha = soma; passamos os dois campos iguais para validar)
-  const listaBody = `dados[nfs]=${nf}&dados[cnpjcpf]=${cnpj}&dados[captchasum1]=10&dados[captcha1]=10`
-  const listaRes = await fetch(`${base}/rastrear/listar`, {
-    method: 'POST', headers, body: listaBody, signal: AbortSignal.timeout(20000),
+  // A Modular usa Cloudflare challenge ("Just a moment") que barra acesso de datacenter.
+  // Abrimos a página com Puppeteer (passa pelo challenge, obtém cf_clearance) e fazemos
+  // os fetches da API de dentro do contexto da página (com os cookies válidos).
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
+    timeout: 40000,
   })
-  if (!listaRes.ok) {
-    const corpo = await listaRes.text().catch(() => '')
-    console.log(`[Modular] HTTP ${listaRes.status} — corpo: ${corpo.slice(0, 200)}`)
-    return { status: null, lastEvent: `Erro: HTTP ${listaRes.status}` }
-  }
 
-  const listaData = await listaRes.json() as { notas?: ModularNota[] }
-  const nota = listaData.notas?.[0]
-  if (!nota?.Controle) return { status: null, lastEvent: null }
+  let nota: ModularNota | undefined
+  let posicoes: ModularPosicao[] = []
+
+  try {
+    const page = await browser.newPage()
+    await page.setUserAgent(MODULAR_UA)
+    await page.setViewport({ width: 1366, height: 768 })
+
+    // Navega à página de rastreio — resolve o challenge Cloudflare automaticamente
+    await page.goto('https://www.modular.com.br/rastrear', { waitUntil: 'networkidle2', timeout: 40000 })
+
+    // Se ainda estiver no challenge, aguarda resolver (título "Just a moment...")
+    for (let i = 0; i < 10; i++) {
+      const title = await page.title().catch(() => '')
+      if (!/just a moment|attention required|um momento/i.test(title)) break
+      await new Promise((r) => setTimeout(r, 2000))
+    }
+
+    // 1) Lista a nota — fetch de dentro da página (já com cookies cf_clearance)
+    const listaData = await page.evaluate(async (nf: string, cnpj: string) => {
+      const res = await fetch('/rastrear/listar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8', 'X-Requested-With': 'XMLHttpRequest' },
+        body: `dados[nfs]=${nf}&dados[cnpjcpf]=${cnpj}&dados[captchasum1]=10&dados[captcha1]=10`,
+      })
+      return res.ok ? res.json() : null
+    }, nf, cnpj) as { notas?: ModularNota[] } | null
+
+    nota = listaData?.notas?.[0]
+    if (!nota?.Controle) {
+      await browser.close()
+      return { status: null, lastEvent: null }
+    }
+
+    // 2) Histórico de posições
+    const posData = await page.evaluate(async (filial: string, controle: string) => {
+      const res = await fetch('/rastrear/listar/posicao', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8', 'X-Requested-With': 'XMLHttpRequest' },
+        body: `dados[filialorigem]=${filial}&dados[controle]=${controle}&dados[captchasum1]=10&dados[captcha1]=10`,
+      })
+      return res.ok ? res.json() : null
+    }, nota.Filial_Origem ?? '', nota.Controle) as { posicao?: ModularPosicao[] } | null
+
+    posicoes = posData?.posicao ?? []
+  } catch (err) {
+    await browser.close().catch(() => {})
+    return { status: null, lastEvent: `Erro: ${err instanceof Error ? err.message : String(err)}` }
+  }
+  await browser.close().catch(() => {})
 
   const estimatedDelivery = parseBrDate(nota.PrevisaoEntrega)
-
-  // 2) Busca o histórico de posições
-  const posBody = `dados[filialorigem]=${nota.Filial_Origem ?? ''}&dados[controle]=${nota.Controle}&dados[captchasum1]=10&dados[captcha1]=10`
-  const posRes = await fetch(`${base}/rastrear/listar/posicao`, {
-    method: 'POST', headers, body: posBody, signal: AbortSignal.timeout(20000),
-  })
-
-  let posicoes: ModularPosicao[] = []
-  if (posRes.ok) {
-    const posData = await posRes.json() as { posicao?: ModularPosicao[] }
-    posicoes = posData.posicao ?? []
-  }
 
   // Eventos em ordem cronológica (mais antigo → mais recente, como vêm da API)
   const events: TrackingEvent[] = posicoes.map((p) => ({
