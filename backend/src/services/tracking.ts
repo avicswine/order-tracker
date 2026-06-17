@@ -1168,7 +1168,16 @@ export async function trackModular(
   // os fetches da API de dentro do contexto da página (com os cookies válidos).
   const execPath = resolveChromiumPath()
   console.log(`[Modular] Chromium: ${execPath ?? 'bundled'}`)
-  const browser = await puppeteer.launch({
+
+  // puppeteer-extra + stealth: mascara características de automação para passar
+  // pelo challenge Cloudflare ("Just a moment")
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const puppeteerExtra = require('puppeteer-extra')
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const StealthPlugin = require('puppeteer-extra-plugin-stealth')
+  puppeteerExtra.use(StealthPlugin())
+
+  const browser = await puppeteerExtra.launch({
     headless: true,
     ...(execPath ? { executablePath: execPath } : {}),
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
