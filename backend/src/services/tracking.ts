@@ -1167,7 +1167,11 @@ export async function trackModular(
   const listaRes = await fetch(`${base}/rastrear/listar`, {
     method: 'POST', headers, body: listaBody, signal: AbortSignal.timeout(20000),
   })
-  if (!listaRes.ok) return { status: null, lastEvent: `Erro: HTTP ${listaRes.status} (base: ${base})` }
+  if (!listaRes.ok) {
+    const corpo = await listaRes.text().catch(() => '')
+    console.log(`[Modular] HTTP ${listaRes.status} — corpo: ${corpo.slice(0, 200)}`)
+    return { status: null, lastEvent: `Erro: HTTP ${listaRes.status}` }
+  }
 
   const listaData = await listaRes.json() as { notas?: ModularNota[] }
   const nota = listaData.notas?.[0]
