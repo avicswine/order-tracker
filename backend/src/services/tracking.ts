@@ -1188,21 +1188,33 @@ export async function trackModular(
     await page.goto('https://www.modular.com.br/rastrear', { waitUntil: 'domcontentloaded', timeout: 40000 })
 
     // Aguarda o challenge resolver (título "Just a moment...") — até 30s
+    let titulo = ''
     for (let i = 0; i < 15; i++) {
-      const title = await page.title().catch(() => '')
-      if (!/just a moment|attention required|um momento/i.test(title)) break
+      titulo = await page.title().catch(() => '')
+      if (!/just a moment|attention required|um momento/i.test(titulo)) break
       await new Promise((r) => setTimeout(r, 2000))
     }
+    console.log(`[Modular] título após challenge: "${titulo}"`)
 
     // 1) Lista a nota — fetch de dentro da página (já com cookies cf_clearance)
-    const listaData = await page.evaluate(async (nf: string, cnpj: string) => {
-      const res = await fetch('/rastrear/listar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8', 'X-Requested-With': 'XMLHttpRequest' },
-        body: `dados[nfs]=${nf}&dados[cnpjcpf]=${cnpj}&dados[captchasum1]=10&dados[captcha1]=10`,
-      })
-      return res.ok ? res.json() : null
-    }, nf, cnpj) as { notas?: ModularNota[] } | null
+    const listaRaw = await page.evaluate(async (nf: string, cnpj: string) => {
+      try {
+        const res = await fetch('/rastrear/listar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8', 'X-Requested-With': 'XMLHttpRequest' },
+          body: `dados[nfs]=${nf}&dados[cnpjcpf]=${cnpj}&dados[captchasum1]=10&dados[captcha1]=10`,
+        })
+        const text = await res.text()
+        return { status: res.status, text: text.slice(0, 300) }
+      } catch (e) {
+        return { status: -1, text: String(e) }
+      }
+    }, nf, cnpj) as { status: number; text: string }
+
+    console.log(`[Modular] /listar → HTTP ${listaRaw.status} | ${listaRaw.text.slice(0, 150)}`)
+
+    let listaData: { notas?: ModularNota[] } | null = null
+    try { listaData = JSON.parse(listaRaw.text) } catch { /* não-JSON */ }
 
     nota = listaData?.notas?.[0]
     if (!nota?.Controle) {
