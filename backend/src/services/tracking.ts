@@ -1183,11 +1183,12 @@ export async function trackModular(
     await page.setUserAgent(MODULAR_UA)
     await page.setViewport({ width: 1366, height: 768 })
 
-    // Navega à página de rastreio — resolve o challenge Cloudflare automaticamente
-    await page.goto('https://www.modular.com.br/rastrear', { waitUntil: 'networkidle2', timeout: 40000 })
+    // Navega à página — domcontentloaded (não espera rede idle; o site tem chat/analytics
+    // que nunca ficam idle). O challenge Cloudflare resolve em background.
+    await page.goto('https://www.modular.com.br/rastrear', { waitUntil: 'domcontentloaded', timeout: 40000 })
 
-    // Se ainda estiver no challenge, aguarda resolver (título "Just a moment...")
-    for (let i = 0; i < 10; i++) {
+    // Aguarda o challenge resolver (título "Just a moment...") — até 30s
+    for (let i = 0; i < 15; i++) {
       const title = await page.title().catch(() => '')
       if (!/just a moment|attention required|um momento/i.test(title)) break
       await new Promise((r) => setTimeout(r, 2000))
