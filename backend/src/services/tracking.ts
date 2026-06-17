@@ -1158,15 +1158,16 @@ export async function trackModular(
   }
 
   // Usa proxy Cloudflare quando configurado (contorna bloqueio de IP do datacenter).
-  // O Worker repassa o caminho para www.modular.com.br.
-  const base = process.env.MODULAR_PROXY_URL || 'https://www.modular.com.br'
+  // O Worker repassa o caminho para www.modular.com.br. Remove barra final para evitar //.
+  const base = (process.env.MODULAR_PROXY_URL || 'https://www.modular.com.br').replace(/\/+$/, '')
+  console.log(`[Modular] base=${base} (proxy=${!!process.env.MODULAR_PROXY_URL})`)
 
   // 1) Lista a nota (captcha = soma; passamos os dois campos iguais para validar)
   const listaBody = `dados[nfs]=${nf}&dados[cnpjcpf]=${cnpj}&dados[captchasum1]=10&dados[captcha1]=10`
   const listaRes = await fetch(`${base}/rastrear/listar`, {
     method: 'POST', headers, body: listaBody, signal: AbortSignal.timeout(20000),
   })
-  if (!listaRes.ok) return { status: null, lastEvent: `Erro: HTTP ${listaRes.status}` }
+  if (!listaRes.ok) return { status: null, lastEvent: `Erro: HTTP ${listaRes.status} (base: ${base})` }
 
   const listaData = await listaRes.json() as { notas?: ModularNota[] }
   const nota = listaData.notas?.[0]
