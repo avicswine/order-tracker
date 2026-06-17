@@ -1140,6 +1140,22 @@ interface ModularPosicao {
   Operacao?: string
 }
 
+// Localiza o Chromium no ambiente — ignora PUPPETEER_EXECUTABLE_PATH se o arquivo não existir
+function resolveChromiumPath(): string | undefined {
+  const fs = require('fs')
+  const candidates = [
+    process.env.PUPPETEER_EXECUTABLE_PATH,
+    '/nix/var/nix/profiles/default/bin/chromium',
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser',
+    '/usr/bin/google-chrome',
+  ].filter(Boolean) as string[]
+  for (const p of candidates) {
+    try { if (fs.existsSync(p)) return p } catch { /* ignora */ }
+  }
+  return undefined // deixa o puppeteer usar o bundled
+}
+
 export async function trackModular(
   senderCnpj: string,
   nfNumber: string
@@ -1150,8 +1166,11 @@ export async function trackModular(
   // A Modular usa Cloudflare challenge ("Just a moment") que barra acesso de datacenter.
   // Abrimos a página com Puppeteer (passa pelo challenge, obtém cf_clearance) e fazemos
   // os fetches da API de dentro do contexto da página (com os cookies válidos).
+  const execPath = resolveChromiumPath()
+  console.log(`[Modular] Chromium: ${execPath ?? 'bundled'}`)
   const browser = await puppeteer.launch({
     headless: true,
+    ...(execPath ? { executablePath: execPath } : {}),
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
     timeout: 40000,
   })
