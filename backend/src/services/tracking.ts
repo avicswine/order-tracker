@@ -875,25 +875,36 @@ export async function trackSaoMiguel(
 ): Promise<TrackingResult> {
   const usarCnpj = (tipo === 'remetente' ? senderCnpj : (recipientCnpj ?? senderCnpj)).replace(/\D/g, '')
   const nf = String(parseInt(nfNumber, 10))
-  const token = smCreateToken()
 
-  const response = await fetch(SM_API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json; charset=UTF-8',
-      'Accept': 'application/json, text/plain, */*',
-      'Authorization': `Bearer ${token}`,
-      'Origin': 'https://portaldocliente.expressosaomiguel.com.br',
-      'Referer': 'https://portaldocliente.expressosaomiguel.com.br/',
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-    },
-    body: JSON.stringify({ cpfcnpj: usarCnpj, numberdocument: nf, serie: '', documentType: 'NFE' }),
-    signal: AbortSignal.timeout(30000),
-  })
+  // O proxy Cloudflare → São Miguel às vezes retorna 5xx/522 transitório.
+  // Tenta até 3 vezes com backoff antes de desistir.
+  let response: Response | undefined
+  for (let tentativa = 1; tentativa <= 3; tentativa++) {
+    try {
+      response = await fetch(SM_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json; charset=UTF-8',
+          'Accept': 'application/json, text/plain, */*',
+          'Authorization': `Bearer ${smCreateToken()}`,
+          'Origin': 'https://portaldocliente.expressosaomiguel.com.br',
+          'Referer': 'https://portaldocliente.expressosaomiguel.com.br/',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        },
+        body: JSON.stringify({ cpfcnpj: usarCnpj, numberdocument: nf, serie: '', documentType: 'NFE' }),
+        signal: AbortSignal.timeout(30000),
+      })
+      // 5xx (502/503/522 do proxy/origem) → retenta; 2xx/4xx → segue
+      if (response.status < 500) break
+    } catch {
+      // timeout/erro de rede → retenta
+    }
+    if (tentativa < 3) await new Promise((r) => setTimeout(r, tentativa * 4000)) // 4s, 8s
+  }
 
-  if (!response.ok) {
-    let msg = `HTTP ${response.status}`
-    try { const json = await response.json() as Record<string, unknown>; msg = (json.message ?? json.error ?? msg) as string } catch {}
+  if (!response || !response.ok) {
+    let msg = `HTTP ${response?.status ?? 'timeout'}`
+    try { const json = await response!.json() as Record<string, unknown>; msg = (json.message ?? json.error ?? msg) as string } catch {}
     return { status: null, lastEvent: `Erro: ${msg}` }
   }
 
