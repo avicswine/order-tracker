@@ -936,6 +936,10 @@ export async function trackSaoMiguel(
   const lastEvent = lastTrack.title ?? null
   const hasOccurrence = cte.tracks.some((t) => detectOccurrence(t.title ?? '')) || undefined
 
+  // Status: se o evento mais recente não mapeia (ex: "Boletim de ocorrência"),
+  // mas há histórico de eventos, a mercadoria está no fluxo → IN_TRANSIT (nunca null aqui).
+  const mappedStatus = smMapStatus(lastTrack.control, lastTrack.title) ?? OrderStatus.IN_TRANSIT
+
   const events: TrackingEvent[] = cte.tracks
     .map((t) => {
       // Para o evento de entrega, usar dateandhourdelivery (data real) em vez de date+hour (data de registro no sistema)
@@ -949,7 +953,7 @@ export async function trackSaoMiguel(
   // cte.tracks já vem mais recente primeiro
 
   return {
-    status: smMapStatus(lastTrack.control, lastTrack.title),
+    status: mappedStatus,
     lastEvent,
     shippedAt,
     estimatedDelivery,

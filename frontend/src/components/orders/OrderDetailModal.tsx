@@ -77,7 +77,7 @@ export function OrderDetailModal({ order, onClose }: Props) {
               <p className="font-mono text-lg font-bold text-gray-900">{data.orderNumber}</p>
             </div>
             <div className="text-right">
-              <StatusBadge status={data.status} />
+              <StatusBadge status={data.status} hasOccurrence={data.hasOccurrence} lastTracking={data.lastTracking} />
             </div>
           </div>
 

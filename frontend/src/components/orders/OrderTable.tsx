@@ -172,7 +172,7 @@ export function OrderTable({ orders, isLoading, onViewDetails, meta, onPageChang
                     onClick={() => onViewDetails(order)}
                     title="Ver detalhes"
                   >
-                    <StatusBadge status={order.status} hasOccurrence={order.hasOccurrence} />
+                    <StatusBadge status={order.status} hasOccurrence={order.hasOccurrence} lastTracking={order.lastTracking} />
                   </div>
                 </td>
                 <td className="py-3 pr-4 text-gray-600">{formatDate(order.shippedAt)}</td>
