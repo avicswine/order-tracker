@@ -1173,9 +1173,11 @@ export async function trackModular(
       headers: { Authorization: `Bearer ${t2}`, Accept: 'application/json' },
       signal: AbortSignal.timeout(20000),
     })
+    if (r2.status === 404) return { status: null, lastEvent: null } // NF ainda não registrada na Modular
     if (!r2.ok) return { status: null, lastEvent: `Erro: HTTP ${r2.status}` }
     return parseModular(await r2.json() as ModularResposta)
   }
+  if (res.status === 404) return { status: null, lastEvent: null } // NF ainda não registrada na Modular
   if (!res.ok) return { status: null, lastEvent: `Erro: HTTP ${res.status}` }
 
   return parseModular(await res.json() as ModularResposta)
