@@ -1113,161 +1113,102 @@ function extractLastEventFromText(text: string): string | null {
   return lastEvent
 }
 
-// --- Modular Cargas ---
-// API pública (sem autenticação real — o "captcha" é uma soma client-side que controlamos).
-// 1) /rastrear/listar  → nota + Controle + Filial_Origem + previsão
-// 2) /rastrear/listar/posicao → histórico de eventos
-const MODULAR_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+// --- Modular Cargas (API EDI oficial) ---
+// Rastreio por chave de acesso da NF-e (44 dígitos). Auth Bearer com login cacheado.
+const MODULAR_API = 'https://sistemamodular.com.br/api/edi/v1'
+let modularToken: { token: string; expires: number } | null = null
 
-function modularMapStatus(localizacao: string, descricao: string, entrega: string): OrderStatus | null {
-  if (entrega && entrega.trim() !== '') return OrderStatus.DELIVERED
-  const t = (localizacao + ' ' + descricao).toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
-  if (t.includes('ENTREGUE') || t.includes('ENTREGA REALIZADA') || t.includes('ENTREGA EFETUADA')) return OrderStatus.DELIVERED
-  if (t.includes('DEVOLV') || t.includes('RECUSAD') || t.includes('RETORNO')) return OrderStatus.CANCELLED
-  return OrderStatus.IN_TRANSIT
+async function modularLogin(): Promise<string> {
+  if (modularToken && Date.now() < modularToken.expires) return modularToken.token
+  const usuario = process.env.MODULAR_USER
+  const senha = process.env.MODULAR_PASSWORD
+  if (!usuario || !senha) throw new Error('MODULAR_USER/MODULAR_PASSWORD não configurados')
+
+  const res = await fetch(`${MODULAR_API}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ Usuario: usuario, Senha: senha }),
+    signal: AbortSignal.timeout(15000),
+  })
+  if (!res.ok) throw new Error(`Modular login falhou: HTTP ${res.status}`)
+  const data = await res.json() as { access_token?: string }
+  if (!data.access_token) throw new Error('Modular: token não retornado')
+  // Token JWT da Modular dura ~1h — renova com folga de 5min
+  modularToken = { token: data.access_token, expires: Date.now() + 50 * 60 * 1000 }
+  return data.access_token
 }
 
-interface ModularNota {
-  Controle?: string
-  Filial_Origem?: string
-  Nota_Fiscal?: string
-  Serie?: string
-  PrevisaoEntrega?: string
-  Entrega?: string
-  Localizacao?: string
-  Descricao?: string
-}
-interface ModularPosicao {
-  Data_Inicial?: string
-  Localizacao?: string
-  Descricao?: string
-  Operacao?: string
-}
-
-// Localiza o Chromium no ambiente — ignora PUPPETEER_EXECUTABLE_PATH se o arquivo não existir
-function resolveChromiumPath(): string | undefined {
-  const fs = require('fs')
-  const candidates = [
-    process.env.PUPPETEER_EXECUTABLE_PATH,
-    '/nix/var/nix/profiles/default/bin/chromium',
-    '/usr/bin/chromium',
-    '/usr/bin/chromium-browser',
-    '/usr/bin/google-chrome',
-  ].filter(Boolean) as string[]
-  for (const p of candidates) {
-    try { if (fs.existsSync(p)) return p } catch { /* ignora */ }
-  }
-  return undefined // deixa o puppeteer usar o bundled
+interface ModularOcorrencia { Data?: string; Ocorrencia?: string; Descricao?: string }
+interface ModularResposta {
+  Chave_NFe?: string
+  Tipo_Documento?: string
+  Documento?: string
+  Emissao?: string
+  Previsao_Entrega?: string
+  Data_Entrega?: string
+  Data_Baixa?: string
+  Ocorrencias?: ModularOcorrencia[]
 }
 
 export async function trackModular(
-  senderCnpj: string,
-  nfNumber: string
+  _senderCnpj: string,
+  _nfNumber: string,
+  nfKey?: string | null
 ): Promise<TrackingResult> {
-  const cnpj = senderCnpj.replace(/\D/g, '')
-  const nf = String(parseInt(nfNumber, 10))
-
-  // A Modular usa Cloudflare challenge ("Just a moment") que barra acesso de datacenter.
-  // Abrimos a página com Puppeteer (passa pelo challenge, obtém cf_clearance) e fazemos
-  // os fetches da API de dentro do contexto da página (com os cookies válidos).
-  const execPath = resolveChromiumPath()
-  console.log(`[Modular] Chromium: ${execPath ?? 'bundled'}`)
-
-  // puppeteer-extra + stealth: mascara características de automação para passar
-  // pelo challenge Cloudflare ("Just a moment")
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const puppeteerExtra = require('puppeteer-extra')
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const StealthPlugin = require('puppeteer-extra-plugin-stealth')
-  puppeteerExtra.use(StealthPlugin())
-
-  const browser = await puppeteerExtra.launch({
-    headless: true,
-    ...(execPath ? { executablePath: execPath } : {}),
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
-    timeout: 40000,
-  })
-
-  let nota: ModularNota | undefined
-  let posicoes: ModularPosicao[] = []
-
-  try {
-    const page = await browser.newPage()
-    await page.setUserAgent(MODULAR_UA)
-    await page.setViewport({ width: 1366, height: 768 })
-
-    // Navega à página — domcontentloaded (não espera rede idle; o site tem chat/analytics
-    // que nunca ficam idle). O challenge Cloudflare resolve em background.
-    await page.goto('https://www.modular.com.br/rastrear', { waitUntil: 'domcontentloaded', timeout: 40000 })
-
-    // Aguarda o challenge resolver (título "Just a moment...") — até 30s
-    let titulo = ''
-    for (let i = 0; i < 15; i++) {
-      titulo = await page.title().catch(() => '')
-      if (!/just a moment|attention required|um momento/i.test(titulo)) break
-      await new Promise((r) => setTimeout(r, 2000))
-    }
-    console.log(`[Modular] título após challenge: "${titulo}"`)
-
-    // 1) Lista a nota — fetch de dentro da página (já com cookies cf_clearance)
-    const listaRaw = await page.evaluate(async (nf: string, cnpj: string) => {
-      try {
-        const res = await fetch('/rastrear/listar', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8', 'X-Requested-With': 'XMLHttpRequest' },
-          body: `dados[nfs]=${nf}&dados[cnpjcpf]=${cnpj}&dados[captchasum1]=10&dados[captcha1]=10`,
-        })
-        const text = await res.text()
-        return { status: res.status, text: text.slice(0, 300) }
-      } catch (e) {
-        return { status: -1, text: String(e) }
-      }
-    }, nf, cnpj) as { status: number; text: string }
-
-    console.log(`[Modular] /listar → HTTP ${listaRaw.status} | ${listaRaw.text.slice(0, 150)}`)
-
-    let listaData: { notas?: ModularNota[] } | null = null
-    try { listaData = JSON.parse(listaRaw.text) } catch { /* não-JSON */ }
-
-    nota = listaData?.notas?.[0]
-    if (!nota?.Controle) {
-      await browser.close()
-      return { status: null, lastEvent: null }
-    }
-
-    // 2) Histórico de posições
-    const posData = await page.evaluate(async (filial: string, controle: string) => {
-      const res = await fetch('/rastrear/listar/posicao', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8', 'X-Requested-With': 'XMLHttpRequest' },
-        body: `dados[filialorigem]=${filial}&dados[controle]=${controle}&dados[captchasum1]=10&dados[captcha1]=10`,
-      })
-      return res.ok ? res.json() : null
-    }, nota.Filial_Origem ?? '', nota.Controle) as { posicao?: ModularPosicao[] } | null
-
-    posicoes = posData?.posicao ?? []
-  } catch (err) {
-    await browser.close().catch(() => {})
-    return { status: null, lastEvent: `Erro: ${err instanceof Error ? err.message : String(err)}` }
+  if (!nfKey || nfKey.replace(/\D/g, '').length !== 44) {
+    return { status: null, lastEvent: 'Sem chave de acesso da NF-e para rastrear' }
   }
-  await browser.close().catch(() => {})
+  const chave = nfKey.replace(/\D/g, '')
 
-  const estimatedDelivery = parseBrDate(nota.PrevisaoEntrega)
+  const token = await modularLogin()
+  const res = await fetch(`${MODULAR_API}/ocorrencias/${chave}`, {
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+    signal: AbortSignal.timeout(20000),
+  })
+  if (res.status === 401) {
+    // token expirado — renova e tenta uma vez
+    modularToken = null
+    const t2 = await modularLogin()
+    const r2 = await fetch(`${MODULAR_API}/ocorrencias/${chave}`, {
+      headers: { Authorization: `Bearer ${t2}`, Accept: 'application/json' },
+      signal: AbortSignal.timeout(20000),
+    })
+    if (!r2.ok) return { status: null, lastEvent: `Erro: HTTP ${r2.status}` }
+    return parseModular(await r2.json() as ModularResposta)
+  }
+  if (!res.ok) return { status: null, lastEvent: `Erro: HTTP ${res.status}` }
 
-  // Eventos em ordem cronológica (mais antigo → mais recente, como vêm da API)
-  const events: TrackingEvent[] = posicoes.map((p) => ({
-    date: parseBrDate(p.Data_Inicial),
-    description: p.Descricao ?? '',
-  }))
+  return parseModular(await res.json() as ModularResposta)
+}
 
-  const ultimo = posicoes[posicoes.length - 1]
-  const lastEvent = ultimo?.Descricao ?? nota.Descricao ?? null
-  const shippedAt = events.length > 0 ? events[0].date : null
-  const status = modularMapStatus(nota.Localizacao ?? '', lastEvent ?? '', nota.Entrega ?? '')
+function parseModular(d: ModularResposta): TrackingResult {
+  const ocorrencias = Array.isArray(d.Ocorrencias) ? d.Ocorrencias : []
+
+  // events do mais recente para o mais antigo (padrão do app)
+  const events: TrackingEvent[] = ocorrencias
+    .map((o) => ({ date: parseBrDate(o.Data), description: o.Descricao || o.Ocorrencia || '' }))
+    .filter((e) => e.description)
+    .sort((a, b) => (b.date?.getTime() ?? 0) - (a.date?.getTime() ?? 0))
+
+  const shippedAt = parseBrDate(d.Emissao)
+  const estimatedDelivery = parseBrDate(d.Previsao_Entrega)
+  const entregue = !!(d.Data_Entrega && d.Data_Entrega.trim())
+  const lastEvent = events[0]?.description ?? null
   const hasOccurrence = events.some((e) => detectOccurrence(e.description))
 
-  // events ordenados do mais recente para o mais antigo (padrão usado no app)
-  const eventsDesc = [...events].reverse()
+  let status: OrderStatus | null
+  if (entregue) status = OrderStatus.DELIVERED
+  else if (lastEvent && /devolv|recusad|retorno/i.test(lastEvent)) status = OrderStatus.CANCELLED
+  else if (events.length > 0 || shippedAt) status = OrderStatus.IN_TRANSIT
+  else status = null
 
-  return { status, lastEvent, shippedAt, estimatedDelivery, hasOccurrence, events: eventsDesc, raw: { nota, posicoes } }
+  return {
+    status,
+    lastEvent: entregue ? (lastEvent ?? 'Entrega realizada') : lastEvent,
+    shippedAt,
+    estimatedDelivery,
+    hasOccurrence,
+    events: events.length > 0 ? events : undefined,
+    raw: d,
+  }
 }

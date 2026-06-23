@@ -45,6 +45,7 @@ model Order {
   trackingEvents    Json?
   hasOccurrence     Boolean   @default(false)
   linkDanfe         String?       // URL do DANFE no Bling (para envio na notificação FATURADO)
+  nfKey             String?       // chave de acesso da NF-e (44 dígitos) — usada no rastreio Modular
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
   statusHistory     StatusHistory[]

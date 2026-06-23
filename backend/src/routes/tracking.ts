@@ -63,7 +63,7 @@ export async function runTrackingSync(onProgress?: ProgressCallback, systems?: T
       } else if (carrier.trackingSystem === TrackingSystem.BRASPRESS) {
         result = await trackBraspress(cnpj, nf, carrier.trackingIdentifier)
       } else if (carrier.trackingSystem === TrackingSystem.MODULAR) {
-        result = await trackModular(cnpj, nf)
+        result = await trackModular(cnpj, nf, order.nfKey)
       } else {
         return
       }
