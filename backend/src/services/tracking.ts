@@ -1120,8 +1120,8 @@ let modularToken: { token: string; expires: number } | null = null
 
 async function modularLogin(): Promise<string> {
   if (modularToken && Date.now() < modularToken.expires) return modularToken.token
-  const usuario = process.env.MODULAR_USER
-  const senha = process.env.MODULAR_PASSWORD
+  const usuario = process.env.MODULAR_USER?.trim()
+  const senha = process.env.MODULAR_PASSWORD?.trim()
   if (!usuario || !senha) throw new Error('MODULAR_USER/MODULAR_PASSWORD não configurados')
 
   const res = await fetch(`${MODULAR_API}/auth/login`, {
