@@ -21,6 +21,17 @@ function occurrenceLabel(text?: string | null): string {
 }
 
 export function StatusBadge({ status, hasOccurrence, lastTracking }: BadgeProps) {
+  // Entregue, mas teve ocorrência no caminho → "Entregue" em âmbar (resolvido com problema)
+  if (status === 'DELIVERED' && hasOccurrence) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium bg-amber-100 text-amber-800 border-amber-200" title="Entregue após ocorrência no transporte">
+        <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+        Entregue (c/ ocorrência)
+      </span>
+    )
+  }
+
+  // Ocorrência ativa (não entregue) → vermelho com o tipo
   if (hasOccurrence) {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium bg-red-100 text-red-800 border-red-200">
