@@ -484,15 +484,17 @@ router.get('/sync-stream', async (req: Request, res: Response) => {
   }
 })
 
-// GET /api/bling/debug/nfe/:id - detalhes de uma NF específica
+// GET /api/bling/debug/nfe/:id?company=agrogranja - detalhes de uma NF específica
 router.get('/debug/nfe/:id', async (req: Request, res: Response) => {
   const connectedCompanies = Object.keys(COMPANIES).filter((key) => !!tokens[key])
   if (connectedCompanies.length === 0) return res.status(401).json({ error: 'Não conectado' })
+  const requested = req.query.company as string | undefined
+  const companyKey = requested && connectedCompanies.includes(requested) ? requested : connectedCompanies[0]
   try {
-    const data = await blingGet(connectedCompanies[0], `/nfe/${req.params.id}`)
+    const data = await blingGet(companyKey, `/nfe/${req.params.id}`)
     res.json(data)
   } catch (err) {
-    res.status(500).json({ error: String(err) })
+    res.status(500).json({ error: String(err), companyKey })
   }
 })
 
