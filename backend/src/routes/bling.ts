@@ -392,18 +392,24 @@ export async function runBlingSync(limite?: number, onlyCompany?: string, onProg
             },
           })
 
-          // Notifica cliente: pedido FATURADO (fire-and-forget)
-          notifyFaturado({
-            id: newOrder.id,
-            orderNumber: newOrder.orderNumber,
-            nfNumber: newOrder.nfNumber,
-            customerName: newOrder.customerName,
-            customerEmail: newOrder.customerEmail,
-            customerPhone: newOrder.customerPhone,
-            senderCnpj: newOrder.senderCnpj,
-            linkDanfe: resolved.linkDanfe,
-            nfIssuedAt: newOrder.nfIssuedAt,
-          }).catch(err => console.error(`[Notifier] Erro ao notificar FATURADO ${newOrder.orderNumber}:`, err))
+          // Notifica cliente FATURADO apenas se a NF foi emitida recentemente (≤48h).
+          // Evita disparar FATURADO retroativo ao importar NFs antigas (ex: transportadora
+          // liberada depois, ou reimportação).
+          const emissao = newOrder.nfIssuedAt ? newOrder.nfIssuedAt.getTime() : 0
+          const recente = emissao > 0 && (Date.now() - emissao) <= 48 * 60 * 60 * 1000
+          if (recente) {
+            notifyFaturado({
+              id: newOrder.id,
+              orderNumber: newOrder.orderNumber,
+              nfNumber: newOrder.nfNumber,
+              customerName: newOrder.customerName,
+              customerEmail: newOrder.customerEmail,
+              customerPhone: newOrder.customerPhone,
+              senderCnpj: newOrder.senderCnpj,
+              linkDanfe: resolved.linkDanfe,
+              nfIssuedAt: newOrder.nfIssuedAt,
+            }).catch(err => console.error(`[Notifier] Erro ao notificar FATURADO ${newOrder.orderNumber}:`, err))
+          }
 
           criados++
           runningCriados++
