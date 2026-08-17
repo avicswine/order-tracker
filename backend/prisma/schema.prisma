@@ -15,6 +15,7 @@ model Carrier {
   active             Boolean        @default(true)
   trackingSystem     TrackingSystem @default(NONE)
   trackingIdentifier String?
+  whatsappResponsavel String?       // WhatsApp do responsável na transportadora (avisos de ocorrência/atraso)
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
   orders             Order[]

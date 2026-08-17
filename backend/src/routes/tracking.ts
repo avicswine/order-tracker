@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express'
 import { prisma } from '../lib/prisma'
 import { trackSSW, trackSenior, trackWithPuppeteer, trackSaoMiguel, trackAtualCargas, trackRodonaves, trackBraspress, trackModular } from '../services/tracking'
 import { OrderStatus, TrackingSystem, Prisma } from '@prisma/client'
-import { notifyOrderUpdate } from '../services/notifier'
+import { notifyOrderUpdate, notifyCarrier } from '../services/notifier'
 
 const router = Router()
 
@@ -175,6 +175,26 @@ export async function runTrackingSync(onProgress?: ProgressCallback, systems?: T
           lastTracking: lastEvent,
           lastTrackingAt: new Date(),
         }).catch(err => console.error(`[Notifier] Erro ao notificar ${order.orderNumber}:`, err))
+      }
+
+      // Avisa o responsável da transportadora em ocorrência ou atraso (fire-and-forget)
+      if (!semDados && carrier.whatsappResponsavel) {
+        const estimatedDelivery = (updates.estimatedDelivery as Date | undefined) ?? order.estimatedDelivery
+        const statusFinal = (updates.status as OrderStatus | undefined) ?? order.status
+        const entregueOuCancelado = statusFinal === OrderStatus.DELIVERED || statusFinal === OrderStatus.CANCELLED
+        const hoje = new Date(); hoje.setHours(0, 0, 0, 0)
+        const atrasado = !entregueOuCancelado && estimatedDelivery && new Date(estimatedDelivery) < hoje
+        const carrierMin = { name: carrier.name, whatsappResponsavel: carrier.whatsappResponsavel }
+        const base = {
+          id: order.id, orderNumber: order.orderNumber, nfNumber: order.nfNumber,
+          customerName: order.customerName, senderCnpj: order.senderCnpj, recipientCnpj: order.recipientCnpj,
+          estimatedDelivery: estimatedDelivery ?? null, lastTracking: lastEvent, carrier: carrierMin,
+        }
+        if (result.hasOccurrence) {
+          notifyCarrier(base, 'OCORRENCIA').catch(err => console.error(`[Notifier] Erro aviso transportadora (ocorrência) ${order.orderNumber}:`, err))
+        } else if (atrasado) {
+          notifyCarrier(base, 'ATRASO').catch(err => console.error(`[Notifier] Erro aviso transportadora (atraso) ${order.orderNumber}:`, err))
+        }
       }
 
       atualizados++

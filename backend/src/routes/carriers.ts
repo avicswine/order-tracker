@@ -164,6 +164,7 @@ router.post(
     body('phone').trim().notEmpty().withMessage('Phone is required'),
     body('trackingSystem').optional().isIn(Object.values(TrackingSystem)),
     body('trackingIdentifier').optional().trim(),
+    body('whatsappResponsavel').optional().trim(),
   ],
   async (req: Request, res: Response) => {
     const errors = validationResult(req)
@@ -177,6 +178,7 @@ router.post(
           phone: req.body.phone,
           ...(req.body.trackingSystem && { trackingSystem: req.body.trackingSystem }),
           trackingIdentifier: req.body.trackingIdentifier ?? null,
+          whatsappResponsavel: req.body.whatsappResponsavel || null,
         },
       })
       res.status(201).json(carrier)
@@ -200,6 +202,7 @@ router.put(
     body('active').optional().isBoolean(),
     body('trackingSystem').optional().isIn(Object.values(TrackingSystem)),
     body('trackingIdentifier').optional().trim(),
+    body('whatsappResponsavel').optional().trim(),
   ],
   async (req: Request, res: Response) => {
     const errors = validationResult(req)
@@ -215,6 +218,7 @@ router.put(
           ...(req.body.active !== undefined && { active: req.body.active }),
           ...(req.body.trackingSystem !== undefined && { trackingSystem: req.body.trackingSystem }),
           ...(req.body.trackingIdentifier !== undefined && { trackingIdentifier: req.body.trackingIdentifier || null }),
+          ...(req.body.whatsappResponsavel !== undefined && { whatsappResponsavel: req.body.whatsappResponsavel || null }),
         },
       })
       res.json(carrier)

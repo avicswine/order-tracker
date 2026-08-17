@@ -16,6 +16,7 @@ interface FormData {
   active: boolean
   trackingSystem: TrackingSystem
   trackingIdentifier: string
+  whatsappResponsavel: string
 }
 
 interface Props {
@@ -39,6 +40,7 @@ export function CarrierFormModal({ open, onClose, carrier }: Props) {
         active: carrier?.active ?? true,
         trackingSystem: carrier?.trackingSystem ?? 'NONE',
         trackingIdentifier: carrier?.trackingIdentifier ?? '',
+        whatsappResponsavel: carrier?.whatsappResponsavel ?? '',
       })
     }
   }, [open, carrier, reset])
@@ -98,6 +100,16 @@ export function CarrierFormModal({ open, onClose, carrier }: Props) {
             onChange={(e) => setValue('phone', formatPhone(e.target.value))}
           />
           {errors.phone && <p className="mt-1 text-xs text-red-500">{errors.phone.message}</p>}
+        </div>
+
+        <div>
+          <label className="label">WhatsApp do responsável</label>
+          <input
+            className="input"
+            placeholder="(00) 00000-0000"
+            {...register('whatsappResponsavel')}
+          />
+          <p className="mt-1 text-xs text-gray-400">Recebe avisos automáticos de ocorrência e atraso desta transportadora.</p>
         </div>
 
         {/* Sistema de rastreamento */}

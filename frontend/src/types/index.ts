@@ -18,6 +18,7 @@ export interface Carrier {
   active: boolean
   trackingSystem: TrackingSystem
   trackingIdentifier: string | null
+  whatsappResponsavel: string | null
   createdAt: string
   updatedAt: string
   _count?: { orders: number }

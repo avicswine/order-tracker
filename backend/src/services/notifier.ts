@@ -405,3 +405,73 @@ export async function notifyBatchEnviado(order: {
   )
   console.log(`[Notifier] 🚚 BATCH_ENVIADO → ${order.orderNumber}${dataEnvio ? ` (enviado em ${dataEnvio})` : ''}`)
 }
+
+// ─── Aviso à transportadora (ocorrência / atraso) ────────────────────────────
+// Empresa remetente por CNPJ (para o atendente saber de qual empresa é a NF)
+const SENDER_LABEL: Record<string, string> = {
+  '47715256000149': 'AVIC',
+  '54695386000122': 'AGROGRANJA',
+  '56633474000125': 'EQUIPAGE',
+}
+
+type CarrierAviso = 'OCORRENCIA' | 'ATRASO'
+
+// Envia aviso ao responsável da transportadora — SEMPRE pela instância AVIC.
+// Deduplicado: cada pedido recebe no máximo 1 aviso por tipo (ocorrência/atraso).
+export async function notifyCarrier(order: {
+  id: string
+  orderNumber: string
+  nfNumber: string | null
+  customerName: string
+  senderCnpj: string | null
+  recipientCnpj: string | null
+  estimatedDelivery: Date | null
+  lastTracking: string | null
+  carrier: { name: string; whatsappResponsavel: string | null } | null
+}, tipo: CarrierAviso): Promise<void> {
+  const numero = order.carrier?.whatsappResponsavel?.replace(/\D/g, '')
+  if (!numero || !isMobilePhone(numero)) return
+
+  const eventHash = hashEvent(order.id, `CARRIER_${tipo}`)
+  // Dedup: só envia se ainda não avisou esse tipo com sucesso
+  const jaAvisou = await prisma.orderNotification.findFirst({
+    where: { orderId: order.id, eventHash, success: true },
+  })
+  if (jaAvisou) return
+
+  const nf = order.nfNumber ? String(parseInt(order.nfNumber, 10)) : order.orderNumber
+  const empresa = order.senderCnpj ? (SENDER_LABEL[order.senderCnpj.replace(/\D/g, '')] ?? '') : ''
+  const evento = order.lastTracking ? formatTrackingText(order.lastTracking) : ''
+  const previsao = order.estimatedDelivery ? formatDate(order.estimatedDelivery) : null
+
+  let msg: string
+  if (tipo === 'OCORRENCIA') {
+    msg = `⚠️ *OCORRÊNCIA* — NF ${nf}${empresa ? ` (${empresa})` : ''}\n\n`
+      + `Cliente: ${order.customerName}\n`
+      + (evento ? `Evento: ${evento}\n` : '')
+      + (previsao ? `Previsão de entrega: ${previsao}\n` : '')
+      + `\nPor favor, verificar a situação da entrega.`
+  } else {
+    const dias = order.estimatedDelivery
+      ? Math.floor((Date.now() - new Date(order.estimatedDelivery).setHours(0, 0, 0, 0)) / 86400000)
+      : 0
+    msg = `⏰ *ENTREGA EM ATRASO* — NF ${nf}${empresa ? ` (${empresa})` : ''}\n\n`
+      + `Cliente: ${order.customerName}\n`
+      + (previsao ? `Previsão era ${previsao}${dias > 0 ? ` (${dias} dia${dias > 1 ? 's' : ''} de atraso)` : ''}\n` : '')
+      + (evento ? `Último evento: ${evento}\n` : '')
+      + `\nPor favor, verificar o andamento da entrega.`
+  }
+
+  const wppNumber = toWhatsAppNumber(numero)
+  const result = await sendMessage('avic', wppNumber, msg) // sempre pela instância AVIC
+  await prisma.orderNotification.create({
+    data: {
+      orderId: order.id, eventHash, channel: `CARRIER_${tipo}`,
+      recipient: wppNumber, eventText: order.lastTracking ?? null,
+      success: result.ok, error: result.ok ? null : (result.error ?? null),
+    },
+  }).catch(() => { /* @@unique em paralelo — ignora */ })
+
+  if (result.ok) console.log(`[Notifier] 📨 Transportadora ${order.carrier?.name} avisada (${tipo}) → ${order.orderNumber}`)
+  else console.warn(`[Notifier] ⚠️ Falha ao avisar transportadora (${tipo}) ${order.orderNumber}: ${result.error}`)
+}
