@@ -428,16 +428,16 @@ export async function notifyCarrier(order: {
   estimatedDelivery: Date | null
   lastTracking: string | null
   carrier: { name: string; whatsappResponsavel: string | null } | null
-}, tipo: CarrierAviso): Promise<void> {
+}, tipo: CarrierAviso): Promise<{ sent: boolean; reason: string }> {
   const numero = order.carrier?.whatsappResponsavel?.replace(/\D/g, '')
-  if (!numero || !isMobilePhone(numero)) return
+  if (!numero || !isMobilePhone(numero)) return { sent: false, reason: 'sem-whatsapp-valido' }
 
   const eventHash = hashEvent(order.id, `CARRIER_${tipo}`)
   // Dedup: só envia se ainda não avisou esse tipo com sucesso
   const jaAvisou = await prisma.orderNotification.findFirst({
     where: { orderId: order.id, eventHash, success: true },
   })
-  if (jaAvisou) return
+  if (jaAvisou) return { sent: false, reason: 'ja-enviado' }
 
   const nf = order.nfNumber ? String(parseInt(order.nfNumber, 10)) : order.orderNumber
   const empresa = order.senderCnpj ? (SENDER_LABEL[order.senderCnpj.replace(/\D/g, '')] ?? '') : ''
@@ -474,4 +474,5 @@ export async function notifyCarrier(order: {
 
   if (result.ok) console.log(`[Notifier] 📨 Transportadora ${order.carrier?.name} avisada (${tipo}) → ${order.orderNumber}`)
   else console.warn(`[Notifier] ⚠️ Falha ao avisar transportadora (${tipo}) ${order.orderNumber}: ${result.error}`)
+  return result.ok ? { sent: true, reason: 'ok' } : { sent: false, reason: result.error ?? 'falha-envio' }
 }

@@ -221,6 +221,51 @@ router.post('/sync', async (_req: Request, res: Response) => {
   res.json({ message: 'Rastreamento concluído', ...result })
 })
 
+// POST /api/tracking/notify-carrier — dispara aviso ao responsável da transportadora
+// APENAS para os pedidos informados (não roda rastreio). Usa o estado atual do pedido
+// para decidir o tipo (ocorrência ou atraso). Deduplicado por tipo, igual ao fluxo automático.
+router.post('/notify-carrier', async (req: Request, res: Response) => {
+  const orderNumbers: unknown = req.body?.orderNumbers
+  if (!Array.isArray(orderNumbers) || orderNumbers.length === 0) {
+    return res.status(400).json({ error: 'Informe orderNumbers: string[]' })
+  }
+
+  const orders = await prisma.order.findMany({
+    where: { orderNumber: { in: orderNumbers as string[] } },
+    include: { carrier: true },
+  })
+
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0)
+  const resultados = []
+
+  for (const num of orderNumbers as string[]) {
+    const order = orders.find((o) => o.orderNumber === num)
+    if (!order) { resultados.push({ orderNumber: num, sent: false, reason: 'nao-encontrado' }); continue }
+    if (!order.carrier?.whatsappResponsavel) {
+      resultados.push({ orderNumber: num, carrier: order.carrier?.name ?? null, sent: false, reason: 'transportadora-sem-whatsapp' })
+      continue
+    }
+
+    const entregueOuCancelado = order.status === OrderStatus.DELIVERED || order.status === OrderStatus.CANCELLED
+    const atrasado = !entregueOuCancelado && order.estimatedDelivery && new Date(order.estimatedDelivery) < hoje
+    const tipo = order.hasOccurrence ? 'OCORRENCIA' : (atrasado ? 'ATRASO' : null)
+    if (!tipo) {
+      resultados.push({ orderNumber: num, carrier: order.carrier.name, sent: false, reason: 'sem-ocorrencia-nem-atraso' })
+      continue
+    }
+
+    const r = await notifyCarrier({
+      id: order.id, orderNumber: order.orderNumber, nfNumber: order.nfNumber,
+      customerName: order.customerName, senderCnpj: order.senderCnpj, recipientCnpj: order.recipientCnpj,
+      estimatedDelivery: order.estimatedDelivery, lastTracking: order.lastTracking,
+      carrier: { name: order.carrier.name, whatsappResponsavel: order.carrier.whatsappResponsavel },
+    }, tipo)
+    resultados.push({ orderNumber: num, carrier: order.carrier.name, tipo, ...r })
+  }
+
+  res.json({ resultados })
+})
+
 function sseHandler(systems?: TrackingSystem[]) {
   return async (_req: Request, res: Response) => {
     res.setHeader('Content-Type', 'text/event-stream')
