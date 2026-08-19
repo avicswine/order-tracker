@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Shell from '../components/Shell'
 import TarefaCard from '../components/TarefaCard'
+import ScannerQr from '../components/ScannerQr'
 import { api } from '../lib/api'
 import { useEventos } from '../lib/useEventos'
 import { useAuth } from '../contexts/AuthContext'
@@ -18,6 +19,7 @@ export default function SepararFilaPage() {
   const [codigo, setCodigo] = useState('')
   const [erro, setErro] = useState('')
   const [carregando, setCarregando] = useState(true)
+  const [camera, setCamera] = useState(false)
 
   const carregar = useCallback(async () => {
     try {
@@ -46,13 +48,14 @@ export default function SepararFilaPage() {
     }
   }
 
-  // Bipar/digitar a NF (chave da DANFE ou número)
-  async function localizar(e: FormEvent) {
-    e.preventDefault()
-    if (!codigo.trim()) return
+  // Bipar/digitar a NF (chave da DANFE ou número) — pelo campo (leitor Bluetooth/teclado) ou pela câmera
+  async function localizar(e?: FormEvent, valorCamera?: string) {
+    e?.preventDefault()
+    const valor = (valorCamera ?? codigo).trim()
+    if (!valor) return
     destravarAudio()
     try {
-      const r = await api.get<{ tarefas: TarefaResumo[] }>(`/tarefas/localizar?codigo=${encodeURIComponent(codigo.trim())}${empresa ? `&empresa=${empresa}` : ''}`)
+      const r = await api.get<{ tarefas: TarefaResumo[] }>(`/tarefas/localizar?codigo=${encodeURIComponent(valor)}${empresa ? `&empresa=${empresa}` : ''}`)
       setCodigo('')
       const validas = r.tarefas.filter(t => t.status === 'PENDENTE' || t.status === 'EM_SEPARACAO')
       if (validas.length === 1) return abrir(validas[0])
@@ -70,7 +73,7 @@ export default function SepararFilaPage() {
 
   return (
     <Shell titulo="Separar" voltarPara="/">
-      <form onSubmit={localizar} className="flex gap-2 mb-3">
+      <form onSubmit={localizar} className="flex gap-2 mb-2">
         <input
           className="input"
           placeholder="Bipe a DANFE ou digite o nº da NF"
@@ -79,8 +82,10 @@ export default function SepararFilaPage() {
           inputMode="numeric"
           autoComplete="off"
         />
+        <button type="button" className={`btn-secondary shrink-0 !px-3 ${camera ? '!bg-brand-50 !border-brand-500' : ''}`} onClick={() => { destravarAudio(); setCamera(c => !c) }} title="Ler código de barras da DANFE pela câmera">📷</button>
         <button className="btn-primary shrink-0">Abrir</button>
       </form>
+      {camera && <div className="mb-3"><ScannerQr ativo={camera} onCodigo={v => localizar(undefined, v)} /></div>}
 
       {empresas.length > 1 && (
         <div className="flex gap-2 mb-3 overflow-x-auto">

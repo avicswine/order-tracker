@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { api } from '../../lib/api'
 import { useEventos } from '../../lib/useEventos'
 import { hora } from '../../components/TarefaCard'
@@ -8,6 +9,10 @@ const DIAS_TRIAGEM = 3
 
 function fmtValor(v: number | null) {
   return v === null ? '' : v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
+
+function hojeISO() {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }) // YYYY-MM-DD
 }
 
 // Jeovan marca aqui quais NFs vão para a separação por bipe.
@@ -21,29 +26,62 @@ export default function TriagemPage() {
   const [msg, setMsg] = useState('')
   const [erro, setErro] = useState('')
   const [sincronizando, setSincronizando] = useState(false)
+  // Período: padrão = últimos 3 dias; "personalizado" permite buscar NFs antigas no Bling
+  const [periodoCustom, setPeriodoCustom] = useState(false)
+  const [dataInicial, setDataInicial] = useState(hojeISO())
+  const [dataFinal, setDataFinal] = useState(hojeISO())
+  const [nfBusca, setNfBusca] = useState('')
+  const [empresaBusca, setEmpresaBusca] = useState('')
 
   const carregar = useCallback(async () => {
     try {
-      setTarefas(await api.get<TarefaResumo[]>(`/tarefas?status=AGUARDANDO_TRIAGEM,PENDENTE,IGNORADA&dias=${DIAS_TRIAGEM}`))
+      const periodo = periodoCustom ? `dataInicial=${dataInicial}&dataFinal=${dataFinal}` : `dias=${DIAS_TRIAGEM}`
+      setTarefas(await api.get<TarefaResumo[]>(`/tarefas?status=AGUARDANDO_TRIAGEM,PENDENTE,IGNORADA&${periodo}`))
       setErro('')
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Erro ao carregar')
     }
-  }, [])
+  }, [periodoCustom, dataInicial, dataFinal])
 
   useEffect(() => { carregar() }, [carregar])
   useEffect(() => { api.get<Empresa[]>('/empresas').then(setEmpresas).catch(() => undefined) }, [])
   useEventos(e => { if (e.tipo === 'tarefas') carregar() })
 
+  // Busca no Bling: sem período = NFs do dia; com período personalizado = importa NFs antigas (máx. 31 dias)
   async function sincronizar() {
     setSincronizando(true); setMsg(''); setErro('')
     try {
-      const r = await api.post<{ novas: number; canceladas: number; erros: string[] }>('/tarefas/sync')
-      setMsg(`Busca concluída: ${r.novas} NF(s) nova(s), ${r.canceladas} cancelada(s).`)
+      const corpo = periodoCustom ? { dataInicial, dataFinal, empresa: empresa || undefined } : {}
+      const r = await api.post<{ novas: number; canceladas: number; erros: string[]; periodo: { dataInicial: string; dataFinal: string } }>('/tarefas/sync', corpo)
+      setMsg(`Busca no Bling (${r.periodo.dataInicial} a ${r.periodo.dataFinal}): ${r.novas} NF(s) nova(s), ${r.canceladas} cancelada(s).`)
       if (r.erros.length) setErro(r.erros.join(' | '))
       await carregar()
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Erro ao buscar NFs')
+    } finally {
+      setSincronizando(false)
+    }
+  }
+
+  // Busca uma NF específica pelo número (qualquer data) e coloca na triagem
+  async function importarPorNumero(e: FormEvent) {
+    e.preventDefault()
+    if (!empresaBusca || !nfBusca.trim()) return setErro('Escolha a empresa e informe o número da NF')
+    setSincronizando(true); setMsg(''); setErro('')
+    try {
+      const r = await api.post<{ novas: number; tarefas: TarefaResumo[] }>('/tarefas/importar', { empresa: empresaBusca, numero: nfBusca.trim() })
+      const t = r.tarefas[0]
+      setMsg(`NF ${t?.nfNumero ?? nfBusca} encontrada${r.novas ? ' e adicionada à triagem' : ` (já estava na fila — status: ${t?.status})`}.`)
+      setNfBusca('')
+      if (t?.nfEmitidaEm) {
+        // garante que ela apareça na lista: muda para período personalizado cobrindo a data da NF
+        const d = new Date(t.nfEmitidaEm).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
+        setPeriodoCustom(true); setDataInicial(d); setDataFinal(d > hojeISO() ? d : hojeISO())
+      } else {
+        await carregar()
+      }
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : 'Erro ao buscar NF')
     } finally {
       setSincronizando(false)
     }
@@ -82,8 +120,11 @@ export default function TriagemPage() {
       <td className="p-2">{t.clienteNome}</td>
       <td className="p-2 text-slate-500">{t.canal ?? '—'}</td>
       <td className="p-2 text-slate-500 text-right whitespace-nowrap">{fmtValor(t.valorNota)}</td>
-      <td className="p-2 text-slate-500 whitespace-nowrap">{hora(t.nfEmitidaEm)}</td>
-      <td className="p-2 text-right whitespace-nowrap">{acoes}</td>
+      <td className="p-2 text-slate-500 whitespace-nowrap">{t.nfEmitidaEm ? new Date(t.nfEmitidaEm).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ' ' : ''}{hora(t.nfEmitidaEm)}</td>
+      <td className="p-2 text-right whitespace-nowrap">
+        <Link to={`/etiquetas?nf=${t.id}`} className="text-slate-400 hover:text-brand-700 mr-3" title="Etiquetas desta NF">🏷</Link>
+        {acoes}
+      </td>
     </tr>
   )
 
@@ -96,7 +137,31 @@ export default function TriagemPage() {
           {empresas.map(e => <option key={e.key} value={e.key}>{e.name}</option>)}
         </select>
         <div className="flex-1" />
-        <button className="btn-secondary !py-2" onClick={sincronizar} disabled={sincronizando}>{sincronizando ? 'Buscando…' : '⟳ Buscar NFs agora'}</button>
+        <button className="btn-secondary !py-2" onClick={sincronizar} disabled={sincronizando}>{sincronizando ? 'Buscando…' : periodoCustom ? '⟳ Buscar período no Bling' : '⟳ Buscar NFs de hoje'}</button>
+      </div>
+
+      {/* Período e busca por número — para trazer NFs antigas para a triagem */}
+      <div className="card p-3 mb-3 flex flex-wrap items-end gap-3 text-sm">
+        <label className="flex items-center gap-2">
+          <input type="checkbox" checked={periodoCustom} onChange={e => setPeriodoCustom(e.target.checked)} />
+          Período personalizado
+        </label>
+        {periodoCustom && (
+          <>
+            <label>De<input type="date" className="input !py-1.5 !text-base ml-2 w-44" value={dataInicial} max={dataFinal} onChange={e => setDataInicial(e.target.value)} /></label>
+            <label>Até<input type="date" className="input !py-1.5 !text-base ml-2 w-44" value={dataFinal} min={dataInicial} max={hojeISO()} onChange={e => setDataFinal(e.target.value)} /></label>
+            <span className="text-xs text-slate-500">Lista o que já está no sistema; "Buscar período no Bling" importa as NFs desse intervalo (máx. 31 dias).</span>
+          </>
+        )}
+        {!periodoCustom && <span className="text-xs text-slate-500">Mostrando os últimos {DIAS_TRIAGEM} dias.</span>}
+        <form onSubmit={importarPorNumero} className="flex items-center gap-2 ml-auto">
+          <select className="input !py-1.5 !text-base w-36" value={empresaBusca} onChange={e => setEmpresaBusca(e.target.value)}>
+            <option value="">Empresa…</option>
+            {empresas.map(e => <option key={e.key} value={e.key}>{e.code}</option>)}
+          </select>
+          <input className="input !py-1.5 !text-base w-36" placeholder="Nº da NF" inputMode="numeric" value={nfBusca} onChange={e => setNfBusca(e.target.value)} />
+          <button className="btn-secondary !py-1.5" disabled={sincronizando}>Buscar NF no Bling</button>
+        </form>
       </div>
 
       {msg && <div className="rounded-xl bg-green-50 text-green-700 px-4 py-2 text-sm mb-3">{msg}</div>}

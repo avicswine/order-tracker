@@ -3,6 +3,7 @@ import { prisma } from '../../lib/prisma'
 import { listarEmpresasBling } from '../../routes/bling'
 import type { OperadorPayload } from '../../middleware/requireOperador'
 import { bling, MODO_MOCK } from './bling'
+import type { NfResumo } from './bling-tipos'
 import { getConfig } from './config'
 import { explodirItensNf } from './explosao'
 import { emitir } from './eventos'
@@ -85,57 +86,80 @@ async function registrarEvento(dados: {
 let syncEmAndamento = false
 let timerSync: NodeJS.Timeout | null = null
 
-export async function sincronizarNfs(): Promise<{ novas: number; canceladas: number; erros: string[]; empresas: string[] }> {
-  if (syncEmAndamento) return { novas: 0, canceladas: 0, erros: ['Sync já em andamento'], empresas: [] }
+// Grava/atualiza as tarefas a partir de uma lista de NFs do Bling. Retorna quantas novas/canceladas.
+async function absorverNfs(companyKey: string, nfs: NfResumo[]): Promise<{ novas: number; canceladas: number; ids: string[] }> {
+  const r = { novas: 0, canceladas: 0, ids: [] as string[] }
+  if (nfs.length === 0) return r
+
+  const existentes = await prisma.separacaoTarefa.findMany({
+    where: { companyKey, blingNfId: { in: nfs.map(n => n.blingNfId) } },
+    select: { id: true, blingNfId: true, status: true, chaveAcesso: true, canal: true },
+  })
+  const porId = new Map(existentes.map(e => [e.blingNfId, e]))
+
+  for (const nf of nfs) {
+    const existente = porId.get(nf.blingNfId)
+    if (!existente) {
+      if (nf.cancelada) continue
+      const criada = await prisma.separacaoTarefa.create({
+        data: {
+          companyKey, blingNfId: nf.blingNfId, nfNumero: normalizarNumeroNf(nf.numero) || nf.numero,
+          nfSerie: nf.serie ?? null, chaveAcesso: nf.chaveAcesso ?? null, nfEmitidaEm: nf.emitidaEm ?? null,
+          clienteNome: nf.clienteNome || 'Cliente não informado', valorNota: nf.valorNota ?? null, canal: nf.canal ?? null,
+        },
+        select: { id: true },
+      })
+      r.novas++
+      r.ids.push(criada.id)
+      continue
+    }
+    r.ids.push(existente.id)
+    if (nf.cancelada && existente.status !== SeparacaoStatus.CONCLUIDO && existente.status !== SeparacaoStatus.CANCELADA) {
+      await prisma.separacaoTarefa.update({ where: { id: existente.id }, data: { status: SeparacaoStatus.CANCELADA } })
+      await registrarEvento({ tarefaId: existente.id, tipo: SeparacaoEventoTipo.CANCELADO, detalhe: 'NF cancelada no Bling' })
+      r.canceladas++
+      continue
+    }
+    // Completa dados que faltavam (chave) ou que agora resolvem melhor (canal "Loja 123" → nome real)
+    const atualiza: { chaveAcesso?: string; canal?: string } = {}
+    if (!existente.chaveAcesso && nf.chaveAcesso) atualiza.chaveAcesso = nf.chaveAcesso
+    if (nf.canal && nf.canal !== existente.canal && (!existente.canal || REGEX_LOJA_ID.test(existente.canal))) atualiza.canal = nf.canal
+    if (Object.keys(atualiza).length) {
+      await prisma.separacaoTarefa.update({ where: { id: existente.id }, data: atualiza })
+    }
+  }
+  return r
+}
+
+const IMPORTACAO_MAX_DIAS = 31
+
+// Sync padrão (NFs do dia) ou importação de um período escolhido na triagem (NFs antigas)
+export async function sincronizarNfs(opcoes: { dataInicial?: string; dataFinal?: string; companyKey?: string } = {}):
+  Promise<{ novas: number; canceladas: number; erros: string[]; empresas: string[]; periodo: { dataInicial: string; dataFinal: string } }> {
+  const cfg = await getConfig()
+  const dataFinal = opcoes.dataFinal ?? dataBR()
+  const dataInicial = opcoes.dataInicial ?? somarDias(dataFinal, -(cfg.diasNfsFila - 1))
+  const periodo = { dataInicial, dataFinal }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dataInicial) || !/^\d{4}-\d{2}-\d{2}$/.test(dataFinal) || dataInicial > dataFinal) {
+    throw new ErroSeparacao(400, 'PERIODO_INVALIDO', 'Período inválido')
+  }
+  if (somarDias(dataInicial, IMPORTACAO_MAX_DIAS) < dataFinal) {
+    throw new ErroSeparacao(400, 'PERIODO_LONGO', `Período máximo de ${IMPORTACAO_MAX_DIAS} dias por busca`)
+  }
+
+  if (syncEmAndamento) return { novas: 0, canceladas: 0, erros: ['Já existe uma busca em andamento — tente de novo em instantes'], empresas: [], periodo }
   syncEmAndamento = true
-  const resultado = { novas: 0, canceladas: 0, erros: [] as string[], empresas: [] as string[] }
+  const resultado = { novas: 0, canceladas: 0, erros: [] as string[], empresas: [] as string[], periodo }
 
   try {
-    const cfg = await getConfig()
-    const dataFinal = dataBR()
-    const dataInicial = somarDias(dataFinal, -(cfg.diasNfsFila - 1))
-
-    const empresas = listarEmpresasBling().filter(e => MODO_MOCK || e.connected)
+    const empresas = listarEmpresasBling().filter(e => (MODO_MOCK || e.connected) && (!opcoes.companyKey || e.key === opcoes.companyKey))
     for (const empresa of empresas) {
       try {
         const nfs = await bling.listarNfs(empresa.key, dataInicial, dataFinal)
         resultado.empresas.push(empresa.key)
-        if (nfs.length === 0) continue
-
-        const existentes = await prisma.separacaoTarefa.findMany({
-          where: { companyKey: empresa.key, blingNfId: { in: nfs.map(n => n.blingNfId) } },
-          select: { id: true, blingNfId: true, status: true, chaveAcesso: true, canal: true },
-        })
-        const porId = new Map(existentes.map(e => [e.blingNfId, e]))
-
-        for (const nf of nfs) {
-          const existente = porId.get(nf.blingNfId)
-          if (!existente) {
-            if (nf.cancelada) continue
-            await prisma.separacaoTarefa.create({
-              data: {
-                companyKey: empresa.key, blingNfId: nf.blingNfId, nfNumero: normalizarNumeroNf(nf.numero) || nf.numero,
-                nfSerie: nf.serie ?? null, chaveAcesso: nf.chaveAcesso ?? null, nfEmitidaEm: nf.emitidaEm ?? null,
-                clienteNome: nf.clienteNome || 'Cliente não informado', valorNota: nf.valorNota ?? null, canal: nf.canal ?? null,
-              },
-            })
-            resultado.novas++
-            continue
-          }
-          if (nf.cancelada && existente.status !== SeparacaoStatus.CONCLUIDO && existente.status !== SeparacaoStatus.CANCELADA) {
-            await prisma.separacaoTarefa.update({ where: { id: existente.id }, data: { status: SeparacaoStatus.CANCELADA } })
-            await registrarEvento({ tarefaId: existente.id, tipo: SeparacaoEventoTipo.CANCELADO, detalhe: 'NF cancelada no Bling' })
-            resultado.canceladas++
-            continue
-          }
-          // Completa dados que faltavam (chave) ou que agora resolvem melhor (canal "Loja 123" → nome real)
-          const atualiza: { chaveAcesso?: string; canal?: string } = {}
-          if (!existente.chaveAcesso && nf.chaveAcesso) atualiza.chaveAcesso = nf.chaveAcesso
-          if (nf.canal && nf.canal !== existente.canal && (!existente.canal || REGEX_LOJA_ID.test(existente.canal))) atualiza.canal = nf.canal
-          if (Object.keys(atualiza).length) {
-            await prisma.separacaoTarefa.update({ where: { id: existente.id }, data: atualiza })
-          }
-        }
+        const r = await absorverNfs(empresa.key, nfs)
+        resultado.novas += r.novas
+        resultado.canceladas += r.canceladas
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
         console.error(`[Separação] Erro no sync de ${empresa.key}:`, msg)
@@ -148,6 +172,25 @@ export async function sincronizarNfs(): Promise<{ novas: number; canceladas: num
 
   if (resultado.novas || resultado.canceladas) emitir({ tipo: 'tarefas', motivo: 'sync' })
   return resultado
+}
+
+// Busca uma NF específica no Bling pelo número e coloca na triagem (NF antiga que não está na fila)
+export async function importarNfPorNumero(companyKey: string, numero: string) {
+  const empresa = listarEmpresasBling().find(e => e.key === companyKey)
+  if (!empresa) throw new ErroSeparacao(404, 'EMPRESA', 'Empresa não encontrada')
+  const nfs = await bling.buscarNfPorNumero(companyKey, numero)
+  if (nfs.length === 0) throw new ErroSeparacao(404, 'NF_NAO_ENCONTRADA', `NF ${numero} não encontrada no Bling da ${empresa.name}`)
+  const r = await absorverNfs(companyKey, nfs)
+  emitir({ tipo: 'tarefas', motivo: 'importar' })
+  const tarefas = await prisma.separacaoTarefa.findMany({ where: { id: { in: r.ids } }, include: INCLUDE_TAREFA })
+  return { novas: r.novas, tarefas: tarefas.map(t => ({ ...t, empresa: empresaDe(t.companyKey) })) }
+}
+
+// Carrega os itens de uma tarefa se ainda não estiverem (usado pela tela de etiquetas da NF)
+export async function garantirItensCarregados(tarefaId: string): Promise<void> {
+  const t = await prisma.separacaoTarefa.findUnique({ where: { id: tarefaId }, select: { companyKey: true, blingNfId: true, itensCarregados: true } })
+  if (!t) throw new ErroSeparacao(404, 'NAO_ENCONTRADA', 'Tarefa não encontrada')
+  if (!t.itensCarregados) await carregarItens(tarefaId, t.companyKey, t.blingNfId)
 }
 
 // ---------- pré-carga de itens em segundo plano ----------
@@ -218,11 +261,17 @@ export function pararSyncPeriodico() {
 
 // ---------- consultas ----------
 
-export async function listarTarefas(filtro: { status?: SeparacaoStatus[]; companyKey?: string; dias?: number }): Promise<TarefaResumo[]> {
+export async function listarTarefas(filtro: { status?: SeparacaoStatus[]; companyKey?: string; dias?: number; dataInicial?: string; dataFinal?: string }): Promise<TarefaResumo[]> {
   const where: Prisma.SeparacaoTarefaWhereInput = {}
   if (filtro.status?.length) where.status = { in: filtro.status }
   if (filtro.companyKey) where.companyKey = filtro.companyKey
-  if (filtro.dias) {
+  if (filtro.dataInicial || filtro.dataFinal) {
+    // Período explícito (triagem de NFs antigas): de 00:00 do dia inicial até 00:00 do dia seguinte ao final
+    const desde = filtro.dataInicial ? meiaNoiteBR(filtro.dataInicial) : undefined
+    const ate = filtro.dataFinal ? meiaNoiteBR(somarDias(filtro.dataFinal, 1)) : undefined
+    const faixa = { ...(desde ? { gte: desde } : {}), ...(ate ? { lt: ate } : {}) }
+    where.OR = [{ nfEmitidaEm: faixa }, { nfEmitidaEm: null, createdAt: faixa }]
+  } else if (filtro.dias) {
     // dias=1 → desde a meia-noite de hoje (Brasília); dias=2 → desde ontem; ...
     const desde = meiaNoiteBR(somarDias(dataBR(), -(filtro.dias - 1)))
     where.OR = [{ nfEmitidaEm: { gte: desde } }, { nfEmitidaEm: null, createdAt: { gte: desde } }]

@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import QRCode from 'qrcode'
 import Shell from '../components/Shell'
 import { api } from '../lib/api'
 import type { Empresa } from '../types'
 
 interface CatalogoItem { id: string; sku: string; nome: string; nfs?: number; unidades?: number; impressoEm?: string | null }
-type Fonte = 'pendentes' | 'catalogo'
+type Fonte = 'pendentes' | 'catalogo' | 'nf'
 
 // Etiqueta de prateleira: layout horizontal (QR à esquerda, SKU/nome à direita), altura máx. 4 cm.
 // A "página" pode ser uma folha A4 ou uma etiqueta da impressora Zebra (10×15 cm) — nas duas, várias
@@ -59,7 +60,11 @@ export default function EtiquetasPage() {
   const [erro, setErro] = useState('')
   const [info, setInfo] = useState('')
   const [msg, setMsg] = useState('')
-  const [fonte, setFonte] = useState<Fonte>('pendentes')
+  const [searchParams] = useSearchParams()
+  const [nfId, setNfId] = useState<string | null>(searchParams.get('nf')) // vindo de "Etiquetas desta NF" ou da busca por número
+  const [fonte, setFonte] = useState<Fonte>(searchParams.get('nf') ? 'nf' : 'pendentes')
+  const [nfInfo, setNfInfo] = useState<{ nfNumero: string } | null>(null)
+  const [nfBusca, setNfBusca] = useState('')
   const [diasPendentes, setDiasPendentes] = useState(1)
   const [incluirImpressos, setIncluirImpressos] = useState(false)
 
@@ -98,8 +103,44 @@ export default function EtiquetasPage() {
     }
   }
 
-  const recarregar = (forcar = false) => (fonte === 'pendentes' ? carregarPendentes() : carregarCatalogo(forcar))
-  useEffect(() => { setSelecionados(new Map()); recarregar() }, [empresa, fonte, diasPendentes, incluirImpressos]) // eslint-disable-line react-hooks/exhaustive-deps
+  // SKUs de uma NF específica — pré-seleciona os que ainda não têm etiqueta impressa
+  async function carregarDaNf() {
+    if (!nfId) return
+    setCarregando(true); setErro('')
+    try {
+      const r = await api.get<{ companyKey: string; nfNumero: string; itens: CatalogoItem[] }>(`/catalogo/nf/${nfId}`)
+      if (r.companyKey !== empresa) setEmpresa(r.companyKey)
+      setNfInfo({ nfNumero: r.nfNumero })
+      const lista = r.itens.map(i => ({ ...i, id: i.sku }))
+      setItens(lista)
+      const semEtiqueta = lista.filter(i => !i.impressoEm)
+      setSelecionados(new Map((incluirImpressos ? lista : semEtiqueta).map(i => [i.id, i])))
+      setInfo(`NF ${r.nfNumero}: ${lista.length} SKU(s) · ${semEtiqueta.length} sem etiqueta${incluirImpressos ? ' · todos selecionados' : semEtiqueta.length ? ' (já selecionados)' : ''}`)
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Erro ao carregar NF')
+    } finally {
+      setCarregando(false)
+    }
+  }
+
+  // Busca a NF pelo número/chave (na empresa escolhida) e carrega os SKUs dela
+  async function buscarNf(e?: FormEvent) {
+    e?.preventDefault()
+    const codigo = nfBusca.trim()
+    if (!codigo) return
+    setErro(''); setMsg('')
+    try {
+      const r = await api.get<{ tarefas: { id: string; nfNumero: string; status: string }[] }>(`/tarefas/localizar?codigo=${encodeURIComponent(codigo)}${empresa ? `&empresa=${empresa}` : ''}`)
+      if (r.tarefas.length === 0) { setItens([]); setNfInfo(null); return setErro('NF não encontrada na fila de separação. Use Balcão → Triagem → "Buscar NF no Bling" para importá-la.') }
+      setNfId(r.tarefas[0].id)
+      setNfBusca('')
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : 'Erro ao localizar NF')
+    }
+  }
+
+  const recarregar = (forcar = false) => (fonte === 'nf' ? carregarDaNf() : fonte === 'pendentes' ? carregarPendentes() : carregarCatalogo(forcar))
+  useEffect(() => { if (fonte !== 'nf') setSelecionados(new Map()); recarregar() }, [empresa, fonte, diasPendentes, incluirImpressos, nfId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function marcarImpressas(skus: string[]) {
     if (!empresa || skus.length === 0) return
@@ -107,7 +148,7 @@ export default function EtiquetasPage() {
       const r = await api.post<{ marcadas: number }>('/catalogo/pendentes/marcar', { empresa, skus })
       setMsg(`${r.marcadas} SKU(s) marcados como impressos.`)
       setSelecionados(new Map())
-      await carregarPendentes()
+      await recarregar()
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Erro ao marcar')
     }
@@ -115,8 +156,8 @@ export default function EtiquetasPage() {
 
   function imprimir() {
     window.print()
-    // Na aba "Pendentes", depois de fechar a janela de impressão, oferece registrar como impressas
-    if (fonte === 'pendentes' && selecionados.size > 0) {
+    // Nas abas "Pendentes" e "Por NF", depois de fechar a janela de impressão, oferece registrar como impressas
+    if (fonte !== 'catalogo' && selecionados.size > 0) {
       const skus = [...selecionados.values()].map(i => i.sku)
       if (window.confirm(`Imprimiu? Marcar ${skus.length} SKU(s) como etiqueta impressa (somem da lista de pendentes)?`)) marcarImpressas(skus)
     }
@@ -194,8 +235,21 @@ export default function EtiquetasPage() {
           </div>
           <div className="flex gap-1 mb-2 bg-slate-100 rounded-xl p-1 text-sm">
             <button className={`flex-1 rounded-lg py-1.5 ${fonte === 'pendentes' ? 'bg-white shadow font-medium' : 'text-slate-600'}`} onClick={() => setFonte('pendentes')}>Pendentes do dia</button>
+            <button className={`flex-1 rounded-lg py-1.5 ${fonte === 'nf' ? 'bg-white shadow font-medium' : 'text-slate-600'}`} onClick={() => setFonte('nf')}>Por NF</button>
             <button className={`flex-1 rounded-lg py-1.5 ${fonte === 'catalogo' ? 'bg-white shadow font-medium' : 'text-slate-600'}`} onClick={() => setFonte('catalogo')}>Catálogo completo</button>
           </div>
+          {fonte === 'nf' && (
+            <div className="mb-2">
+              <form onSubmit={buscarNf} className="flex gap-2 mb-1">
+                <input className="input !py-1.5 !text-base" placeholder="Nº da NF ou bipe a DANFE" inputMode="numeric" value={nfBusca} onChange={e => setNfBusca(e.target.value)} />
+                <button className="btn-secondary !py-1.5 shrink-0">Buscar</button>
+              </form>
+              <div className="flex items-center justify-between text-xs text-slate-600">
+                <span>{nfInfo ? <>NF <b>{nfInfo.nfNumero}</b> carregada — os SKUs sem etiqueta já vêm selecionados.</> : 'Digite o número da NF para listar os SKUs dela.'}</span>
+                <label className="flex items-center gap-1"><input type="checkbox" checked={incluirImpressos} onChange={e => setIncluirImpressos(e.target.checked)} /> selecionar também já impressos</label>
+              </div>
+            </div>
+          )}
           {fonte === 'pendentes' && (
             <div className="flex items-center gap-3 text-xs text-slate-600 mb-2 flex-wrap">
               <span>NFs de:</span>
@@ -221,7 +275,7 @@ export default function EtiquetasPage() {
                 <input type="checkbox" checked={selecionados.has(item.id)} onChange={() => toggle(item)} />
                 <span className="font-semibold w-32 shrink-0 truncate">{item.sku}</span>
                 <span className="flex-1 truncate text-slate-700">{item.nome}</span>
-                {fonte === 'pendentes' && item.nfs !== undefined && (
+                {fonte !== 'catalogo' && item.nfs !== undefined && (
                   <span className={`text-xs whitespace-nowrap ${item.impressoEm ? 'text-green-700' : 'text-slate-400'}`} title={item.impressoEm ? `impresso em ${new Date(item.impressoEm).toLocaleDateString('pt-BR')}` : ''}>
                     {item.impressoEm ? '✔ impresso · ' : ''}{item.nfs} NF · {item.unidades} un.
                   </span>
@@ -234,11 +288,11 @@ export default function EtiquetasPage() {
             ))}
             {!carregando && filtrados.length === 0 && (
               <div className="p-4 text-center text-slate-500 text-sm">
-                {!empresa ? 'Selecione a empresa' : fonte === 'pendentes' ? 'Nenhum SKU pendente — todas as etiquetas das NFs do período já foram impressas.' : 'Nenhum produto'}
+                {!empresa && fonte !== 'nf' ? 'Selecione a empresa' : fonte === 'pendentes' ? 'Nenhum SKU pendente — todas as etiquetas das NFs do período já foram impressas.' : fonte === 'nf' ? 'Nenhuma NF carregada.' : 'Nenhum produto'}
               </div>
             )}
           </div>
-          {fonte === 'pendentes' && selecionados.size > 0 && (
+          {fonte !== 'catalogo' && selecionados.size > 0 && (
             <button className="btn-secondary w-full mt-2 !py-2 text-sm" onClick={() => marcarImpressas([...selecionados.values()].map(i => i.sku))}>
               Marcar {selecionados.size} selecionado(s) como impressos (sem imprimir)
             </button>

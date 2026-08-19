@@ -2,8 +2,8 @@ import { Router, Request, Response } from 'express'
 import { requireSupervisor } from '../../middleware/requireOperador'
 import { bling } from '../../services/separacao/bling'
 import type { CatalogoItem } from '../../services/separacao/bling-tipos'
-import { desmarcarImpressas, listarSkusDoPeriodo, marcarImpressas } from '../../services/separacao/etiquetas'
-import { precarregarItens } from '../../services/separacao/tarefas'
+import { desmarcarImpressas, listarSkusDaTarefa, listarSkusDoPeriodo, marcarImpressas } from '../../services/separacao/etiquetas'
+import { garantirItensCarregados, precarregarItens } from '../../services/separacao/tarefas'
 
 // Catálogo de produtos (para imprimir etiquetas QR) — /api/separacao/catalogo, supervisor.
 // Listar o catálogo inteiro custa várias páginas na API do Bling → cache em memória por empresa.
@@ -35,6 +35,16 @@ router.get('/pendentes', async (req: Request, res: Response) => {
   const precarga = await precarregarItens(dias).catch(() => ({ carregadas: 0, erros: 0 })) // garante que NFs recém-chegadas entrem
   const itens = await listarSkusDoPeriodo(empresa, dias, req.query.todos === '1')
   res.json({ itens, dias, precarga })
+})
+
+// GET /catalogo/nf/:tarefaId — SKUs físicos de uma NF (carrega os itens se ainda não estiverem)
+router.get('/nf/:tarefaId', async (req: Request, res: Response) => {
+  try {
+    await garantirItensCarregados(req.params.tarefaId)
+    res.json(await listarSkusDaTarefa(req.params.tarefaId))
+  } catch (err) {
+    res.status(404).json({ error: err instanceof Error ? err.message : 'NF não encontrada' })
+  }
 })
 
 // POST /catalogo/pendentes/marcar { empresa, skus: [] } — registra como impressas

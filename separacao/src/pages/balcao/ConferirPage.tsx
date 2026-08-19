@@ -164,6 +164,7 @@ export default function ConferirPage() {
                   </>
                 )}
                 {tarefa.status === 'CONCLUIDO' && <button className="btn-secondary" onClick={reabrir}>Reabrir</button>}
+                <button className="btn-secondary" onClick={() => navigate(`/etiquetas?nf=${tarefa.id}`)} title="Imprimir QR dos SKUs desta NF que ainda não têm etiqueta">🏷 Etiquetas desta NF</button>
                 {tarefa.status === 'EM_SEPARACAO' && (
                   <>
                     <div className="text-amber-700 bg-amber-50 rounded-xl px-3 py-2 text-sm">Ainda em separação — aguarde o separador concluir.</div>

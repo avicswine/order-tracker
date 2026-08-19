@@ -195,6 +195,19 @@ export const blingReal: BlingSeparacaoAdapter = {
     return resultado
   },
 
+  async buscarNfPorNumero(companyKey, numero) {
+    const n = String(parseInt(numero.replace(/\D/g, ''), 10))
+    if (!n || n === 'NaN') return []
+    const lista = await listarNfsPaginado(companyKey, { tipo: NF_TIPO_SAIDA, numero: n })
+    const resultado: NfResumo[] = []
+    for (const nf of lista) {
+      const situacao = num(nf.situacao)
+      if (situacao !== undefined && NF_SITUACOES_DESCARTADAS.has(situacao)) continue
+      resultado.push(await paraNfResumo(companyKey, nf))
+    }
+    return resultado
+  },
+
   async obterDetalheNf(companyKey, blingNfId) {
     const resp = (await blingGet(companyKey, `/nfe/${blingNfId}`)) as { data?: NfeDetalhe }
     const d = resp.data

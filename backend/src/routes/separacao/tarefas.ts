@@ -33,20 +33,39 @@ function parseStatus(valor: unknown): SeparacaoStatus[] | undefined {
   return valor.split(',').map(s => s.trim().toUpperCase()).filter((s): s is SeparacaoStatus => validos.has(s as SeparacaoStatus))
 }
 
-// GET /tarefas?status=PENDENTE,EM_SEPARACAO&empresa=avic&dias=2
+const REGEX_DATA = /^\d{4}-\d{2}-\d{2}$/
+const dataQuery = (v: unknown) => (typeof v === 'string' && REGEX_DATA.test(v) ? v : undefined)
+
+// GET /tarefas?status=PENDENTE,EM_SEPARACAO&empresa=avic&dias=2  (ou &dataInicial=2026-08-01&dataFinal=2026-08-10)
 router.get('/', tratar(async (req, res) => {
   const dias = req.query.dias ? Number(req.query.dias) : undefined
   const lista = await svc.listarTarefas({
     status: parseStatus(req.query.status),
     companyKey: typeof req.query.empresa === 'string' ? req.query.empresa : undefined,
     dias: dias && Number.isFinite(dias) ? Math.min(Math.max(dias, 1), 90) : undefined,
+    dataInicial: dataQuery(req.query.dataInicial),
+    dataFinal: dataQuery(req.query.dataFinal),
   })
   res.json(lista)
 }))
 
-// POST /tarefas/sync — busca NFs novas no Bling agora (também roda sozinho no intervalo configurado)
-router.post('/sync', tratar(async (_req, res) => {
-  res.json(await svc.sincronizarNfs())
+// POST /tarefas/sync { dataInicial?, dataFinal?, empresa? } — busca NFs no Bling agora
+// (sem corpo: NFs do dia, igual ao automático; com período: importa NFs antigas para a triagem)
+router.post('/sync', tratar(async (req, res) => {
+  const { dataInicial, dataFinal, empresa } = req.body ?? {}
+  res.json(await svc.sincronizarNfs({
+    dataInicial: dataQuery(dataInicial), dataFinal: dataQuery(dataFinal),
+    companyKey: typeof empresa === 'string' && empresa ? empresa : undefined,
+  }))
+}))
+
+// POST /tarefas/importar { empresa, numero } — busca uma NF pelo número no Bling e coloca na triagem
+router.post('/importar', requireSupervisor, tratar(async (req, res) => {
+  const { empresa, numero } = req.body ?? {}
+  if (typeof empresa !== 'string' || !empresa || typeof numero !== 'string' || !numero.trim()) {
+    return res.status(400).json({ error: 'Informe empresa e número da NF' })
+  }
+  res.json(await svc.importarNfPorNumero(empresa, numero.trim()))
 }))
 
 // GET /tarefas/stream — SSE: avisa quando a fila ou uma tarefa muda (front refaz o GET)

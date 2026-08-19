@@ -50,6 +50,11 @@ export const blingMock: BlingSeparacaoAdapter = {
     await atraso()
     return (NFS[companyKey] ?? []).map(n => n.resumo)
   },
+  async buscarNfPorNumero(companyKey, numero) {
+    await atraso()
+    const n = String(parseInt(numero, 10))
+    return (NFS[companyKey] ?? []).filter(x => x.resumo.numero === n).map(x => x.resumo)
+  },
   async obterDetalheNf(companyKey, blingNfId) {
     await atraso()
     const nf = (NFS[companyKey] ?? []).find(n => n.resumo.blingNfId === blingNfId)

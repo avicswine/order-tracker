@@ -52,6 +52,23 @@ export async function listarSkusDoPeriodo(companyKey: string, dias: number, incl
   return lista.sort((a, b) => b.nfs - a.nfs || a.sku.localeCompare(b.sku))
 }
 
+// SKUs físicos de UMA NF (para imprimir as etiquetas dela direto da tela de separação/conferência)
+export async function listarSkusDaTarefa(tarefaId: string): Promise<{ companyKey: string; nfNumero: string; itens: EtiquetaPendente[] }> {
+  const tarefa = await prisma.separacaoTarefa.findUnique({
+    where: { id: tarefaId },
+    select: { companyKey: true, nfNumero: true, itens: { select: { sku: true, nome: true, fotoUrl: true, qtdEsperada: true }, orderBy: { ordem: 'asc' } } },
+  })
+  if (!tarefa) throw new Error('Tarefa não encontrada')
+  const skus = [...new Set(tarefa.itens.map(i => i.sku))]
+  const impressas = await prisma.separacaoEtiqueta.findMany({ where: { companyKey: tarefa.companyKey, sku: { in: skus } }, select: { sku: true, impressoEm: true } })
+  const impressaPorSku = new Map(impressas.map(i => [i.sku.trim().toLowerCase(), i.impressoEm]))
+  const itens: EtiquetaPendente[] = tarefa.itens.map(i => {
+    const imp = impressaPorSku.get(i.sku.trim().toLowerCase()) ?? null
+    return { sku: i.sku, nome: i.nome, fotoUrl: i.fotoUrl, nfs: 1, unidades: i.qtdEsperada, impressoEm: imp ? imp.toISOString() : null }
+  })
+  return { companyKey: tarefa.companyKey, nfNumero: tarefa.nfNumero, itens }
+}
+
 export async function marcarImpressas(companyKey: string, skus: string[], operadorId: string): Promise<number> {
   const unicos = [...new Set(skus.map(s => s.trim()).filter(Boolean))]
   let n = 0

@@ -54,6 +54,8 @@ export interface DiagnosticoRecurso {
 export interface BlingSeparacaoAdapter {
   // NFs de saída emitidas no período (inclusive), com paginação resolvida internamente
   listarNfs(companyKey: string, dataInicial: string, dataFinal: string): Promise<NfResumo[]>
+  // NF de saída pelo número (pode haver mais de uma série)
+  buscarNfPorNumero(companyKey: string, numero: string): Promise<NfResumo[]>
   obterDetalheNf(companyKey: string, blingNfId: string): Promise<NfDetalhe>
   // null = não encontrado OU sem permissão de produtos (ver produtosDisponiveis)
   obterProdutoPorSku(companyKey: string, sku: string): Promise<ProdutoResumo | null>
