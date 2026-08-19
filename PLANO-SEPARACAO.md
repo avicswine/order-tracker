@@ -4,7 +4,9 @@ Criado em 2026-08-18. Objetivo: zerar envio de peça errada / quantidade errada 
 
 ## Estado da implementação (2026-08-18)
 
-**Fases 1–7 implementadas e testadas localmente com dados de exemplo. Deploy ainda NÃO feito.**
+**EM PRODUÇÃO desde 2026-08-19** (`https://order-tracker-production-4189.up.railway.app/separacao`). Validado com NFs reais: sync (109 NFs/2 dias), triagem, iniciar (itens da NF, valor, série), devolver à triagem.
+
+**Pendência do lado do Bling (José):** o app do Bling usado pelo order-tracker **não tem os escopos "Produtos" e "Canais de venda"** (403). Sem "Produtos" o módulo funciona só com os itens da NF — sem explosão de kits, fotos, peso de cadastro e catálogo de etiquetas. Para liberar: Bling → app → escopos → marcar Produtos (+ Canais de venda) → salvar → reconectar as 3 empresas no painel do order-tracker → `/separacao` → Configurações → "Testar permissões". Enquanto isso, os nomes dos canais podem ser digitados em Configurações (ID da loja → nome; ex.: 204387953).
 
 | Fase | Estado | Observações |
 |---|---|---|
@@ -15,7 +17,7 @@ Criado em 2026-08-18. Objetivo: zerar envio de peça errada / quantidade errada 
 | 5 Painel SSE | ✅ | Aba "Fila do dia" do balcão |
 | 6 Etiquetas QR | ✅ | Impressão pelo navegador (A4 ou térmica), altura máx. 40 mm, layout salvo no PC |
 | 7 Integração (Sidebar, build raiz, static, `iniciar.bat`) | ✅ | Porta dev **5176** (5175 já era do BI) |
-| 8 Deploy único | ⏳ | Ver checklist abaixo |
+| 8 Deploy | ✅ 2026-08-19 | Commits 08d1efb, 4a38bff, 3f7c7f8. Supervisor inicial "José" criado em produção |
 
 ### Como rodar local
 - `iniciar.bat` (sobe backend, painel, portal e `separacao/` em modo celular/HTTPS) — ou `cd separacao && npm run dev` (http, só PC).

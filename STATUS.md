@@ -1,12 +1,12 @@
 # STATUS — Order Tracker
 
-Última atualização: 2026-08-18 (módulo de Separação por bipe — implementado local, AINDA NÃO DEPLOYADO)
+Última atualização: 2026-08-19 (módulo de Separação por bipe EM PRODUÇÃO)
 
-## Módulo de Separação por bipe (novo — 2026-08-18)
-Plano, decisões e checklist de deploy: `PLANO-SEPARACAO.md`.
+## Módulo de Separação por bipe (novo — em produção desde 2026-08-19)
+Plano, decisões e estado: `PLANO-SEPARACAO.md`. URL: `https://order-tracker-production-4189.up.railway.app/separacao`.
 - App próprio em `separacao/` (Vite, mobile-first) servido em `/separacao`; API em `/api/separacao`; tabelas `separacao_*`; auth própria (operador + PIN).
 - Fluxo: sync de NFs do Bling → triagem no balcão → bipe no celular (QR = SKU) → finalização no balcão. Balança preparada (Web Serial), desativada até chegar o equipamento.
-- Estado: fases 1–7 prontas e testadas localmente com dados de exemplo (`SEPARACAO_MOCK=1` no `.env` local). Falta: testar com Bling real (só possível com tokens = produção) e deploy único.
+- Validado em produção com NFs reais. **Pendência:** app do Bling sem escopos "Produtos"/"Canais de venda" (403) → sem kits/fotos/catálogo até José adicionar os escopos e reconectar as empresas (Config → "Testar permissões" mostra).
 - Migrations novas: `20260818120000_add_separacao`, `20260818123000_add_separacao_chave` (aplicam sozinhas no `npm start` do Railway).
 - Dev local: `iniciar.bat` sobe também `separacao/` na porta 5176 (modo `dev:celular` = HTTPS para a câmera do Android). Painel: link "Separação" no Sidebar.
 
