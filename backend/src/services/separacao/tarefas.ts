@@ -174,12 +174,24 @@ export async function sincronizarNfs(opcoes: { dataInicial?: string; dataFinal?:
   return resultado
 }
 
-// Busca uma NF específica no Bling pelo número e coloca na triagem (NF antiga que não está na fila)
+// Busca uma NF específica pelo número: primeiro no que já está no sistema, depois no Bling
 export async function importarNfPorNumero(companyKey: string, numero: string) {
   const empresa = listarEmpresasBling().find(e => e.key === companyKey)
   if (!empresa) throw new ErroSeparacao(404, 'EMPRESA', 'Empresa não encontrada')
+
+  const numeroNormalizado = normalizarNumeroNf(numero)
+  const jaNoSistema = await prisma.separacaoTarefa.findMany({
+    where: { companyKey, nfNumero: numeroNormalizado }, include: INCLUDE_TAREFA, orderBy: { createdAt: 'desc' },
+  })
+  if (jaNoSistema.length > 0) {
+    return { novas: 0, tarefas: jaNoSistema.map(t => ({ ...t, empresa: empresaDe(t.companyKey) })) }
+  }
+
   const nfs = await bling.buscarNfPorNumero(companyKey, numero)
-  if (nfs.length === 0) throw new ErroSeparacao(404, 'NF_NAO_ENCONTRADA', `NF ${numero} não encontrada no Bling da ${empresa.name}`)
+  if (nfs.length === 0) {
+    throw new ErroSeparacao(404, 'NF_NAO_ENCONTRADA',
+      `NF ${numero} não encontrada na ${empresa.name}. Se ela é antiga, use o período personalizado e "Buscar período no Bling".`)
+  }
   const r = await absorverNfs(companyKey, nfs)
   emitir({ tipo: 'tarefas', motivo: 'importar' })
   const tarefas = await prisma.separacaoTarefa.findMany({ where: { id: { in: r.ids } }, include: INCLUDE_TAREFA })

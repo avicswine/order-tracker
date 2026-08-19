@@ -196,11 +196,24 @@ export const blingReal: BlingSeparacaoAdapter = {
   },
 
   async buscarNfPorNumero(companyKey, numero) {
-    const n = String(parseInt(numero.replace(/\D/g, ''), 10))
-    if (!n || n === 'NaN') return []
-    const lista = await listarNfsPaginado(companyKey, { tipo: NF_TIPO_SAIDA, numero: n })
+    const digitos = numero.replace(/\D/g, '')
+    if (!digitos) return []
+    const semZeros = String(parseInt(digitos, 10))
+    if (semZeros === 'NaN') return []
+
+    // O filtro "numero" do Bling é sensível ao formato gravado (com/sem zeros à esquerda) —
+    // tenta as variações e para na primeira que retornar algo.
+    const variacoes = [...new Set([semZeros, digitos, semZeros.padStart(9, '0')])]
+    let lista: NfeLista[] = []
+    for (const v of variacoes) {
+      lista = await listarNfsPaginado(companyKey, { tipo: NF_TIPO_SAIDA, numero: v })
+      if (lista.length > 0) break
+      await pausa(PAUSA_ENTRE_PAGINAS_MS)
+    }
+    // Confere o número de verdade (se o filtro tiver sido ignorado, não devolve NF errada)
     const resultado: NfResumo[] = []
     for (const nf of lista) {
+      if (String(parseInt(String(nf.numero ?? '0').replace(/\D/g, ''), 10)) !== semZeros) continue
       const situacao = num(nf.situacao)
       if (situacao !== undefined && NF_SITUACOES_DESCARTADAS.has(situacao)) continue
       resultado.push(await paraNfResumo(companyKey, nf))
