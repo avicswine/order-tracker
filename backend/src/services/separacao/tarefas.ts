@@ -104,7 +104,7 @@ export async function sincronizarNfs(): Promise<{ novas: number; canceladas: num
 
         const existentes = await prisma.separacaoTarefa.findMany({
           where: { companyKey: empresa.key, blingNfId: { in: nfs.map(n => n.blingNfId) } },
-          select: { id: true, blingNfId: true, status: true, chaveAcesso: true },
+          select: { id: true, blingNfId: true, status: true, chaveAcesso: true, canal: true },
         })
         const porId = new Map(existentes.map(e => [e.blingNfId, e]))
 
@@ -128,8 +128,12 @@ export async function sincronizarNfs(): Promise<{ novas: number; canceladas: num
             resultado.canceladas++
             continue
           }
-          if (!existente.chaveAcesso && nf.chaveAcesso) {
-            await prisma.separacaoTarefa.update({ where: { id: existente.id }, data: { chaveAcesso: nf.chaveAcesso } })
+          // Completa dados que faltavam (chave) ou que agora resolvem melhor (canal "Loja 123" → nome real)
+          const atualiza: { chaveAcesso?: string; canal?: string } = {}
+          if (!existente.chaveAcesso && nf.chaveAcesso) atualiza.chaveAcesso = nf.chaveAcesso
+          if (nf.canal && nf.canal !== existente.canal && (!existente.canal || REGEX_LOJA_ID.test(existente.canal))) atualiza.canal = nf.canal
+          if (Object.keys(atualiza).length) {
+            await prisma.separacaoTarefa.update({ where: { id: existente.id }, data: atualiza })
           }
         }
       } catch (err) {

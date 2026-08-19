@@ -88,14 +88,18 @@ export function produtosIndisponiveis(companyKey: string): boolean {
 }
 
 // ---- cache de canais de venda (id → descrição) por empresa ----
-const canaisCache = new Map<string, { em: number; mapa: Map<string, string> }>()
+// Falha (ex.: 403 sem escopo) é lembrada por pouco tempo, para voltar a funcionar assim que o escopo for liberado.
+const CACHE_CANAIS_FALHA_MS = 5 * 60 * 1000
+const canaisCache = new Map<string, { em: number; mapa: Map<string, string>; falhou: boolean }>()
 
 async function nomeCanal(companyKey: string, lojaId: string | number | undefined): Promise<string | undefined> {
   if (lojaId === undefined || lojaId === null || lojaId === 0 || lojaId === '0') return undefined
   const agora = Date.now()
   let cache = canaisCache.get(companyKey)
-  if (!cache || agora - cache.em > CACHE_CANAIS_MS) {
+  const validade = cache?.falhou ? CACHE_CANAIS_FALHA_MS : CACHE_CANAIS_MS
+  if (!cache || agora - cache.em > validade) {
     const mapa = new Map<string, string>()
+    let falhou = false
     try {
       for (let pagina = 1; pagina <= 5; pagina++) {
         const resp = (await blingGet(companyKey, `/canais-venda?pagina=${pagina}&limite=${LIMITE_PAGINA}`)) as { data?: CanalVenda[] }
@@ -104,12 +108,25 @@ async function nomeCanal(companyKey: string, lojaId: string | number | undefined
         if (lote.length < LIMITE_PAGINA) break
       }
     } catch (err) {
+      falhou = true
       console.warn('[Separação] Não foi possível listar canais de venda:', err instanceof Error ? err.message : err)
     }
-    cache = { em: agora, mapa }
+    cache = { em: agora, mapa, falhou }
     canaisCache.set(companyKey, cache)
   }
   return cache.mapa.get(String(lojaId)) ?? `Loja ${lojaId}`
+}
+
+// ---- cache de produtos (por empresa) — kits repetem os mesmos componentes NF após NF ----
+const CACHE_PRODUTOS_MS = 10 * 60 * 1000
+const produtosPorId = new Map<string, { em: number; p: ProdutoResumo | null }>()
+const produtoIdPorSku = new Map<string, { em: number; id: string | null }>()
+const chaveCache = (companyKey: string, k: string) => `${companyKey}|${k.trim().toLowerCase()}`
+function lerCache<T>(mapa: Map<string, { em: number } & T>, chave: string): (T & { em: number }) | undefined {
+  const v = mapa.get(chave)
+  if (!v) return undefined
+  if (Date.now() - v.em > CACHE_PRODUTOS_MS) { mapa.delete(chave); return undefined }
+  return v
 }
 
 async function paraNfResumo(companyKey: string, nf: NfeLista): Promise<NfResumo> {
@@ -199,11 +216,15 @@ export const blingReal: BlingSeparacaoAdapter = {
   async obterProdutoPorSku(companyKey, sku) {
     if (produtosBloqueado(companyKey)) return null
     const alvo = sku.trim()
+    const emCache = lerCache(produtoIdPorSku, chaveCache(companyKey, alvo))
+    if (emCache) return emCache.id ? blingReal.obterProdutoPorId(companyKey, emCache.id) : null
+
     const qs = new URLSearchParams({ pagina: '1', limite: '10', criterio: PRODUTO_CRITERIO_TODOS })
     qs.append('codigos[]', alvo)
     try {
       const resp = (await blingGet(companyKey, `/produtos?${qs}`)) as { data?: ProdutoBling[] }
       const achado = (resp.data ?? []).find(p => (p.codigo || '').trim().toLowerCase() === alvo.toLowerCase())
+      produtoIdPorSku.set(chaveCache(companyKey, alvo), { em: Date.now(), id: achado ? String(achado.id) : null })
       if (!achado) return null
       // A listagem não traz estrutura (kit) nem peso → busca o detalhe
       return blingReal.obterProdutoPorId(companyKey, String(achado.id))
@@ -215,12 +236,17 @@ export const blingReal: BlingSeparacaoAdapter = {
 
   async obterProdutoPorId(companyKey, id) {
     if (produtosBloqueado(companyKey)) return null
+    const emCache = lerCache(produtosPorId, chaveCache(companyKey, id))
+    if (emCache) return emCache.p
     try {
       const resp = (await blingGet(companyKey, `/produtos/${id}`)) as { data?: ProdutoBling }
-      return resp.data ? paraProdutoResumo(resp.data) : null
+      const p = resp.data ? paraProdutoResumo(resp.data) : null
+      produtosPorId.set(chaveCache(companyKey, id), { em: Date.now(), p })
+      if (p) produtoIdPorSku.set(chaveCache(companyKey, p.sku), { em: Date.now(), id: p.id })
+      return p
     } catch (err) {
       const status = statusHttp(err)
-      if (status === 404) return null
+      if (status === 404) { produtosPorId.set(chaveCache(companyKey, id), { em: Date.now(), p: null }); return null }
       if (status === 403) { marcarProdutosBloqueado(companyKey); return null }
       throw err
     }
