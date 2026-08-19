@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Uso em galpão: fonte grande, botões altos, sem seleção acidental de texto */
+html, body, #root {
+  height: 100%;
+}
+body {
+  @apply bg-slate-100 text-slate-900 antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-base font-semibold
+           select-none active:scale-[0.98] transition disabled:opacity-50 disabled:pointer-events-none;
+  }
+  .btn-primary { @apply btn bg-brand-600 text-white hover:bg-brand-700; }
+  .btn-secondary { @apply btn bg-white text-slate-800 border border-slate-300 hover:bg-slate-50; }
+  .btn-danger { @apply btn bg-red-600 text-white hover:bg-red-700; }
+  .input {
+    @apply w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-lg
+           focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500;
+  }
+  .card { @apply rounded-2xl bg-white shadow-sm border border-slate-200; }
+}

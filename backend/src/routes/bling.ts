@@ -72,6 +72,17 @@ const COMPANIES: Record<string, { name: string; code: string; cnpj: string; clie
 }
 
 
+// Empresas configuradas (visão somente leitura para outros módulos, ex.: separação)
+export function listarEmpresasBling() {
+  return Object.entries(COMPANIES).map(([key, c]) => ({
+    key,
+    name: c.name,
+    code: c.code,
+    cnpj: c.cnpj.replace(/\D/g, ''),
+    connected: !!tokens[key],
+  }))
+}
+
 // GET /api/bling/status - status de conexão de todas as empresas
 router.get('/status', (_req: Request, res: Response) => {
   const status = Object.entries(COMPANIES).map(([key, company]) => ({
@@ -141,39 +152,51 @@ publicRouter.get('/callback', async (req: Request, res: Response) => {
   }
 })
 
-// Renova token de uma empresa
-async function refreshToken(companyKey: string) {
-  const company = COMPANIES[companyKey]
-  const token = tokens[companyKey]
-  if (!token?.refresh_token) throw new Error('Sem refresh token')
+// Refresh em andamento por empresa — o refresh token do Bling é rotativo (o antigo
+// deixa de valer), então duas chamadas simultâneas com 401 NÃO podem renovar em paralelo.
+const refreshEmAndamento = new Map<string, Promise<void>>()
 
-  const credentials = Buffer.from(`${company.clientId}:${company.clientSecret}`).toString('base64')
+// Renova token de uma empresa (serializado por empresa)
+async function refreshToken(companyKey: string): Promise<void> {
+  const emAndamento = refreshEmAndamento.get(companyKey)
+  if (emAndamento) return emAndamento
 
-  const response = await axios.post(
-    BLING_TOKEN_URL,
-    new URLSearchParams({
-      grant_type: 'refresh_token',
-      refresh_token: token.refresh_token,
-    }),
-    {
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        Authorization: `Basic ${credentials}`,
-      },
+  const promessa = (async () => {
+    const company = COMPANIES[companyKey]
+    const token = tokens[companyKey]
+    if (!token?.refresh_token) throw new Error('Sem refresh token')
+
+    const credentials = Buffer.from(`${company.clientId}:${company.clientSecret}`).toString('base64')
+
+    const response = await axios.post(
+      BLING_TOKEN_URL,
+      new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: token.refresh_token,
+      }),
+      {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Authorization: `Basic ${credentials}`,
+        },
+      }
+    )
+
+    tokens[companyKey] = {
+      access_token: response.data.access_token,
+      refresh_token: response.data.refresh_token,
     }
-  )
+    await saveToken(companyKey)
+  })().finally(() => refreshEmAndamento.delete(companyKey))
 
-  tokens[companyKey] = {
-    access_token: response.data.access_token,
-    refresh_token: response.data.refresh_token,
-  }
-  await saveToken(companyKey)
+  refreshEmAndamento.set(companyKey, promessa)
+  return promessa
 }
 
-// Chamada autenticada ao Bling por empresa (com retry em 401 e 429)
-async function blingGet(companyKey: string, path: string, retries = 5): Promise<unknown> {
-  const token = tokens[companyKey]
-  if (!token) {
+// Chamada autenticada ao Bling por empresa (com retry em 401 e 429).
+// Exportada para outros módulos (ex.: separação) — NUNCA criar um segundo cliente/cache de token.
+export async function blingGet(companyKey: string, path: string, retries = 5): Promise<unknown> {
+  if (!tokens[companyKey]) {
     // Tenta recarregar do banco antes de desistir
     await loadTokensFromDB()
     if (!tokens[companyKey]) throw new Error(`Empresa ${companyKey} não conectada`)
@@ -181,7 +204,7 @@ async function blingGet(companyKey: string, path: string, retries = 5): Promise<
 
   try {
     const response = await axios.get(`${BLING_API}${path}`, {
-      headers: { Authorization: `Bearer ${token.access_token}` },
+      headers: { Authorization: `Bearer ${tokens[companyKey].access_token}` },
     })
     return response.data
   } catch (err: unknown) {

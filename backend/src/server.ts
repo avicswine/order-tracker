@@ -13,6 +13,8 @@ import publicRouter from './routes/public'
 import setupRouter from './routes/setup'
 import whatsappRouter from './routes/whatsapp'
 import notificationsRouter from './routes/notifications'
+import separacaoRouter from './routes/separacao'
+import { iniciarSyncPeriodico as iniciarSyncSeparacao } from './services/separacao/tarefas'
 import { requireAuth } from './middleware/auth'
 import { initWhatsApp, destroyAll } from './services/whatsapp'
 import { prisma } from './lib/prisma'
@@ -59,17 +61,21 @@ app.use('/api/bling', requireAuth, blingRouter)
 app.use('/api/tracking', requireAuth, trackingRouter)
 app.use('/api/whatsapp', requireAuth, whatsappRouter)
 app.use('/api/notifications', requireAuth, notificationsRouter)
+app.use('/api/separacao', separacaoRouter) // auth própria (operador + PIN) dentro do router
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
 })
 
-// Em produção: serve o portal do cliente em /portal e o painel em tudo mais
+// Em produção: serve o portal do cliente em /portal, o app de separação em /separacao e o painel em tudo mais
 if (isProd) {
   const portalDist = path.join(__dirname, '../../customer-portal/dist')
+  const separacaoDist = path.join(__dirname, '../../separacao/dist')
   const frontendDist = path.join(__dirname, '../../frontend/dist')
   app.use('/portal', express.static(portalDist))
   app.get('/portal/*', (_req, res) => res.sendFile(path.join(portalDist, 'index.html')))
+  app.use('/separacao', express.static(separacaoDist))
+  app.get('/separacao/*', (_req, res) => res.sendFile(path.join(separacaoDist, 'index.html')))
   app.get('*', (_req, res) => res.sendFile(path.join(frontendDist, 'index.html')))
 }
 
@@ -94,6 +100,9 @@ app.listen(Number(PORT), '0.0.0.0', () => {
     console.log(`[Cron] Rastreamento concluído — atualizados: ${tracking.atualizados}, erros: ${tracking.erros}, total: ${tracking.total}`)
   })
   console.log('[Cron] Sync automático agendado a cada 2 horas (Bling + rastreamento)')
+
+  // Módulo de separação: busca NFs novas do dia no intervalo configurado (padrão 3 min)
+  iniciarSyncSeparacao()
 
   // Batch ENVIADO disponível via POST /api/notifications/batch-enviado (uso único)
 })

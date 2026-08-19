@@ -116,6 +116,150 @@ model OrderNotification {
   @@map("order_notifications")
 }
 
+// ============================================================
+// Módulo de Separação por bipe (ver PLANO-SEPARACAO.md)
+// Isolado do restante: tabelas com prefixo separacao_, sem FK para Order.
+// ============================================================
+
+model SeparacaoOperador {
+  id         String   @id @default(cuid())
+  nome       String   @unique
+  pinHash    String
+  supervisor Boolean  @default(false) // pode triar, finalizar, liberar exceções e gerir operadores
+  ativo      Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  tarefasOperadas    SeparacaoTarefa[] @relation("TarefaOperador")
+  tarefasTriadas     SeparacaoTarefa[] @relation("TarefaTriador")
+  tarefasFinalizadas SeparacaoTarefa[] @relation("TarefaFinalizador")
+  eventos            SeparacaoEvento[]
+
+  @@map("separacao_operadores")
+}
+
+model SeparacaoTarefa {
+  id              String          @id @default(cuid())
+  companyKey      String          // avic | agrogranja | equipage
+  blingNfId       String          // id da NF no Bling
+  nfNumero        String
+  nfSerie         String?
+  chaveAcesso     String?         // 44 dígitos — é o que o leitor lê no código de barras da DANFE
+  nfEmitidaEm     DateTime?
+  clienteNome     String
+  canal           String?         // loja/canal de venda, quando o Bling expõe
+  valorNota       Float?
+  orderId         String?         // id em orders, quando o order-tracker também tiver a NF (sem FK: módulo isolado)
+  status          SeparacaoStatus @default(AGUARDANDO_TRIAGEM)
+  itensCarregados Boolean         @default(false)
+  observacao      String?
+
+  triadoPorId     String?
+  triadoPor       SeparacaoOperador? @relation("TarefaTriador", fields: [triadoPorId], references: [id])
+  triadoEm        DateTime?
+  operadorId      String?
+  operador        SeparacaoOperador? @relation("TarefaOperador", fields: [operadorId], references: [id])
+  iniciadoEm      DateTime?
+  separadoEm      DateTime?
+  finalizadoPorId String?
+  finalizadoPor   SeparacaoOperador? @relation("TarefaFinalizador", fields: [finalizadoPorId], references: [id])
+  concluidoEm     DateTime?
+
+  // Conferência de peso no balcão (fase 4b — aguarda balança)
+  pesoConferido   Boolean         @default(false)
+  pesoCaixaLido   Float?          // kg — peso da caixa fechada, quando pesada
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  itens   SeparacaoItem[]
+  eventos SeparacaoEvento[]
+
+  @@unique([companyKey, blingNfId])
+  @@index([status])
+  @@index([companyKey, nfNumero])
+  @@index([chaveAcesso])
+  @@index([nfEmitidaEm])
+  @@map("separacao_tarefas")
+}
+
+model SeparacaoItem {
+  id             String          @id @default(cuid())
+  tarefaId       String
+  tarefa         SeparacaoTarefa @relation(fields: [tarefaId], references: [id], onDelete: Cascade)
+  ordem          Int
+  sku            String
+  nome           String
+  fotoUrl        String?
+  blingProdutoId String?
+  origemKit      String?         // ex.: "KIT-123 ×2" — de qual kit da NF este item físico veio
+  qtdEsperada    Float
+  qtdBipada      Float           @default(0)
+  qtdManual      Boolean         @default(false) // quantidade digitada (não bipada unidade a unidade) → conferir peso
+  pesoUnit       Float?          // kg, do cadastro do Bling
+  pesoLido       Float?          // kg, lido na balança do balcão
+  pesoOk         Boolean?        // resultado da conferência de peso
+  concluidoEm    DateTime?
+
+  eventos SeparacaoEvento[]
+
+  @@index([tarefaId, sku])
+  @@map("separacao_itens")
+}
+
+model SeparacaoEvento {
+  id         String              @id @default(cuid())
+  tarefaId   String
+  tarefa     SeparacaoTarefa     @relation(fields: [tarefaId], references: [id], onDelete: Cascade)
+  operadorId String?
+  operador   SeparacaoOperador?  @relation(fields: [operadorId], references: [id])
+  itemId     String?
+  item       SeparacaoItem?      @relation(fields: [itemId], references: [id], onDelete: SetNull)
+  sku        String?
+  tipo       SeparacaoEventoTipo
+  qtd        Float?
+  detalhe    String?
+  criadoEm   DateTime            @default(now())
+
+  @@index([tarefaId, criadoEm])
+  @@index([tipo, criadoEm])
+  @@map("separacao_eventos")
+}
+
+model SeparacaoConfig {
+  chave     String   @id
+  valor     String
+  updatedAt DateTime @updatedAt
+
+  @@map("separacao_config")
+}
+
+enum SeparacaoStatus {
+  AGUARDANDO_TRIAGEM
+  PENDENTE
+  IGNORADA
+  EM_SEPARACAO
+  SEPARADO
+  CONCLUIDO
+  CANCELADA
+}
+
+enum SeparacaoEventoTipo {
+  TRIAGEM
+  INICIO
+  BIPE_OK
+  BIPE_ERRADO
+  BIPE_EXCEDENTE
+  QTD_MANUAL
+  PESO_OK
+  PESO_FORA
+  LIBERACAO
+  SEPARADO
+  FINALIZADO
+  CANCELADO
+  REABERTO
+}
+
 enum UserRole {
   ADMIN
   VIEWER

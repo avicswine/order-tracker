@@ -1,0 +1,115 @@
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useNavigate } from 'react-router-dom'
+import Shell from '../components/Shell'
+import TarefaCard from '../components/TarefaCard'
+import { api } from '../lib/api'
+import { useEventos } from '../lib/useEventos'
+import { useAuth } from '../contexts/AuthContext'
+import { destravarAudio, feedbackErro } from '../lib/feedback'
+import type { Empresa, TarefaResumo } from '../types'
+
+// Fila do celular: NFs liberadas na triagem (PENDENTE) e as já em separação.
+export default function SepararFilaPage() {
+  const navigate = useNavigate()
+  const { operador } = useAuth()
+  const [tarefas, setTarefas] = useState<TarefaResumo[]>([])
+  const [empresas, setEmpresas] = useState<Empresa[]>([])
+  const [empresa, setEmpresa] = useState<string>('')
+  const [codigo, setCodigo] = useState('')
+  const [erro, setErro] = useState('')
+  const [carregando, setCarregando] = useState(true)
+
+  const carregar = useCallback(async () => {
+    try {
+      const lista = await api.get<TarefaResumo[]>('/tarefas?status=PENDENTE,EM_SEPARACAO&dias=3')
+      setTarefas(lista)
+      setErro('')
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Erro ao carregar fila')
+    } finally {
+      setCarregando(false)
+    }
+  }, [])
+
+  useEffect(() => { carregar() }, [carregar])
+  useEffect(() => { api.get<Empresa[]>('/empresas').then(setEmpresas).catch(() => undefined) }, [])
+  useEventos(e => { if (e.tipo === 'tarefas') carregar() })
+
+  async function abrir(t: TarefaResumo) {
+    destravarAudio()
+    try {
+      await api.post(`/tarefas/${t.id}/iniciar`)
+      navigate(`/separar/${t.id}`)
+    } catch (e) {
+      feedbackErro()
+      setErro(e instanceof Error ? e.message : 'Não foi possível iniciar')
+    }
+  }
+
+  // Bipar/digitar a NF (chave da DANFE ou número)
+  async function localizar(e: FormEvent) {
+    e.preventDefault()
+    if (!codigo.trim()) return
+    destravarAudio()
+    try {
+      const r = await api.get<{ tarefas: TarefaResumo[] }>(`/tarefas/localizar?codigo=${encodeURIComponent(codigo.trim())}${empresa ? `&empresa=${empresa}` : ''}`)
+      setCodigo('')
+      const validas = r.tarefas.filter(t => t.status === 'PENDENTE' || t.status === 'EM_SEPARACAO')
+      if (validas.length === 1) return abrir(validas[0])
+      if (r.tarefas.length === 0) { feedbackErro('Nota não encontrada'); return setErro('NF não encontrada. Ela já passou pela triagem?') }
+      if (validas.length === 0) { feedbackErro(); return setErro(`NF encontrada, mas está "${r.tarefas[0].status}". Peça ao balcão para liberar.`) }
+      setErro('Mais de uma NF com esse número — selecione a empresa e tente de novo.')
+    } catch (err) {
+      feedbackErro()
+      setErro(err instanceof Error ? err.message : 'Erro ao localizar')
+    }
+  }
+
+  const minhas = tarefas.filter(t => t.status === 'EM_SEPARACAO' && t.operador?.id === operador?.id)
+  const filtradas = tarefas.filter(t => (!empresa || t.companyKey === empresa) && !minhas.includes(t))
+
+  return (
+    <Shell titulo="Separar" voltarPara="/">
+      <form onSubmit={localizar} className="flex gap-2 mb-3">
+        <input
+          className="input"
+          placeholder="Bipe a DANFE ou digite o nº da NF"
+          value={codigo}
+          onChange={e => setCodigo(e.target.value)}
+          inputMode="numeric"
+          autoComplete="off"
+        />
+        <button className="btn-primary shrink-0">Abrir</button>
+      </form>
+
+      {empresas.length > 1 && (
+        <div className="flex gap-2 mb-3 overflow-x-auto">
+          <button className={`px-3 py-1 rounded-full text-sm border ${empresa === '' ? 'bg-brand-600 text-white border-brand-600' : 'bg-white'}`} onClick={() => setEmpresa('')}>Todas</button>
+          {empresas.map(e => (
+            <button key={e.key} className={`px-3 py-1 rounded-full text-sm border ${empresa === e.key ? 'bg-brand-600 text-white border-brand-600' : 'bg-white'}`} onClick={() => setEmpresa(e.key)}>{e.code}</button>
+          ))}
+        </div>
+      )}
+
+      {erro && <div className="rounded-xl bg-red-50 text-red-700 px-4 py-2 text-sm mb-3">{erro}</div>}
+
+      {minhas.length > 0 && (
+        <>
+          <div className="text-xs uppercase tracking-wide text-slate-500 mb-1">Continuar</div>
+          <div className="space-y-2 mb-4">
+            {minhas.map(t => <TarefaCard key={t.id} tarefa={t} destaque onClick={() => navigate(`/separar/${t.id}`)} />)}
+          </div>
+        </>
+      )}
+
+      <div className="text-xs uppercase tracking-wide text-slate-500 mb-1">Fila ({filtradas.length})</div>
+      {carregando && <div className="text-slate-500 text-sm">Carregando…</div>}
+      {!carregando && filtradas.length === 0 && (
+        <div className="card p-6 text-center text-slate-500">Nenhuma NF liberada para separação no momento.</div>
+      )}
+      <div className="space-y-2">
+        {filtradas.map(t => <TarefaCard key={t.id} tarefa={t} onClick={() => abrir(t)} />)}
+      </div>
+    </Shell>
+  )
+}
