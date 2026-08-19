@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import jsQR from 'jsqr'
+import { BrowserMultiFormatReader, type IScannerControls } from '@zxing/browser'
+import { BarcodeFormat, DecodeHintType } from '@zxing/library'
 
 // Leitor de QR Code / código de barras pela câmera.
-// - Chrome Android: API nativa BarcodeDetector (rápida, lê QR e códigos de barras).
-// - iPhone/Safari e outros: fallback com jsQR (só QR Code, decodificado em JavaScript).
+// - Chrome Android: API nativa BarcodeDetector (rápida; QR e códigos 1D).
+// - iPhone/Safari e outros: fallback ZXing em JavaScript (QR e códigos 1D — ex.: Code128 da DANFE).
 // Exige HTTPS (ou localhost). O campo de digitação/leitor Bluetooth continua funcionando sempre.
 
 interface DetectorLike {
@@ -12,15 +13,17 @@ interface DetectorLike {
 type DetectorCtor = new (opts: { formats: string[] }) => DetectorLike
 
 const INTERVALO_MESMO_CODIGO_MS = 2500
-const FORMATOS = ['qr_code', 'code_128', 'ean_13', 'ean_8', 'code_39', 'data_matrix']
-const JSQR_INTERVALO_MS = 120     // ~8 leituras/s no fallback (poupa bateria)
-const JSQR_LARGURA_MAX = 480      // reduz o frame antes de decodificar
+const FORMATOS_NATIVO = ['qr_code', 'code_128', 'ean_13', 'ean_8', 'code_39', 'itf', 'data_matrix']
+const FORMATOS_ZXING = [
+  BarcodeFormat.QR_CODE, BarcodeFormat.CODE_128, BarcodeFormat.EAN_13, BarcodeFormat.EAN_8,
+  BarcodeFormat.CODE_39, BarcodeFormat.ITF, BarcodeFormat.DATA_MATRIX,
+]
+const ZXING_INTERVALO_MS = 150 // tempo entre tentativas de decodificação (poupa bateria)
 
 export default function ScannerQr({ onCodigo, ativo }: { onCodigo: (codigo: string) => void; ativo: boolean }) {
   const videoRef = useRef<HTMLVideoElement>(null)
-  const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const [erro, setErro] = useState('')
-  const [modo, setModo] = useState<'nativo' | 'jsqr' | null>(null)
+  const [modo, setModo] = useState<'nativo' | 'zxing' | null>(null)
   const ultimoRef = useRef<{ valor: string; em: number }>({ valor: '', em: 0 })
   const cbRef = useRef(onCodigo)
   cbRef.current = onCodigo
@@ -30,7 +33,7 @@ export default function ScannerQr({ onCodigo, ativo }: { onCodigo: (codigo: stri
     let parado = false
     let stream: MediaStream | null = null
     let raf = 0
-    let timer = 0
+    let controles: IScannerControls | null = null
 
     if (!window.isSecureContext) {
       setErro('A câmera só funciona em HTTPS. Abra o app pelo endereço seguro.')
@@ -54,17 +57,17 @@ export default function ScannerQr({ onCodigo, ativo }: { onCodigo: (codigo: stri
 
     ;(async () => {
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-        if (parado) { stream.getTracks().forEach(t => t.stop()); return }
         const video = videoRef.current!
-        video.srcObject = stream
-        await video.play()
-        setErro('')
-
         const Detector = (window as unknown as { BarcodeDetector?: DetectorCtor }).BarcodeDetector
+
         if (Detector) {
+          stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+          if (parado) { stream.getTracks().forEach(t => t.stop()); return }
+          video.srcObject = stream
+          await video.play()
+          setErro('')
           setModo('nativo')
-          const detector = new Detector({ formats: FORMATOS })
+          const detector = new Detector({ formats: FORMATOS_NATIVO })
           const loop = async () => {
             if (parado) return
             try {
@@ -79,28 +82,19 @@ export default function ScannerQr({ onCodigo, ativo }: { onCodigo: (codigo: stri
           return
         }
 
-        // Fallback jsQR (iPhone/Safari)
-        setModo('jsqr')
-        const canvas = canvasRef.current ?? document.createElement('canvas')
-        canvasRef.current = canvas
-        const ctx = canvas.getContext('2d', { willReadFrequently: true })
-        if (!ctx) { setErro('Não foi possível iniciar o leitor.'); return }
-        const tick = () => {
-          if (parado) return
-          try {
-            if (video.readyState >= 2 && video.videoWidth > 0) {
-              const escala = Math.min(1, JSQR_LARGURA_MAX / video.videoWidth)
-              canvas.width = Math.round(video.videoWidth * escala)
-              canvas.height = Math.round(video.videoHeight * escala)
-              ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-              const img = ctx.getImageData(0, 0, canvas.width, canvas.height)
-              const qr = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' })
-              if (qr?.data) entregar(qr.data)
-            }
-          } catch { /* falha pontual */ }
-          timer = window.setTimeout(tick, JSQR_INTERVALO_MS)
-        }
-        tick()
+        // Fallback ZXing (iPhone/Safari): lê QR e códigos de barras 1D
+        setModo('zxing')
+        const hints = new Map()
+        hints.set(DecodeHintType.POSSIBLE_FORMATS, FORMATOS_ZXING)
+        hints.set(DecodeHintType.TRY_HARDER, true)
+        const leitor = new BrowserMultiFormatReader(hints, { delayBetweenScanAttempts: ZXING_INTERVALO_MS })
+        controles = await leitor.decodeFromConstraints(
+          { video: { facingMode: 'environment' } },
+          video,
+          (resultado) => { if (resultado) entregar(resultado.getText()) },
+        )
+        if (parado) { controles.stop(); return }
+        setErro('')
       } catch (e) {
         setErro('Não foi possível acessar a câmera: ' + (e instanceof Error ? e.message : String(e)))
       }
@@ -109,7 +103,7 @@ export default function ScannerQr({ onCodigo, ativo }: { onCodigo: (codigo: stri
     return () => {
       parado = true
       cancelAnimationFrame(raf)
-      window.clearTimeout(timer)
+      controles?.stop()
       stream?.getTracks().forEach(t => t.stop())
     }
   }, [ativo])
@@ -120,11 +114,11 @@ export default function ScannerQr({ onCodigo, ativo }: { onCodigo: (codigo: stri
       <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
       {!erro && (
         <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-          <div className="w-3/5 aspect-square border-4 border-white/70 rounded-2xl" />
+          <div className="w-4/5 h-3/5 border-4 border-white/70 rounded-2xl" />
         </div>
       )}
-      {modo === 'jsqr' && !erro && (
-        <div className="absolute bottom-1 right-2 text-[10px] text-white/70 pointer-events-none">leitor JS · só QR Code</div>
+      {modo === 'zxing' && !erro && (
+        <div className="absolute bottom-1 right-2 text-[10px] text-white/70 pointer-events-none">leitor JS · QR e código de barras</div>
       )}
       {erro && <div className="absolute inset-0 bg-black/80 text-amber-300 text-sm p-4 flex items-center text-center">{erro}</div>}
     </div>
