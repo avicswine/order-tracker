@@ -10,6 +10,11 @@ type ProgressCallback = (data: { current: number; total: number; orderNumber: st
 
 const TRACKING_CONCURRENCY = 5
 
+// Aviso automático à transportadora só vale para NFs recentes.
+// NFs muito antigas podem estar com status de rastreio desatualizado (ex: já entregues
+// mas ainda marcadas como atrasadas), então não devem gerar aviso retroativo.
+const CARRIER_NOTIFY_MAX_AGE_DAYS = 60
+
 export async function runTrackingSync(onProgress?: ProgressCallback, systems?: TrackingSystem[]): Promise<{ atualizados: number; erros: number; total: number }> {
   const orders = await prisma.order.findMany({
     where: {
@@ -178,7 +183,11 @@ export async function runTrackingSync(onProgress?: ProgressCallback, systems?: T
       }
 
       // Avisa o responsável da transportadora em ocorrência ou atraso (fire-and-forget)
-      if (!semDados && carrier.whatsappResponsavel) {
+      // Só para NFs recentes (ver CARRIER_NOTIFY_MAX_AGE_DAYS) — evita disparo retroativo
+      // em massa de notas antigas com status possivelmente desatualizado.
+      const emissao = order.nfIssuedAt ? new Date(order.nfIssuedAt).getTime() : 0
+      const nfRecente = emissao > 0 && (Date.now() - emissao) <= CARRIER_NOTIFY_MAX_AGE_DAYS * 86400000
+      if (!semDados && carrier.whatsappResponsavel && nfRecente) {
         const estimatedDelivery = (updates.estimatedDelivery as Date | undefined) ?? order.estimatedDelivery
         const statusFinal = (updates.status as OrderStatus | undefined) ?? order.status
         const entregueOuCancelado = statusFinal === OrderStatus.DELIVERED || statusFinal === OrderStatus.CANCELLED
@@ -264,6 +273,31 @@ router.post('/notify-carrier', async (req: Request, res: Response) => {
   }
 
   res.json({ resultados })
+})
+
+// GET /api/tracking/carrier-notifs — lista os avisos já enviados às transportadoras
+// (canal CARRIER_OCORRENCIA / CARRIER_ATRASO), do mais recente ao mais antigo.
+router.get('/carrier-notifs', async (_req: Request, res: Response) => {
+  const notifs = await prisma.orderNotification.findMany({
+    where: { channel: { startsWith: 'CARRIER_' } },
+    orderBy: { sentAt: 'desc' },
+    include: {
+      order: { select: { orderNumber: true, customerName: true, nfIssuedAt: true, carrier: { select: { name: true } } } },
+    },
+  })
+
+  const lista = notifs.map((n) => ({
+    sentAt: n.sentAt,
+    tipo: n.channel.replace('CARRIER_', ''),
+    sucesso: n.success,
+    orderNumber: n.order?.orderNumber ?? null,
+    cliente: n.order?.customerName ?? null,
+    transportadora: n.order?.carrier?.name ?? null,
+    nfEmitida: n.order?.nfIssuedAt ?? null,
+    erro: n.error ?? null,
+  }))
+
+  res.json({ total: lista.length, avisos: lista })
 })
 
 function sseHandler(systems?: TrackingSystem[]) {
