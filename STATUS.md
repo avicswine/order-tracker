@@ -6,7 +6,10 @@
 Plano, decisões e estado: `PLANO-SEPARACAO.md`. URL: `https://order-tracker-production-4189.up.railway.app/separacao`.
 - App próprio em `separacao/` (Vite, mobile-first) servido em `/separacao`; API em `/api/separacao`; tabelas `separacao_*`; auth própria (operador + PIN).
 - Fluxo: sync de NFs do Bling → triagem no balcão → bipe no celular (QR = SKU) → finalização no balcão. Balança preparada (Web Serial), desativada até chegar o equipamento.
-- Validado em produção com NFs reais. **Pendência:** app do Bling sem escopos "Produtos"/"Canais de venda" (403) → sem kits/fotos/catálogo até José adicionar os escopos e reconectar as empresas (Config → "Testar permissões" mostra).
+- Validado em produção com NFs reais (kits explodidos, bipe no iPhone, finalização no balcão). Escopos do Bling (Produtos/Canais de venda) liberados em 2026-08-19.
+- Poka-yoke: item selecionado trava o bipe (aviso laranja), quantidade digitada só após bipar o QR, DANFE bipada por engano vira aviso, SKU `BASE.N` (ex.: RL040.15) explode em N × BASE.
+- Etiquetas: papel Zebra 10×15, abas "Pendentes do dia" / "Por NF" / catálogo, com controle do que já foi impresso.
+- Triagem: importa NFs antigas por período (máx. 31 dias) ou por número.
 - Migrations novas: `20260818120000_add_separacao`, `20260818123000_add_separacao_chave` (aplicam sozinhas no `npm start` do Railway).
 - Dev local: `iniciar.bat` sobe também `separacao/` na porta 5176 (modo `dev:celular` = HTTPS para a câmera do Android). Painel: link "Separação" no Sidebar.
 

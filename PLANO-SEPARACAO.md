@@ -15,9 +15,20 @@ Criado em 2026-08-18. Objetivo: zerar envio de peça errada / quantidade errada 
 | 3 Separação no celular | ✅ | Câmera: BarcodeDetector (Chrome Android) com fallback jsQR (iPhone/Safari, só QR); campo p/ leitor Bluetooth; som/voz/vibração (iOS não vibra); qtd digitada acima do limite; zerar item |
 | 4 Balcão (triagem, fila, conferir/finalizar) | ✅ | Balança via Web Serial pronta, desligada por padrão (`balancaAtiva`) |
 | 5 Painel SSE | ✅ | Aba "Fila do dia" do balcão |
-| 6 Etiquetas QR | ✅ | Impressão pelo navegador (A4 ou térmica), altura máx. 40 mm, layout salvo no PC |
+| 6 Etiquetas QR | ✅ | Impressão pelo navegador. Papéis: A4 ou **Zebra 10×15 cm** (4 etiquetas de 90×30 mm por página). Abas: **Pendentes do dia** (SKUs das NFs sem etiqueta impressa), **Por NF** (digita/bipa a NF, já seleciona o que falta) e **Catálogo completo**. Registro do que já foi impresso em `separacao_etiquetas` |
+| 6b Triagem de NFs antigas | ✅ | Período personalizado (máx. 31 dias por busca no Bling) e busca por número. O filtro `numero` do Bling não responde nessa conta → fallback varre ~4 meses em blocos (leva ~10 s) |
 | 7 Integração (Sidebar, build raiz, static, `iniciar.bat`) | ✅ | Porta dev **5176** (5175 já era do BI) |
 | 8 Deploy | ✅ 2026-08-19 | Commits 08d1efb, 4a38bff, 3f7c7f8. Supervisor inicial "José" criado em produção |
+
+### Regras de bipe (poka-yoke) — como está hoje
+- **Item selecionado**: tocar num item da lista trava a seleção; outro SKU da NF → aviso **laranja** "não é o selecionado". SKU fora da NF → **vermelho** "item errado".
+- **Quantidade digitada**: só liberada depois de ao menos 1 bipe do QR daquele item (regra também no servidor), e só para itens acima do limite (`limiteBipeUnitario`, padrão 5). Se a quantidade digitada não bater com a esperada, recusa.
+- **DANFE bipada na tela de itens**: reconhecida (chave de 44 dígitos, QR com `|` ou URL) → aviso laranja "isso é a nota", sem contar como erro.
+- **SKU virtual `BASE.N`** (ex.: `RL040.15` = 15 × `RL040`): quando o produto não tem composição no Bling e o `BASE` existe, explode automaticamente. A prateleira só precisa do QR do `BASE`.
+- **Abrir NF**: aceita nº da NF, código de barras da chave (Code128, 44 dígitos) e QR da DANFE.
+
+### Leitura da chave da DANFE pela câmera
+A chave é um Code128 de 44 dígitos (barras finas). O leitor pede resolução Full HD, oferece **lanterna** e **zoom**, e usa mira horizontal. Se ainda assim falhar (etiqueta pequena/borrada), o operador digita o nº da NF. Ideia futura: imprimir na etiqueta de expedição um QR com o número da NF (bem mais tolerante que Code128).
 
 ### Como rodar local
 - `iniciar.bat` (sobe backend, painel, portal e `separacao/` em modo celular/HTTPS) — ou `cd separacao && npm run dev` (http, só PC).
