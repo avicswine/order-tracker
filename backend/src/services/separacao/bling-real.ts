@@ -1,5 +1,5 @@
 import { blingGet } from '../../routes/bling'
-import type { BlingSeparacaoAdapter, CatalogoItem, NfItemBruto, NfResumo, ProdutoResumo } from './bling-tipos'
+import type { BlingSeparacaoAdapter, CatalogoItem, DiagnosticoRecurso, NfItemBruto, NfResumo, ProdutoResumo } from './bling-tipos'
 import { parseDataBling } from './datas'
 
 // Implementação real sobre a API Bling v3, usando o cliente/tokens já existentes do order-tracker.
@@ -60,6 +60,31 @@ function num(v: unknown): number | undefined {
   if (v === null || v === undefined || v === '') return undefined
   const n = Number(v)
   return Number.isFinite(n) ? n : undefined
+}
+
+function statusHttp(err: unknown): number | undefined {
+  return (err as { response?: { status?: number } })?.response?.status
+}
+
+// ---- permissão de /produtos ----
+// Se o app do Bling não tiver o escopo "Produtos", o Bling devolve 403. Em vez de travar a separação,
+// seguimos só com os itens da NF (sem kits/fotos/peso) e lembramos por 1h para não insistir a cada SKU.
+const BLOQUEIO_PRODUTOS_MS = 60 * 60 * 1000
+const produtos403 = new Map<string, number>()
+function produtosBloqueado(companyKey: string): boolean {
+  const em = produtos403.get(companyKey)
+  if (!em) return false
+  if (Date.now() - em > BLOQUEIO_PRODUTOS_MS) { produtos403.delete(companyKey); return false }
+  return true
+}
+function marcarProdutosBloqueado(companyKey: string) {
+  if (!produtos403.has(companyKey)) {
+    console.warn(`[Separação] Bling recusou /produtos (403) para ${companyKey} — seguindo sem cadastro de produtos (sem kits/fotos). Adicione o escopo "Produtos" no app do Bling e reconecte a empresa.`)
+  }
+  produtos403.set(companyKey, Date.now())
+}
+export function produtosIndisponiveis(companyKey: string): boolean {
+  return produtosBloqueado(companyKey)
 }
 
 // ---- cache de canais de venda (id → descrição) por empresa ----
@@ -153,38 +178,73 @@ export const blingReal: BlingSeparacaoAdapter = {
     return resultado
   },
 
-  async obterItensNf(companyKey, blingNfId) {
+  async obterDetalheNf(companyKey, blingNfId) {
     const resp = (await blingGet(companyKey, `/nfe/${blingNfId}`)) as { data?: NfeDetalhe }
-    const itens = resp.data?.itens ?? []
-    return itens.map((i): NfItemBruto => ({
+    const d = resp.data
+    const itens = (d?.itens ?? []).map((i): NfItemBruto => ({
       sku: (i.codigo || '').trim(),
       descricao: i.descricao || '',
       quantidade: num(i.quantidade) ?? 0,
       pesoBruto: num(i.pesoBruto),
       pesoLiquido: num(i.pesoLiquido),
     })).filter(i => i.quantidade > 0)
+    return {
+      serie: d?.serie !== undefined && d?.serie !== null ? String(d.serie) : undefined,
+      valorNota: num(d?.valorNota),
+      chaveAcesso: d?.chaveAcesso || undefined,
+      itens,
+    }
   },
 
   async obterProdutoPorSku(companyKey, sku) {
+    if (produtosBloqueado(companyKey)) return null
     const alvo = sku.trim()
     const qs = new URLSearchParams({ pagina: '1', limite: '10', criterio: PRODUTO_CRITERIO_TODOS })
     qs.append('codigos[]', alvo)
-    const resp = (await blingGet(companyKey, `/produtos?${qs}`)) as { data?: ProdutoBling[] }
-    const achado = (resp.data ?? []).find(p => (p.codigo || '').trim().toLowerCase() === alvo.toLowerCase())
-    if (!achado) return null
-    // A listagem não traz estrutura (kit) nem peso → busca o detalhe
-    return blingReal.obterProdutoPorId(companyKey, String(achado.id))
+    try {
+      const resp = (await blingGet(companyKey, `/produtos?${qs}`)) as { data?: ProdutoBling[] }
+      const achado = (resp.data ?? []).find(p => (p.codigo || '').trim().toLowerCase() === alvo.toLowerCase())
+      if (!achado) return null
+      // A listagem não traz estrutura (kit) nem peso → busca o detalhe
+      return blingReal.obterProdutoPorId(companyKey, String(achado.id))
+    } catch (err) {
+      if (statusHttp(err) === 403) { marcarProdutosBloqueado(companyKey); return null }
+      throw err
+    }
   },
 
   async obterProdutoPorId(companyKey, id) {
+    if (produtosBloqueado(companyKey)) return null
     try {
       const resp = (await blingGet(companyKey, `/produtos/${id}`)) as { data?: ProdutoBling }
       return resp.data ? paraProdutoResumo(resp.data) : null
     } catch (err) {
-      const status = (err as { response?: { status?: number } })?.response?.status
+      const status = statusHttp(err)
       if (status === 404) return null
+      if (status === 403) { marcarProdutosBloqueado(companyKey); return null }
       throw err
     }
+  },
+
+  async diagnosticar(companyKey) {
+    const testes: Array<[DiagnosticoRecurso['recurso'], string]> = [
+      ['nfe', '/nfe?pagina=1&limite=1'],
+      ['produtos', '/produtos?pagina=1&limite=1'],
+      ['canais-venda', '/canais-venda?pagina=1&limite=1'],
+    ]
+    const resultado: DiagnosticoRecurso[] = []
+    for (const [recurso, path] of testes) {
+      try {
+        await blingGet(companyKey, path, 1)
+        resultado.push({ recurso, ok: true })
+        if (recurso === 'produtos') produtos403.delete(companyKey) // permissão voltou → libera
+      } catch (err) {
+        const status = statusHttp(err)
+        resultado.push({ recurso, ok: false, status, detalhe: status === 403 ? 'Sem permissão — adicione o escopo no app do Bling e reconecte a empresa' : (err instanceof Error ? err.message : String(err)) })
+      }
+      await pausa(PAUSA_ENTRE_PAGINAS_MS)
+    }
+    return resultado
   },
 
   async listarCatalogo(companyKey) {

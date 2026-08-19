@@ -110,4 +110,14 @@ export interface Config {
   diasNfsFila: number
   toleranciaPesoPct: number
   balancaAtiva: boolean
+  nomesCanais: Record<string, string>
+}
+
+export interface Diagnostico {
+  mock: boolean
+  empresas: Array<{
+    empresa: string
+    key: string
+    recursos: Array<{ recurso: 'nfe' | 'produtos' | 'canais-venda'; ok: boolean; status?: number; detalhe?: string }>
+  }>
 }

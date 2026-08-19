@@ -64,6 +64,15 @@ function empresaDe(companyKey: string) {
   return e ? { name: e.name, code: e.code } : undefined
 }
 
+// "Loja 204387953" → nome configurado (Site, Mercado Livre…) quando o Bling não libera /canais-venda
+const REGEX_LOJA_ID = /^Loja (\d+)$/
+function nomeCanal(canal: string | null, nomes: Record<string, string>): string | null {
+  if (!canal) return null
+  const m = canal.match(REGEX_LOJA_ID)
+  if (!m) return canal
+  return nomes[m[1]] ?? canal
+}
+
 async function registrarEvento(dados: {
   tarefaId: string; operadorId?: string | null; itemId?: string | null; sku?: string | null
   tipo: SeparacaoEventoTipo; qtd?: number | null; detalhe?: string | null
@@ -172,19 +181,46 @@ export async function listarTarefas(filtro: { status?: SeparacaoStatus[]; compan
     where.OR = [{ nfEmitidaEm: { gte: desde } }, { nfEmitidaEm: null, createdAt: { gte: desde } }]
   }
 
-  const tarefas = await prisma.separacaoTarefa.findMany({
-    where,
-    include: { ...INCLUDE_TAREFA, itens: { select: { qtdEsperada: true, qtdBipada: true, concluidoEm: true } } },
-    orderBy: [{ nfEmitidaEm: 'asc' }, { createdAt: 'asc' }],
-  })
+  const [tarefas, cfg] = await Promise.all([
+    prisma.separacaoTarefa.findMany({
+      where,
+      include: { ...INCLUDE_TAREFA, itens: { select: { qtdEsperada: true, qtdBipada: true, concluidoEm: true } } },
+      orderBy: [{ nfEmitidaEm: 'asc' }, { createdAt: 'asc' }],
+    }),
+    getConfig(),
+  ])
 
-  return tarefas.map(({ itens, ...t }) => ({ ...t, progresso: resumoItens(itens), empresa: empresaDe(t.companyKey) }))
+  return tarefas.map(({ itens, ...t }) => ({
+    ...t, canal: nomeCanal(t.canal, cfg.nomesCanais), progresso: resumoItens(itens), empresa: empresaDe(t.companyKey),
+  }))
 }
 
 export async function obterTarefa(id: string) {
-  const t = await prisma.separacaoTarefa.findUnique({ where: { id }, include: INCLUDE_TAREFA_COMPLETA })
+  const [t, cfg] = await Promise.all([
+    prisma.separacaoTarefa.findUnique({ where: { id }, include: INCLUDE_TAREFA_COMPLETA }),
+    getConfig(),
+  ])
   if (!t) throw new ErroSeparacao(404, 'NAO_ENCONTRADA', 'Tarefa não encontrada')
-  return { ...t, progresso: resumoItens(t.itens), empresa: empresaDe(t.companyKey) }
+  return { ...t, canal: nomeCanal(t.canal, cfg.nomesCanais), progresso: resumoItens(t.itens), empresa: empresaDe(t.companyKey) }
+}
+
+// IDs de loja vistos nas NFs recentes (para a tela de config nomear os canais)
+export async function canaisVistos(): Promise<{ canal: string; quantidade: number }[]> {
+  const desde = meiaNoiteBR(somarDias(dataBR(), -30))
+  const grupos = await prisma.separacaoTarefa.groupBy({
+    by: ['canal'], where: { createdAt: { gte: desde }, canal: { not: null } }, _count: { _all: true },
+  })
+  return grupos.map(g => ({ canal: g.canal as string, quantidade: g._count._all })).sort((a, b) => b.quantidade - a.quantidade)
+}
+
+// Diagnóstico das permissões do Bling por empresa (tela de config)
+export async function diagnosticoBling() {
+  const empresas = listarEmpresasBling().filter(e => MODO_MOCK || e.connected)
+  const resultado = []
+  for (const e of empresas) {
+    resultado.push({ empresa: e.name, key: e.key, recursos: await bling.diagnosticar(e.key) })
+  }
+  return { mock: MODO_MOCK, empresas: resultado }
 }
 
 // Localiza a tarefa pelo que foi bipado/digitado: chave de acesso (44 dígitos) ou número da NF
@@ -252,8 +288,13 @@ export async function triar(ids: string[], acao: AcaoTriagem, operador: Operador
 // ---------- separação (celular) ----------
 
 async function carregarItens(tarefaId: string, companyKey: string, blingNfId: string) {
-  const itensNf = await bling.obterItensNf(companyKey, blingNfId)
-  const fisicos = await explodirItensNf(bling, companyKey, itensNf)
+  let detalhe
+  try {
+    detalhe = await bling.obterDetalheNf(companyKey, blingNfId)
+  } catch (err) {
+    throw new ErroSeparacao(502, 'BLING_INDISPONIVEL', `Não foi possível ler a NF no Bling: ${err instanceof Error ? err.message : String(err)}`)
+  }
+  const fisicos = await explodirItensNf(bling, companyKey, detalhe.itens)
   if (fisicos.length === 0) throw new ErroSeparacao(422, 'NF_SEM_ITENS', 'A NF não tem itens para separar')
 
   await prisma.$transaction([
@@ -264,7 +305,15 @@ async function carregarItens(tarefaId: string, companyKey: string, blingNfId: st
         origemKit: f.origens.length ? f.origens.join(', ') : null, qtdEsperada: f.qtd, pesoUnit: f.pesoUnit ?? null,
       })),
     }),
-    prisma.separacaoTarefa.update({ where: { id: tarefaId }, data: { itensCarregados: true } }),
+    prisma.separacaoTarefa.update({
+      where: { id: tarefaId },
+      data: {
+        itensCarregados: true,
+        ...(detalhe.valorNota !== undefined ? { valorNota: detalhe.valorNota } : {}),
+        ...(detalhe.serie ? { nfSerie: detalhe.serie } : {}),
+        ...(detalhe.chaveAcesso ? { chaveAcesso: detalhe.chaveAcesso } : {}),
+      },
+    }),
   ])
 }
 

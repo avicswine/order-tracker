@@ -37,11 +37,27 @@ export interface CatalogoItem {
   nome: string
 }
 
+export interface NfDetalhe {
+  serie?: string
+  valorNota?: number
+  chaveAcesso?: string
+  itens: NfItemBruto[]
+}
+
+export interface DiagnosticoRecurso {
+  recurso: 'nfe' | 'produtos' | 'canais-venda'
+  ok: boolean
+  status?: number
+  detalhe?: string
+}
+
 export interface BlingSeparacaoAdapter {
   // NFs de saída emitidas no período (inclusive), com paginação resolvida internamente
   listarNfs(companyKey: string, dataInicial: string, dataFinal: string): Promise<NfResumo[]>
-  obterItensNf(companyKey: string, blingNfId: string): Promise<NfItemBruto[]>
+  obterDetalheNf(companyKey: string, blingNfId: string): Promise<NfDetalhe>
+  // null = não encontrado OU sem permissão de produtos (ver produtosDisponiveis)
   obterProdutoPorSku(companyKey: string, sku: string): Promise<ProdutoResumo | null>
   obterProdutoPorId(companyKey: string, id: string): Promise<ProdutoResumo | null>
   listarCatalogo(companyKey: string): Promise<CatalogoItem[]>
+  diagnosticar(companyKey: string): Promise<DiagnosticoRecurso[]>
 }

@@ -50,11 +50,19 @@ export const blingMock: BlingSeparacaoAdapter = {
     await atraso()
     return (NFS[companyKey] ?? []).map(n => n.resumo)
   },
-  async obterItensNf(companyKey, blingNfId) {
+  async obterDetalheNf(companyKey, blingNfId) {
     await atraso()
     const nf = (NFS[companyKey] ?? []).find(n => n.resumo.blingNfId === blingNfId)
     if (!nf) throw new Error(`NF ${blingNfId} não encontrada (mock)`)
-    return nf.itens
+    return { serie: nf.resumo.serie, valorNota: nf.resumo.valorNota, chaveAcesso: nf.resumo.chaveAcesso, itens: nf.itens }
+  },
+  async diagnosticar() {
+    await atraso(50)
+    return [
+      { recurso: 'nfe', ok: true },
+      { recurso: 'produtos', ok: true },
+      { recurso: 'canais-venda', ok: true },
+    ]
   },
   async obterProdutoPorSku(_companyKey, sku) {
     await atraso(50)

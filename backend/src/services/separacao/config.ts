@@ -8,6 +8,9 @@ export const CONFIG_PADRAO = {
   diasNfsFila: 1,          // quantos dias para trás buscar NFs (1 = só hoje)
   toleranciaPesoPct: 5,    // conferência de peso no balcão (fase 4b)
   balancaAtiva: false,     // liga a etapa de pesagem no balcão (aguarda balança)
+  // ID da loja no Bling → nome do canal (ex.: { "204387953": "Site" }). Usado quando o Bling não
+  // libera /canais-venda para o app (403) e a NF só traz o id da loja.
+  nomesCanais: {} as Record<string, string>,
 }
 
 export type SeparacaoConfigValores = typeof CONFIG_PADRAO
@@ -73,6 +76,16 @@ export function validarConfig(entrada: unknown): { ok: true; valores: Partial<Se
   if (!inteiro('diasNfsFila', 1, 30)) return { ok: false, erro: 'diasNfsFila deve ser inteiro entre 1 e 30' }
   if (!numero('toleranciaPesoPct', 0, 100)) return { ok: false, erro: 'toleranciaPesoPct deve ser entre 0 e 100' }
   if (!booleano('balancaAtiva')) return { ok: false, erro: 'balancaAtiva deve ser true/false' }
+
+  if (e.nomesCanais !== undefined) {
+    if (!e.nomesCanais || typeof e.nomesCanais !== 'object' || Array.isArray(e.nomesCanais)) return { ok: false, erro: 'nomesCanais deve ser um objeto { idLoja: nome }' }
+    const limpo: Record<string, string> = {}
+    for (const [id, nome] of Object.entries(e.nomesCanais as Record<string, unknown>)) {
+      const k = String(id).trim(), v = String(nome ?? '').trim()
+      if (k && v) limpo[k] = v.slice(0, 40)
+    }
+    valores.nomesCanais = limpo
+  }
 
   return { ok: true, valores }
 }

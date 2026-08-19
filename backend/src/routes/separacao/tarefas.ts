@@ -7,14 +7,22 @@ import { barramento, type EventoSeparacao } from '../../services/separacao/event
 // /api/separacao/tarefas — já atrás de requireOperador
 const router = Router()
 
-// Converte ErroSeparacao em resposta HTTP; o resto vira 500
-function tratar(fn: (req: Request, res: Response) => Promise<unknown>) {
-  return async (req: Request, res: Response, next: NextFunction) => {
+// Converte ErroSeparacao em resposta HTTP; erros do Bling (axios) viram 502 com mensagem; o resto 500.
+// Sem isso o Express devolveria o status do erro do axios (ex.: 403 "Forbidden" em HTML) para o app.
+export function tratar(fn: (req: Request, res: Response) => Promise<unknown>) {
+  return async (req: Request, res: Response, _next: NextFunction) => {
     try {
       await fn(req, res)
     } catch (err) {
       if (err instanceof svc.ErroSeparacao) return res.status(err.status).json({ error: err.message, codigo: err.codigo })
-      next(err)
+      const status = (err as { response?: { status?: number } })?.response?.status
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`[Separação] ${req.method} ${req.originalUrl} →`, msg)
+      if (status) {
+        const dica = status === 403 ? ' (o app do Bling não tem permissão para este recurso — veja Configurações → Diagnóstico)' : ''
+        return res.status(502).json({ error: `Bling respondeu ${status}${dica}`, codigo: 'BLING_ERRO', blingStatus: status })
+      }
+      res.status(500).json({ error: 'Erro interno', codigo: 'ERRO_INTERNO' })
     }
   }
 }
@@ -60,6 +68,11 @@ router.get('/stream', (req: Request, res: Response) => {
     barramento.off('evento', ouvinte)
   })
 })
+
+// GET /tarefas/canais — ids de loja vistos nas NFs (para nomear canais na config)
+router.get('/canais', tratar(async (_req, res) => {
+  res.json(await svc.canaisVistos())
+}))
 
 // GET /tarefas/localizar?codigo=<chave 44 dígitos | número NF>&empresa=avic
 router.get('/localizar', tratar(async (req, res) => {
