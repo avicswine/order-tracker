@@ -1,6 +1,6 @@
 import { blingGet } from '../../routes/bling'
 import type { BlingSeparacaoAdapter, CatalogoItem, DiagnosticoRecurso, NfItemBruto, NfResumo, ProdutoResumo } from './bling-tipos'
-import { parseDataBling } from './datas'
+import { dataBR, parseDataBling, somarDias } from './datas'
 
 // Implementação real sobre a API Bling v3, usando o cliente/tokens já existentes do order-tracker.
 // Só LEITURA. Nomes de campos conforme a spec OpenAPI oficial (developer.bling.com.br/referencia).
@@ -16,6 +16,7 @@ const NF_SITUACAO_CANCELADA = 2
 const NF_SITUACOES_DESCARTADAS = new Set([4, 9, 11]) // rejeitada, denegada, bloqueada
 const NF_TIPO_SAIDA = '1'
 const PRODUTO_CRITERIO_TODOS = '5'
+const BUSCA_NUMERO_BLOCOS = 4 // fallback da busca por número: ~4 meses para trás, em blocos de 31 dias
 
 const pausa = (ms: number) => new Promise(r => setTimeout(r, ms))
 
@@ -201,24 +202,42 @@ export const blingReal: BlingSeparacaoAdapter = {
     const semZeros = String(parseInt(digitos, 10))
     if (semZeros === 'NaN') return []
 
-    // O filtro "numero" do Bling é sensível ao formato gravado (com/sem zeros à esquerda) —
-    // tenta as variações e para na primeira que retornar algo.
-    const variacoes = [...new Set([semZeros, digitos, semZeros.padStart(9, '0')])]
-    let lista: NfeLista[] = []
-    for (const v of variacoes) {
-      lista = await listarNfsPaginado(companyKey, { tipo: NF_TIPO_SAIDA, numero: v })
-      if (lista.length > 0) break
+    const mesmoNumero = (nf: NfeLista) => String(parseInt(String(nf.numero ?? '0').replace(/\D/g, ''), 10)) === semZeros
+    const converter = async (lista: NfeLista[]) => {
+      const r: NfResumo[] = []
+      for (const nf of lista) {
+        if (!mesmoNumero(nf)) continue
+        const situacao = num(nf.situacao)
+        if (situacao !== undefined && NF_SITUACOES_DESCARTADAS.has(situacao)) continue
+        r.push(await paraNfResumo(companyKey, nf))
+      }
+      return r
+    }
+
+    // 1) Filtro direto por número (nem toda conta do Bling responde a ele)
+    for (const v of [...new Set([semZeros, digitos, semZeros.padStart(9, '0')])]) {
+      const lista = await listarNfsPaginado(companyKey, { tipo: NF_TIPO_SAIDA, numero: v })
+      const achados = await converter(lista)
+      if (achados.length > 0) return achados
       await pausa(PAUSA_ENTRE_PAGINAS_MS)
     }
-    // Confere o número de verdade (se o filtro tiver sido ignorado, não devolve NF errada)
-    const resultado: NfResumo[] = []
-    for (const nf of lista) {
-      if (String(parseInt(String(nf.numero ?? '0').replace(/\D/g, ''), 10)) !== semZeros) continue
-      const situacao = num(nf.situacao)
-      if (situacao !== undefined && NF_SITUACOES_DESCARTADAS.has(situacao)) continue
-      resultado.push(await paraNfResumo(companyKey, nf))
+
+    // 2) Fallback: varre períodos retroativos (blocos de 31 dias) e filtra pelo número.
+    //    Mais lento, mas funciona quando o filtro "numero" é ignorado pela API.
+    const hoje = dataBR()
+    for (let bloco = 0; bloco < BUSCA_NUMERO_BLOCOS; bloco++) {
+      const dataFinal = somarDias(hoje, -bloco * 31)
+      const dataInicial = somarDias(dataFinal, -30)
+      const lista = await listarNfsPaginado(companyKey, {
+        tipo: NF_TIPO_SAIDA,
+        dataEmissaoInicial: `${dataInicial} 00:00:00`,
+        dataEmissaoFinal: `${dataFinal} 23:59:59`,
+      })
+      const achados = await converter(lista)
+      if (achados.length > 0) return achados
+      await pausa(PAUSA_ENTRE_PAGINAS_MS)
     }
-    return resultado
+    return []
   },
 
   async obterDetalheNf(companyKey, blingNfId) {
