@@ -37,6 +37,12 @@ export function somErro() {
   tom(180, 260, 240, 'square', 0.5)
 }
 
+// Aviso (laranja): dois toques médios — diferente do grave do erro
+export function somAviso() {
+  tom(520, 140, 0, 'triangle', 0.45)
+  tom(520, 140, 200, 'triangle', 0.45)
+}
+
 export function somConcluido() {
   tom(660, 100); tom(880, 100, 110); tom(1100, 100, 220); tom(1320, 260, 330)
 }
@@ -70,4 +76,5 @@ export function destravarAudio() {
 
 export function feedbackOk(texto?: string) { somOk(); vibrar(120); if (texto) falar(texto) }
 export function feedbackErro(texto?: string) { somErro(); vibrar([150, 80, 150, 80, 300]); if (texto) falar(texto) }
+export function feedbackAviso(texto?: string) { somAviso(); vibrar([120, 80, 120]); if (texto) falar(texto) }
 export function feedbackConcluido(texto?: string) { somConcluido(); vibrar([100, 50, 100, 50, 400]); if (texto) falar(texto) }

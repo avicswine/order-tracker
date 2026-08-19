@@ -99,16 +99,17 @@ router.post('/:id/iniciar', tratar(async (req, res) => {
   res.json(await svc.iniciar(req.params.id, req.operador!))
 }))
 
-// POST /tarefas/:id/bipar { codigo: 'SKU', qtd?: number }
+// POST /tarefas/:id/bipar { codigo: 'SKU', qtd?: number, itemSelecionadoId?: string }
 router.post('/:id/bipar', tratar(async (req, res) => {
-  const { codigo, qtd } = req.body ?? {}
+  const { codigo, qtd, itemSelecionadoId } = req.body ?? {}
   if (typeof codigo !== 'string' || !codigo.trim()) return res.status(400).json({ error: 'Informe o código bipado' })
   let qtdManual: number | undefined
   if (qtd !== undefined && qtd !== null) {
     qtdManual = Number(qtd)
     if (!Number.isFinite(qtdManual) || qtdManual <= 0) return res.status(400).json({ error: 'Quantidade inválida' })
   }
-  res.json(await svc.bipar(req.params.id, req.operador!, codigo, qtdManual))
+  const selecionado = typeof itemSelecionadoId === 'string' && itemSelecionadoId ? itemSelecionadoId : undefined
+  res.json(await svc.bipar(req.params.id, req.operador!, codigo, qtdManual, selecionado))
 }))
 
 router.post('/:id/itens/:itemId/zerar', tratar(async (req, res) => {

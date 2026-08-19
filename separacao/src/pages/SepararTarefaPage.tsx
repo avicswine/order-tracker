@@ -5,13 +5,14 @@ import ScannerQr from '../components/ScannerQr'
 import { BadgeStatus } from '../components/TarefaCard'
 import { api } from '../lib/api'
 import { useEventos } from '../lib/useEventos'
-import { destravarAudio, feedbackConcluido, feedbackErro, feedbackOk, getVozAtiva, setVozAtiva } from '../lib/feedback'
+import { destravarAudio, feedbackAviso, feedbackConcluido, feedbackErro, feedbackOk, getVozAtiva, setVozAtiva } from '../lib/feedback'
 import type { Config, Item, ResultadoBipe, Tarefa } from '../types'
 
 const CHAVE_CAMERA = 'separacao_camera'
 const OVERLAY_MS = 1400
 
-type Overlay = { tipo: 'ok' | 'erro' | 'concluido'; titulo: string; detalhe?: string } | null
+// ok = verde · erro = vermelho (item não é da NF / qtd divergente) · aviso = laranja (não é o item selecionado) · concluido = NF pronta
+type Overlay = { tipo: 'ok' | 'erro' | 'aviso' | 'concluido'; titulo: string; detalhe?: string } | null
 
 function fmtQtd(n: number) {
   return Number.isInteger(n) ? String(n) : n.toFixed(3).replace(/\.?0+$/, '')
@@ -31,9 +32,12 @@ export default function SepararTarefaPage() {
   const [itemQtd, setItemQtd] = useState<Item | null>(null)
   const [qtdDigitada, setQtdDigitada] = useState('')
   const [itemFoto, setItemFoto] = useState<Item | null>(null)
+  const [selecionadoId, setSelecionadoId] = useState<string | null>(null) // item tocado na lista: só ele é aceito no bipe
   const [enviando, setEnviando] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const overlayTimer = useRef<number | undefined>(undefined)
+  const selecionadoRef = useRef<string | null>(null)
+  selecionadoRef.current = selecionadoId
 
   const carregar = useCallback(async () => {
     if (!id) return
@@ -63,7 +67,11 @@ export default function SepararTarefaPage() {
     setEnviando(true)
     destravarAudio()
     try {
-      const r = await api.post<ResultadoBipe>(`/tarefas/${id}/bipar`, qtd !== undefined ? { codigo: valor, qtd } : { codigo: valor })
+      const r = await api.post<ResultadoBipe>(`/tarefas/${id}/bipar`, {
+        codigo: valor,
+        ...(qtd !== undefined ? { qtd } : {}),
+        ...(selecionadoRef.current ? { itemSelecionadoId: selecionadoRef.current } : {}),
+      })
       // Atualiza item local imediatamente (resposta rápida) e recarrega em seguida
       if (r.item) {
         setTarefa(t => t ? {
@@ -75,6 +83,7 @@ export default function SepararTarefaPage() {
       }
       if (r.ok) {
         const it = r.item!
+        if (it.concluido) setSelecionadoId(null) // item terminou → libera a seleção
         if (r.tarefaSeparada) {
           feedbackConcluido('Nota separada. Leve ao balcão.')
           mostrarOverlay({ tipo: 'concluido', titulo: 'NF separada!', detalhe: 'Leve ao balcão' })
@@ -87,9 +96,19 @@ export default function SepararTarefaPage() {
           mostrarOverlay({ tipo: 'ok', titulo: `${fmtQtd(it.qtdBipada)} de ${fmtQtd(it.qtdEsperada)}`, detalhe: it.nome })
         }
       } else {
-        const fala = r.motivo === 'ITEM_NAO_PERTENCE' ? 'Item errado' : r.motivo === 'ITEM_COMPLETO' ? 'Item já completo' : 'Confira a quantidade'
-        feedbackErro(fala)
-        mostrarOverlay({ tipo: 'erro', titulo: r.motivo === 'ITEM_NAO_PERTENCE' ? 'ITEM ERRADO' : 'ATENÇÃO', detalhe: r.mensagem })
+        const fala =
+          r.motivo === 'ITEM_NAO_PERTENCE' ? 'Item errado'
+          : r.motivo === 'ITEM_DIFERENTE_SELECIONADO' ? 'Não é o item selecionado'
+          : r.motivo === 'ITEM_COMPLETO' ? 'Item já completo'
+          : r.motivo === 'BIPE_ANTES_DA_QTD' ? 'Bipe o item primeiro'
+          : 'Confira a quantidade'
+        if (r.motivo === 'ITEM_DIFERENTE_SELECIONADO') {
+          feedbackAviso(fala)
+          mostrarOverlay({ tipo: 'aviso', titulo: 'NÃO É O SELECIONADO', detalhe: r.mensagem })
+        } else {
+          feedbackErro(fala)
+          mostrarOverlay({ tipo: 'erro', titulo: r.motivo === 'ITEM_NAO_PERTENCE' ? 'ITEM ERRADO' : 'ATENÇÃO', detalhe: r.mensagem })
+        }
       }
       if (r.tarefaSeparada) carregar()
     } catch (e) {
@@ -203,20 +222,37 @@ export default function SepararTarefaPage() {
 
       {erro && <div className="rounded-xl bg-red-50 text-red-700 px-4 py-2 text-sm mb-3">{erro}</div>}
 
-      {/* Itens pendentes */}
-      {pendentes.length > 0 && <div className="text-xs uppercase tracking-wide text-slate-500 mb-1">A separar ({pendentes.length})</div>}
+      {/* Item selecionado (toque na lista) */}
+      {!separada && selecionadoId && (() => {
+        const sel = tarefa.itens.find(i => i.id === selecionadoId)
+        return sel ? (
+          <div className="rounded-xl bg-orange-50 border border-orange-300 text-orange-900 px-3 py-2 mb-2 flex items-center gap-2 text-sm">
+            <span className="flex-1">Separando agora: <b>{sel.sku}</b> — só este QR será aceito</span>
+            <button className="underline" onClick={() => setSelecionadoId(null)}>liberar</button>
+          </div>
+        ) : null
+      })()}
+
+      {/* Itens pendentes — toque no item para selecioná-lo (só ele passa a ser aceito) */}
+      {pendentes.length > 0 && <div className="text-xs uppercase tracking-wide text-slate-500 mb-1">A separar ({pendentes.length}) · toque no item para travar a seleção</div>}
       <div className="space-y-2 mb-4">
         {pendentes.map((item, idx) => {
           const falta = item.qtdEsperada - item.qtdBipada
           const permiteQtd = item.qtdEsperada > limite
+          const selecionado = item.id === selecionadoId
+          const sugerido = !selecionadoId && idx === 0
           return (
-            <div key={item.id} className={`card p-3 ${idx === 0 ? 'border-brand-500 ring-2 ring-brand-100' : ''}`}>
+            <div
+              key={item.id}
+              onClick={() => !separada && setSelecionadoId(selecionado ? null : item.id)}
+              className={`card p-3 cursor-pointer ${selecionado ? 'border-orange-400 ring-2 ring-orange-200 bg-orange-50' : sugerido ? 'border-brand-500 ring-2 ring-brand-100' : ''}`}
+            >
               <div className="flex gap-3">
-                <button className="w-16 h-16 rounded-xl bg-slate-100 shrink-0 overflow-hidden flex items-center justify-center text-slate-400 text-xs" onClick={() => item.fotoUrl && setItemFoto(item)}>
+                <button className="w-16 h-16 rounded-xl bg-slate-100 shrink-0 overflow-hidden flex items-center justify-center text-slate-400 text-xs" onClick={e => { e.stopPropagation(); if (item.fotoUrl) setItemFoto(item) }}>
                   {item.fotoUrl ? <img src={item.fotoUrl} alt="" className="w-full h-full object-cover" loading="lazy" /> : 'sem foto'}
                 </button>
                 <div className="flex-1 min-w-0">
-                  <div className="font-bold text-xl leading-tight">{item.sku}</div>
+                  <div className="font-bold text-xl leading-tight">{item.sku}{selecionado && <span className="ml-2 text-xs font-semibold bg-orange-500 text-white rounded px-1.5 py-0.5 align-middle">SELECIONADO</span>}</div>
                   <div className="text-sm text-slate-700 leading-snug">{item.nome}</div>
                   {item.origemKit && <div className="text-xs text-slate-400 mt-0.5">de: {item.origemKit}</div>}
                 </div>
@@ -225,12 +261,15 @@ export default function SepararTarefaPage() {
                   <div className="text-xs text-slate-500">{item.qtdBipada > 0 ? `${fmtQtd(item.qtdBipada)}/${fmtQtd(item.qtdEsperada)}` : 'a separar'}</div>
                 </div>
               </div>
-              {(permiteQtd || item.qtdBipada > 0) && !separada && (
-                <div className="flex gap-2 mt-2">
-                  {permiteQtd && (
+              {!separada && (permiteQtd || item.qtdBipada > 0) && (
+                <div className="flex gap-2 mt-2" onClick={e => e.stopPropagation()}>
+                  {permiteQtd && item.qtdBipada > 0 && (
                     <button className="btn-secondary flex-1 !py-2 text-sm" onClick={() => { setItemQtd(item); setQtdDigitada('') }}>
-                      Já contei — digitar quantidade
+                      Já contei — digitar quantidade ({fmtQtd(falta)} faltam)
                     </button>
+                  )}
+                  {permiteQtd && item.qtdBipada === 0 && (
+                    <div className="flex-1 text-xs text-slate-500 py-2">Bipe o QR deste item 1 vez para liberar "digitar quantidade"</div>
                   )}
                   {item.qtdBipada > 0 && <button className="btn-secondary !py-2 text-sm" onClick={() => zerar(item)}>Zerar</button>}
                 </div>
@@ -259,9 +298,9 @@ export default function SepararTarefaPage() {
       {overlay && (
         <div
           className={`fixed inset-0 z-50 flex flex-col items-center justify-center text-white text-center p-8 pointer-events-none
-            ${overlay.tipo === 'erro' ? 'bg-red-600/95' : overlay.tipo === 'concluido' ? 'bg-emerald-600/95' : 'bg-green-600/90'}`}
+            ${overlay.tipo === 'erro' ? 'bg-red-600/95' : overlay.tipo === 'aviso' ? 'bg-orange-500/95' : overlay.tipo === 'concluido' ? 'bg-emerald-600/95' : 'bg-green-600/90'}`}
         >
-          <div className="text-6xl mb-3">{overlay.tipo === 'erro' ? '✖' : '✔'}</div>
+          <div className="text-6xl mb-3">{overlay.tipo === 'erro' ? '✖' : overlay.tipo === 'aviso' ? '⚠' : '✔'}</div>
           <div className="text-4xl font-bold">{overlay.titulo}</div>
           {overlay.detalhe && <div className="text-lg mt-2 opacity-90">{overlay.detalhe}</div>}
         </div>

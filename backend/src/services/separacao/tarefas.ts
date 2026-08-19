@@ -407,14 +407,15 @@ export async function iniciar(tarefaId: string, operador: OperadorPayload) {
 
 export interface ResultadoBipe {
   ok: boolean
-  motivo?: 'ITEM_NAO_PERTENCE' | 'ITEM_COMPLETO' | 'QTD_DIVERGENTE' | 'QTD_MANUAL_NAO_PERMITIDA'
+  motivo?: 'ITEM_NAO_PERTENCE' | 'ITEM_COMPLETO' | 'QTD_DIVERGENTE' | 'QTD_MANUAL_NAO_PERMITIDA' | 'BIPE_ANTES_DA_QTD' | 'ITEM_DIFERENTE_SELECIONADO'
   mensagem: string
   item?: { id: string; sku: string; nome: string; qtdEsperada: number; qtdBipada: number; concluido: boolean }
   tarefaSeparada: boolean
   progresso: ReturnType<typeof resumoItens>
 }
 
-export async function bipar(tarefaId: string, operador: OperadorPayload, codigo: string, qtdManual?: number): Promise<ResultadoBipe> {
+// itemSelecionadoId: o operador tocou num item da lista → só esse SKU é aceito (mesmo que o bipado seja da NF)
+export async function bipar(tarefaId: string, operador: OperadorPayload, codigo: string, qtdManual?: number, itemSelecionadoId?: string): Promise<ResultadoBipe> {
   const t = await prisma.separacaoTarefa.findUnique({ where: { id: tarefaId }, include: { itens: true } })
   if (!t) throw new ErroSeparacao(404, 'NAO_ENCONTRADA', 'Tarefa não encontrada')
   if (t.status !== SeparacaoStatus.EM_SEPARACAO) throw new ErroSeparacao(409, 'STATUS_INVALIDO', 'Esta NF não está em separação')
@@ -427,6 +428,15 @@ export async function bipar(tarefaId: string, operador: OperadorPayload, codigo:
   if (!item) {
     await registrarEvento({ tarefaId, operadorId: operador.id, sku: codigo.trim(), tipo: SeparacaoEventoTipo.BIPE_ERRADO, detalhe: 'não pertence à NF' })
     return { ok: false, motivo: 'ITEM_NAO_PERTENCE', mensagem: 'Este item NÃO é desta nota', tarefaSeparada: false, progresso: progressoAtual() }
+  }
+
+  if (itemSelecionadoId && item.id !== itemSelecionadoId) {
+    const selecionado = t.itens.find(i => i.id === itemSelecionadoId)
+    await registrarEvento({ tarefaId, operadorId: operador.id, itemId: item.id, sku: item.sku, tipo: SeparacaoEventoTipo.BIPE_ERRADO, detalhe: `esperado ${selecionado?.sku ?? 'item selecionado'}` })
+    return {
+      ok: false, motivo: 'ITEM_DIFERENTE_SELECIONADO', tarefaSeparada: false, progresso: progressoAtual(),
+      mensagem: `Você selecionou ${selecionado?.sku ?? 'outro item'} — este QR é do ${item.sku}`,
+    }
   }
 
   const restante = item.qtdEsperada - item.qtdBipada
@@ -446,6 +456,10 @@ export async function bipar(tarefaId: string, operador: OperadorPayload, codigo:
   if (qtdManual !== undefined) {
     if (item.qtdEsperada <= cfg.limiteBipeUnitario) {
       return { ok: false, motivo: 'QTD_MANUAL_NAO_PERMITIDA', mensagem: `Até ${cfg.limiteBipeUnitario} unidades, bipe uma a uma`, tarefaSeparada: false, progresso: progressoAtual() }
+    }
+    // Poka-yoke: só aceita quantidade digitada depois de pelo menos 1 bipe do QR correto
+    if (item.qtdBipada <= 0) {
+      return { ok: false, motivo: 'BIPE_ANTES_DA_QTD', mensagem: `Bipe o QR do ${item.sku} primeiro, depois digite a quantidade`, tarefaSeparada: false, progresso: progressoAtual() }
     }
     if (qtdManual !== restante) {
       await registrarEvento({ tarefaId, operadorId: operador.id, itemId: item.id, sku: item.sku, tipo: SeparacaoEventoTipo.BIPE_ERRADO, qtd: qtdManual, detalhe: `qtd divergente (esperado ${restante})` })
