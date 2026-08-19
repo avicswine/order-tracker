@@ -234,6 +234,18 @@ model SeparacaoConfig {
   @@map("separacao_config")
 }
 
+// Etiquetas QR de prateleira já impressas — para a tela "Pendentes do dia" mostrar só SKUs novos
+model SeparacaoEtiqueta {
+  id           String   @id @default(cuid())
+  companyKey   String
+  sku          String
+  impressoEm   DateTime @default(now())
+  impressoPorId String?
+
+  @@unique([companyKey, sku])
+  @@map("separacao_etiquetas")
+}
+
 enum SeparacaoStatus {
   AGUARDANDO_TRIAGEM
   PENDENTE

@@ -2,6 +2,8 @@ import { Router, Request, Response } from 'express'
 import { requireSupervisor } from '../../middleware/requireOperador'
 import { bling } from '../../services/separacao/bling'
 import type { CatalogoItem } from '../../services/separacao/bling-tipos'
+import { desmarcarImpressas, listarSkusDoPeriodo, marcarImpressas } from '../../services/separacao/etiquetas'
+import { precarregarItens } from '../../services/separacao/tarefas'
 
 // Catálogo de produtos (para imprimir etiquetas QR) — /api/separacao/catalogo, supervisor.
 // Listar o catálogo inteiro custa várias páginas na API do Bling → cache em memória por empresa.
@@ -24,6 +26,34 @@ async function obterCatalogo(companyKey: string, forcar: boolean): Promise<Catal
   carregando.set(companyKey, p)
   return p
 }
+
+// GET /catalogo/pendentes?empresa=avic&dias=1&todos=1 — SKUs físicos das NFs do período (sem etiqueta impressa, salvo todos=1)
+router.get('/pendentes', async (req: Request, res: Response) => {
+  const empresa = typeof req.query.empresa === 'string' ? req.query.empresa : ''
+  if (!empresa) return res.status(400).json({ error: 'Informe a empresa' })
+  const dias = Math.min(Math.max(Number(req.query.dias) || 1, 1), 30)
+  const precarga = await precarregarItens(dias).catch(() => ({ carregadas: 0, erros: 0 })) // garante que NFs recém-chegadas entrem
+  const itens = await listarSkusDoPeriodo(empresa, dias, req.query.todos === '1')
+  res.json({ itens, dias, precarga })
+})
+
+// POST /catalogo/pendentes/marcar { empresa, skus: [] } — registra como impressas
+router.post('/pendentes/marcar', async (req: Request, res: Response) => {
+  const { empresa, skus } = req.body ?? {}
+  if (typeof empresa !== 'string' || !Array.isArray(skus) || !skus.every(s => typeof s === 'string')) {
+    return res.status(400).json({ error: 'Informe empresa e skus' })
+  }
+  res.json({ marcadas: await marcarImpressas(empresa, skus, req.operador!.id) })
+})
+
+// POST /catalogo/pendentes/desmarcar { empresa, skus: [] } — volta a aparecer como pendente (reimprimir)
+router.post('/pendentes/desmarcar', async (req: Request, res: Response) => {
+  const { empresa, skus } = req.body ?? {}
+  if (typeof empresa !== 'string' || !Array.isArray(skus) || !skus.every(s => typeof s === 'string')) {
+    return res.status(400).json({ error: 'Informe empresa e skus' })
+  }
+  res.json({ desmarcadas: await desmarcarImpressas(empresa, skus) })
+})
 
 // GET /catalogo?empresa=avic&busca=texto&forcar=1
 router.get('/', async (req: Request, res: Response) => {

@@ -32,7 +32,7 @@ const NFS: Record<string, { resumo: NfResumo; itens: NfItemBruto[] }[]> = {
     { resumo: { blingNfId: '900002', numero: '9102', serie: '1', chaveAcesso: '35260847715256000149550010000091021000091025', emitidaEm: HOJE, clienteNome: 'Maria Silva', valorNota: 120, canal: 'Mercado Livre', cancelada: false },
       itens: [{ sku: 'FIX-M6', descricao: 'Kit fixação M6', quantidade: 3 }] },
     { resumo: { blingNfId: '900003', numero: '9103', serie: '1', emitidaEm: HOJE, clienteNome: 'Cliente Balcão', valorNota: 55, canal: 'Balcão', cancelada: false },
-      itens: [{ sku: 'HEL-40', descricao: 'Hélice 40cm', quantidade: 1 }] },
+      itens: [{ sku: 'HEL-40', descricao: 'Hélice 40cm', quantidade: 1 }, { sku: 'HEL-40.3', descricao: 'Hélice 40cm (kit c/ 3)', quantidade: 2 }] },
     { resumo: { blingNfId: '900004', numero: '9104', serie: '1', emitidaEm: ontem, clienteNome: 'Pedido Cancelado LTDA', valorNota: 10, cancelada: true },
       itens: [{ sku: 'ARR-M6', descricao: 'Arruela', quantidade: 100 }] },
   ],

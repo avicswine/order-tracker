@@ -4,7 +4,8 @@ import Shell from '../components/Shell'
 import { api } from '../lib/api'
 import type { Empresa } from '../types'
 
-interface CatalogoItem { id: string; sku: string; nome: string }
+interface CatalogoItem { id: string; sku: string; nome: string; nfs?: number; unidades?: number; impressoEm?: string | null }
+type Fonte = 'pendentes' | 'catalogo'
 
 // Etiqueta de prateleira: layout horizontal (QR à esquerda, SKU/nome à direita), altura máx. 4 cm.
 // A "página" pode ser uma folha A4 ou uma etiqueta da impressora Zebra (10×15 cm) — nas duas, várias
@@ -57,6 +58,10 @@ export default function EtiquetasPage() {
   const [carregando, setCarregando] = useState(false)
   const [erro, setErro] = useState('')
   const [info, setInfo] = useState('')
+  const [msg, setMsg] = useState('')
+  const [fonte, setFonte] = useState<Fonte>('pendentes')
+  const [diasPendentes, setDiasPendentes] = useState(1)
+  const [incluirImpressos, setIncluirImpressos] = useState(false)
 
   useEffect(() => { api.get<Empresa[]>('/empresas').then(setEmpresas).catch(() => undefined) }, [])
   useEffect(() => { localStorage.setItem(CHAVE_LAYOUT, JSON.stringify(layout)) }, [layout])
@@ -75,7 +80,47 @@ export default function EtiquetasPage() {
       setCarregando(false)
     }
   }
-  useEffect(() => { carregarCatalogo() }, [empresa]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // SKUs físicos das NFs do período ainda sem etiqueta (alimenta a prateleira conforme as NFs chegam)
+  async function carregarPendentes() {
+    if (!empresa) return
+    setCarregando(true); setErro('')
+    try {
+      const r = await api.get<{ itens: CatalogoItem[]; dias: number; precarga: { carregadas: number; erros: number } }>(
+        `/catalogo/pendentes?empresa=${empresa}&dias=${diasPendentes}${incluirImpressos ? '&todos=1' : ''}`)
+      setItens(r.itens.map(i => ({ ...i, id: i.sku })))
+      const semEtiqueta = r.itens.filter(i => !i.impressoEm).length
+      setInfo(`${r.itens.length} SKU(s) nas NFs ${diasPendentes === 1 ? 'de hoje' : `dos últimos ${diasPendentes} dias`} · ${semEtiqueta} sem etiqueta${r.precarga.carregadas ? ` · ${r.precarga.carregadas} NF(s) processada(s) agora` : ''}`)
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Erro ao carregar pendentes')
+    } finally {
+      setCarregando(false)
+    }
+  }
+
+  const recarregar = (forcar = false) => (fonte === 'pendentes' ? carregarPendentes() : carregarCatalogo(forcar))
+  useEffect(() => { setSelecionados(new Map()); recarregar() }, [empresa, fonte, diasPendentes, incluirImpressos]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function marcarImpressas(skus: string[]) {
+    if (!empresa || skus.length === 0) return
+    try {
+      const r = await api.post<{ marcadas: number }>('/catalogo/pendentes/marcar', { empresa, skus })
+      setMsg(`${r.marcadas} SKU(s) marcados como impressos.`)
+      setSelecionados(new Map())
+      await carregarPendentes()
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Erro ao marcar')
+    }
+  }
+
+  function imprimir() {
+    window.print()
+    // Na aba "Pendentes", depois de fechar a janela de impressão, oferece registrar como impressas
+    if (fonte === 'pendentes' && selecionados.size > 0) {
+      const skus = [...selecionados.values()].map(i => i.sku)
+      if (window.confirm(`Imprimiu? Marcar ${skus.length} SKU(s) como etiqueta impressa (somem da lista de pendentes)?`)) marcarImpressas(skus)
+    }
+  }
 
   const filtrados = useMemo(() => {
     const b = busca.trim().toLowerCase()
@@ -145,31 +190,59 @@ export default function EtiquetasPage() {
               <option value="">Empresa…</option>
               {empresas.map(e => <option key={e.key} value={e.key}>{e.name}</option>)}
             </select>
-            <button className="btn-secondary !py-2 shrink-0" onClick={() => carregarCatalogo(true)} disabled={!empresa || carregando}>⟳</button>
+            <button className="btn-secondary !py-2 shrink-0" onClick={() => recarregar(true)} disabled={!empresa || carregando}>⟳</button>
           </div>
+          <div className="flex gap-1 mb-2 bg-slate-100 rounded-xl p-1 text-sm">
+            <button className={`flex-1 rounded-lg py-1.5 ${fonte === 'pendentes' ? 'bg-white shadow font-medium' : 'text-slate-600'}`} onClick={() => setFonte('pendentes')}>Pendentes do dia</button>
+            <button className={`flex-1 rounded-lg py-1.5 ${fonte === 'catalogo' ? 'bg-white shadow font-medium' : 'text-slate-600'}`} onClick={() => setFonte('catalogo')}>Catálogo completo</button>
+          </div>
+          {fonte === 'pendentes' && (
+            <div className="flex items-center gap-3 text-xs text-slate-600 mb-2 flex-wrap">
+              <span>NFs de:</span>
+              {[1, 2, 7].map(d => (
+                <button key={d} className={`px-2 py-0.5 rounded-full border ${diasPendentes === d ? 'bg-brand-600 text-white border-brand-600' : 'bg-white'}`} onClick={() => setDiasPendentes(d)}>{d === 1 ? 'hoje' : `${d} dias`}</button>
+              ))}
+              <label className="flex items-center gap-1 ml-auto"><input type="checkbox" checked={incluirImpressos} onChange={e => setIncluirImpressos(e.target.checked)} /> mostrar já impressos</label>
+            </div>
+          )}
           <input className="input !py-2 !text-base mb-2" placeholder="Buscar por SKU ou nome" value={busca} onChange={e => setBusca(e.target.value)} />
-          <div className="text-xs text-slate-500 mb-2 flex justify-between">
-            <span>{carregando ? 'Carregando catálogo do Bling…' : info}</span>
-            <span>
+          <div className="text-xs text-slate-500 mb-2 flex justify-between gap-2">
+            <span>{carregando ? (fonte === 'pendentes' ? 'Processando NFs do período…' : 'Carregando catálogo do Bling…') : info}</span>
+            <span className="whitespace-nowrap">
               <button className="text-brand-700 mr-3" onClick={() => setSelecionados(s => { const n = new Map(s); filtrados.forEach(i => n.set(i.id, i)); return n })}>Selecionar visíveis</button>
               <button className="text-slate-500" onClick={() => setSelecionados(new Map())}>Limpar</button>
             </span>
           </div>
           {erro && <div className="rounded-xl bg-red-50 text-red-700 px-3 py-2 text-sm mb-2">{erro}</div>}
+          {msg && <div className="rounded-xl bg-green-50 text-green-700 px-3 py-2 text-sm mb-2">{msg}</div>}
           <div className="max-h-[28rem] overflow-y-auto border border-slate-200 rounded-xl">
             {filtrados.map(item => (
               <label key={item.id} className="flex items-center gap-2 px-3 py-1.5 border-b border-slate-100 text-sm cursor-pointer hover:bg-slate-50">
                 <input type="checkbox" checked={selecionados.has(item.id)} onChange={() => toggle(item)} />
                 <span className="font-semibold w-32 shrink-0 truncate">{item.sku}</span>
                 <span className="flex-1 truncate text-slate-700">{item.nome}</span>
+                {fonte === 'pendentes' && item.nfs !== undefined && (
+                  <span className={`text-xs whitespace-nowrap ${item.impressoEm ? 'text-green-700' : 'text-slate-400'}`} title={item.impressoEm ? `impresso em ${new Date(item.impressoEm).toLocaleDateString('pt-BR')}` : ''}>
+                    {item.impressoEm ? '✔ impresso · ' : ''}{item.nfs} NF · {item.unidades} un.
+                  </span>
+                )}
                 {selecionados.has(item.id) && (
                   <input type="number" min={1} max={99} className="w-14 border rounded px-1 text-center" value={copias[item.id] ?? 1}
                     onChange={e => setCopias(c => ({ ...c, [item.id]: Number(e.target.value) }))} onClick={e => e.preventDefault()} title="cópias" />
                 )}
               </label>
             ))}
-            {!carregando && filtrados.length === 0 && <div className="p-4 text-center text-slate-500 text-sm">{empresa ? 'Nenhum produto' : 'Selecione a empresa'}</div>}
+            {!carregando && filtrados.length === 0 && (
+              <div className="p-4 text-center text-slate-500 text-sm">
+                {!empresa ? 'Selecione a empresa' : fonte === 'pendentes' ? 'Nenhum SKU pendente — todas as etiquetas das NFs do período já foram impressas.' : 'Nenhum produto'}
+              </div>
+            )}
           </div>
+          {fonte === 'pendentes' && selecionados.size > 0 && (
+            <button className="btn-secondary w-full mt-2 !py-2 text-sm" onClick={() => marcarImpressas([...selecionados.values()].map(i => i.sku))}>
+              Marcar {selecionados.size} selecionado(s) como impressos (sem imprimir)
+            </button>
+          )}
         </div>
 
         {/* Layout */}
@@ -198,7 +271,7 @@ export default function EtiquetasPage() {
           {!cabeNaLargura && <div className="text-red-600 text-sm mt-2">As {layout.colunas} coluna(s) de {layout.larguraMm} mm não cabem na largura da página ({layout.paginaLarguraMm} mm menos margens).</div>}
           <div className="text-xs text-slate-500 mt-2">{porPagina} etiqueta(s) por página → {etiquetas.length > 0 ? Math.ceil(etiquetas.length / Math.max(porPagina, 1)) : 0} página(s)</div>
           <div className="mt-4 flex items-center gap-3">
-            <button className="btn-primary" disabled={etiquetas.length === 0 || !alturaOk || !cabeNaLargura} onClick={() => window.print()}>🖨 Imprimir {etiquetas.length} etiqueta(s)</button>
+            <button className="btn-primary" disabled={etiquetas.length === 0 || !alturaOk || !cabeNaLargura} onClick={imprimir}>🖨 Imprimir {etiquetas.length} etiqueta(s)</button>
             <span className="text-xs text-slate-500">
               {layout.pagina === 'ZEBRA_10x15'
                 ? 'Na janela de impressão: escolha a Zebra, papel 100 × 150 mm (4" × 6"), margens "Nenhuma", escala 100%, sem cabeçalho/rodapé.'

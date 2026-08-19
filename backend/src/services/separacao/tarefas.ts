@@ -150,6 +150,47 @@ export async function sincronizarNfs(): Promise<{ novas: number; canceladas: num
   return resultado
 }
 
+// ---------- pré-carga de itens em segundo plano ----------
+// Carrega os itens (com explosão de kits) das NFs recém-chegadas, uma por vez, para:
+// (1) a tela de etiquetas saber quais SKUs físicos apareceram no dia; (2) abrir a NF no celular ser instantâneo.
+const PRECARGA_MAX_POR_RODADA = 40
+const PRECARGA_PAUSA_MS = 300
+let precargaEmAndamento = false
+
+export async function precarregarItens(dias?: number): Promise<{ carregadas: number; erros: number }> {
+  if (precargaEmAndamento) return { carregadas: 0, erros: 0 }
+  precargaEmAndamento = true
+  const resultado = { carregadas: 0, erros: 0 }
+  try {
+    const cfg = await getConfig()
+    const desde = meiaNoiteBR(somarDias(dataBR(), -((dias ?? cfg.diasNfsFila) - 1)))
+    const pendentes = await prisma.separacaoTarefa.findMany({
+      where: {
+        itensCarregados: false,
+        status: { in: [SeparacaoStatus.AGUARDANDO_TRIAGEM, SeparacaoStatus.PENDENTE] },
+        OR: [{ nfEmitidaEm: { gte: desde } }, { nfEmitidaEm: null, createdAt: { gte: desde } }],
+      },
+      select: { id: true, companyKey: true, blingNfId: true, nfNumero: true },
+      orderBy: { createdAt: 'asc' },
+      take: PRECARGA_MAX_POR_RODADA,
+    })
+    for (const t of pendentes) {
+      try {
+        await carregarItens(t.id, t.companyKey, t.blingNfId)
+        resultado.carregadas++
+      } catch (err) {
+        resultado.erros++
+        console.warn(`[Separação] Pré-carga da NF ${t.nfNumero} falhou:`, err instanceof Error ? err.message : err)
+      }
+      await new Promise(r => setTimeout(r, PRECARGA_PAUSA_MS))
+    }
+    if (resultado.carregadas) emitir({ tipo: 'tarefas', motivo: 'precarga' })
+  } finally {
+    precargaEmAndamento = false
+  }
+  return resultado
+}
+
 // Sync periódico com intervalo lido da config a cada rodada (mudou na tela → vale na próxima)
 export function iniciarSyncPeriodico() {
   const agendar = async () => {
@@ -159,6 +200,8 @@ export function iniciarSyncPeriodico() {
       try {
         const r = await sincronizarNfs()
         if (r.novas || r.canceladas || r.erros.length) console.log(`[Separação] Sync: ${r.novas} nova(s), ${r.canceladas} cancelada(s)${r.erros.length ? ', erros: ' + r.erros.join(' | ') : ''}`)
+        const p = await precarregarItens()
+        if (p.carregadas || p.erros) console.log(`[Separação] Pré-carga: ${p.carregadas} NF(s) com itens carregados, ${p.erros} erro(s)`)
       } catch (err) {
         console.error('[Separação] Sync falhou:', err)
       }
@@ -291,7 +334,21 @@ export async function triar(ids: string[], acao: AcaoTriagem, operador: Operador
 
 // ---------- separação (celular) ----------
 
-async function carregarItens(tarefaId: string, companyKey: string, blingNfId: string) {
+// Trava por tarefa: a pré-carga em segundo plano e o "iniciar" do celular não podem carregar juntos
+const carregandoItens = new Map<string, Promise<void>>()
+
+async function carregarItens(tarefaId: string, companyKey: string, blingNfId: string): Promise<void> {
+  const emAndamento = carregandoItens.get(tarefaId)
+  if (emAndamento) return emAndamento
+  const promessa = carregarItensInterno(tarefaId, companyKey, blingNfId).finally(() => carregandoItens.delete(tarefaId))
+  carregandoItens.set(tarefaId, promessa)
+  return promessa
+}
+
+async function carregarItensInterno(tarefaId: string, companyKey: string, blingNfId: string) {
+  const atual = await prisma.separacaoTarefa.findUnique({ where: { id: tarefaId }, select: { itensCarregados: true } })
+  if (atual?.itensCarregados) return
+
   let detalhe
   try {
     detalhe = await bling.obterDetalheNf(companyKey, blingNfId)

@@ -16,6 +16,18 @@ export interface ItemFisico {
 
 const PROFUNDIDADE_MAX = 10
 
+// SKU "virtual" no padrão BASE.N (ex.: SEN001.5 = 5 × SEN001). Na prateleira só existe o QR do SEN001.
+// Só vale quando o produto NÃO tem composição cadastrada e o SKU base existe no Bling.
+const REGEX_SKU_VIRTUAL = /^(.+?)\.(\d{1,4})$/
+
+export function interpretarSkuVirtual(sku: string): { base: string; multiplo: number } | null {
+  const m = sku.trim().match(REGEX_SKU_VIRTUAL)
+  if (!m) return null
+  const multiplo = parseInt(m[2], 10)
+  if (!Number.isFinite(multiplo) || multiplo < 1) return null
+  return { base: m[1], multiplo }
+}
+
 interface Cache {
   porSku: Map<string, ProdutoResumo | null>
   porId: Map<string, ProdutoResumo | null>
@@ -57,6 +69,17 @@ async function explodirProduto(
 ) {
   const eKit = produto.componentes.length > 0
   if (!eKit || profundidade >= PROFUNDIDADE_MAX || visitados.has(produto.id)) {
+    // Sem composição: pode ser SKU virtual BASE.N → N × BASE (se BASE existir no cadastro)
+    const virtual = !eKit && profundidade < PROFUNDIDADE_MAX ? interpretarSkuVirtual(produto.sku) : null
+    if (virtual) {
+      const base = await produtoPorSku(adapter, companyKey, virtual.base, cache)
+      if (base && base.id !== produto.id) {
+        const novaOrigem = [...origem, `${produto.sku} ×${formatarQtd(qtd)}`]
+        const novosVisitados = new Set(visitados).add(produto.id)
+        await explodirProduto(adapter, companyKey, base, virtual.multiplo * qtd, novaOrigem, cache, saida, profundidade + 1, novosVisitados)
+        return
+      }
+    }
     saida.push({
       sku: produto.sku, nome: produto.nome, fotoUrl: produto.fotoUrl,
       blingProdutoId: produto.id, pesoUnit: produto.pesoUnit, qtd, origens: [...origem],
@@ -87,6 +110,13 @@ export async function explodirItensNf(adapter: BlingSeparacaoAdapter, companyKey
     }
     const produto = await produtoPorSku(adapter, companyKey, item.sku, cache)
     if (!produto) {
+      // SKU virtual BASE.N que nem existe no cadastro → tenta o BASE direto
+      const virtual = interpretarSkuVirtual(item.sku)
+      const base = virtual ? await produtoPorSku(adapter, companyKey, virtual.base, cache) : null
+      if (virtual && base) {
+        await explodirProduto(adapter, companyKey, base, virtual.multiplo * item.quantidade, [`${item.sku} ×${formatarQtd(item.quantidade)}`], cache, brutos, 1, new Set())
+        continue
+      }
       // Não achou no cadastro → trata como item físico com os dados da própria NF
       const pesoUnit = item.pesoBruto || item.pesoLiquido
       brutos.push({ sku: item.sku, nome: item.descricao, qtd: item.quantidade, pesoUnit: pesoUnit && item.quantidade ? pesoUnit / item.quantidade : undefined, origens: [] })
