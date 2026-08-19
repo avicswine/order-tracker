@@ -7,12 +7,39 @@ import type { Empresa } from '../types'
 interface CatalogoItem { id: string; sku: string; nome: string }
 
 // Etiqueta de prateleira: layout horizontal (QR à esquerda, SKU/nome à direita), altura máx. 4 cm.
-const LAYOUT_PADRAO = { larguraMm: 60, alturaMm: 30, colunas: 3, margemMm: 8, espacoMm: 3, mostrarNome: true }
+// A "página" pode ser uma folha A4 ou uma etiqueta da impressora Zebra (10×15 cm) — nas duas, várias
+// etiquetas de prateleira são impressas por página e recortadas depois.
+type Pagina = 'A4' | 'ZEBRA_10x15' | 'PERSONALIZADA'
+
+const PAGINAS: Record<Pagina, { nome: string; larguraMm: number; alturaMm: number }> = {
+  A4: { nome: 'Folha A4 (210 × 297 mm)', larguraMm: 210, alturaMm: 297 },
+  ZEBRA_10x15: { nome: 'Zebra 10 × 15 cm', larguraMm: 100, alturaMm: 150 },
+  PERSONALIZADA: { nome: 'Personalizada', larguraMm: 100, alturaMm: 150 },
+}
+
+interface Layout {
+  pagina: Pagina
+  paginaLarguraMm: number
+  paginaAlturaMm: number
+  larguraMm: number
+  alturaMm: number
+  colunas: number
+  margemMm: number
+  espacoMm: number
+  mostrarNome: boolean
+}
+
+// Presets por página: Zebra 10×15 → 1 coluna de 90 × 30 mm = 4 etiquetas de prateleira por etiqueta Zebra
+const PRESETS: Record<Pagina, Omit<Layout, 'pagina' | 'mostrarNome'>> = {
+  A4: { paginaLarguraMm: 210, paginaAlturaMm: 297, larguraMm: 60, alturaMm: 30, colunas: 3, margemMm: 8, espacoMm: 3 },
+  ZEBRA_10x15: { paginaLarguraMm: 100, paginaAlturaMm: 150, larguraMm: 90, alturaMm: 30, colunas: 1, margemMm: 4, espacoMm: 4 },
+  PERSONALIZADA: { paginaLarguraMm: 100, paginaAlturaMm: 150, larguraMm: 90, alturaMm: 30, colunas: 1, margemMm: 4, espacoMm: 4 },
+}
+
+const LAYOUT_PADRAO: Layout = { pagina: 'A4', mostrarNome: true, ...PRESETS.A4 }
 const ALTURA_MAX_MM = 40
 const CHAVE_LAYOUT = 'separacao_etiquetas_layout'
 const CHAVE_EMPRESA = 'separacao_etiquetas_empresa'
-
-type Layout = typeof LAYOUT_PADRAO
 
 function carregarLayout(): Layout {
   try { return { ...LAYOUT_PADRAO, ...JSON.parse(localStorage.getItem(CHAVE_LAYOUT) || '{}') } } catch { return LAYOUT_PADRAO }
@@ -86,8 +113,17 @@ export default function EtiquetasPage() {
   }, [selecionados, copias])
 
   const alturaOk = layout.alturaMm <= ALTURA_MAX_MM
-  const set = (k: keyof Layout, v: number | boolean) => setLayout(l => ({ ...l, [k]: v }))
+  const set = (k: keyof Layout, v: number | boolean | string) => setLayout(l => ({ ...l, [k]: v }))
   const qrMm = layout.alturaMm - 4
+
+  // Trocar de página aplica o preset daquela página (a pessoa ajusta depois se quiser)
+  const aplicarPagina = (p: Pagina) => setLayout(l => ({ ...l, pagina: p, ...PRESETS[p] }))
+
+  const larguraUtil = layout.paginaLarguraMm - 2 * layout.margemMm
+  const alturaUtil = layout.paginaAlturaMm - 2 * layout.margemMm
+  const cabeNaLargura = layout.colunas * layout.larguraMm + (layout.colunas - 1) * layout.espacoMm <= larguraUtil + 0.01
+  const linhasPorPagina = Math.max(0, Math.floor((alturaUtil + layout.espacoMm) / (layout.alturaMm + layout.espacoMm)))
+  const porPagina = linhasPorPagina * layout.colunas
 
   return (
     <Shell titulo="Etiquetas de prateleira" voltarPara="/" largura="max-w-6xl">
@@ -96,8 +132,8 @@ export default function EtiquetasPage() {
         @media print {
           body * { visibility: hidden; }
           #folha-etiquetas, #folha-etiquetas * { visibility: visible; }
-          #folha-etiquetas { position: absolute; left: 0; top: 0; margin: 0 !important; box-shadow: none !important; border: 0 !important; }
-          @page { size: A4; margin: 0; }
+          #folha-etiquetas { position: absolute; left: 0; top: 0; margin: 0 !important; padding: 0 !important; box-shadow: none !important; border: 0 !important; min-height: 0 !important; }
+          @page { size: ${layout.paginaLarguraMm}mm ${layout.paginaAlturaMm}mm; margin: ${layout.margemMm}mm; }
         }
       `}</style>
 
@@ -138,6 +174,17 @@ export default function EtiquetasPage() {
 
         {/* Layout */}
         <div className="card p-4">
+          <div className="font-semibold mb-2">Papel / impressora</div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm mb-4">
+            <label className="col-span-2 sm:col-span-1">Página
+              <select className="input !py-1.5 !text-base" value={layout.pagina} onChange={e => aplicarPagina(e.target.value as Pagina)}>
+                {(Object.keys(PAGINAS) as Pagina[]).map(p => <option key={p} value={p}>{PAGINAS[p].nome}</option>)}
+              </select>
+            </label>
+            <label>Largura da página (mm)<input type="number" className="input !py-1.5 !text-base" value={layout.paginaLarguraMm} min={30} max={300} disabled={layout.pagina !== 'PERSONALIZADA'} onChange={e => set('paginaLarguraMm', Number(e.target.value))} /></label>
+            <label>Altura da página (mm)<input type="number" className="input !py-1.5 !text-base" value={layout.paginaAlturaMm} min={30} max={420} disabled={layout.pagina !== 'PERSONALIZADA'} onChange={e => set('paginaAlturaMm', Number(e.target.value))} /></label>
+          </div>
+
           <div className="font-semibold mb-2">Layout da etiqueta <span className="text-slate-500 font-normal text-sm">(altura máx. {ALTURA_MAX_MM} mm)</span></div>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
             <label>Largura (mm)<input type="number" className="input !py-1.5 !text-base" value={layout.larguraMm} min={20} max={200} onChange={e => set('larguraMm', Number(e.target.value))} /></label>
@@ -148,16 +195,22 @@ export default function EtiquetasPage() {
             <label className="flex items-end gap-2 pb-2"><input type="checkbox" checked={layout.mostrarNome} onChange={e => set('mostrarNome', e.target.checked)} /> Mostrar nome</label>
           </div>
           {!alturaOk && <div className="text-red-600 text-sm mt-2">Altura acima do máximo permitido para a prateleira.</div>}
+          {!cabeNaLargura && <div className="text-red-600 text-sm mt-2">As {layout.colunas} coluna(s) de {layout.larguraMm} mm não cabem na largura da página ({layout.paginaLarguraMm} mm menos margens).</div>}
+          <div className="text-xs text-slate-500 mt-2">{porPagina} etiqueta(s) por página → {etiquetas.length > 0 ? Math.ceil(etiquetas.length / Math.max(porPagina, 1)) : 0} página(s)</div>
           <div className="mt-4 flex items-center gap-3">
-            <button className="btn-primary" disabled={etiquetas.length === 0 || !alturaOk} onClick={() => window.print()}>🖨 Imprimir {etiquetas.length} etiqueta(s)</button>
-            <span className="text-xs text-slate-500">Na janela de impressão, escolha A4 (ou a impressora de etiquetas) e desative margens/cabeçalhos.</span>
+            <button className="btn-primary" disabled={etiquetas.length === 0 || !alturaOk || !cabeNaLargura} onClick={() => window.print()}>🖨 Imprimir {etiquetas.length} etiqueta(s)</button>
+            <span className="text-xs text-slate-500">
+              {layout.pagina === 'ZEBRA_10x15'
+                ? 'Na janela de impressão: escolha a Zebra, papel 100 × 150 mm (4" × 6"), margens "Nenhuma", escala 100%, sem cabeçalho/rodapé.'
+                : 'Na janela de impressão: escolha a impressora, o papel correspondente, margens "Nenhuma" e desative cabeçalho/rodapé.'}
+            </span>
           </div>
         </div>
       </div>
 
       {/* Folha (pré-visualização + impressão) */}
       <div className="mt-4 print:hidden text-xs uppercase tracking-wide text-slate-500">Pré-visualização</div>
-      <div id="folha-etiquetas" className="bg-white shadow border border-slate-200 mx-auto mt-1" style={{ width: '210mm', minHeight: '297mm', padding: `${layout.margemMm}mm`, boxSizing: 'border-box' }}>
+      <div id="folha-etiquetas" className="bg-white shadow border border-slate-200 mx-auto mt-1" style={{ width: `${layout.paginaLarguraMm}mm`, minHeight: `${layout.paginaAlturaMm}mm`, padding: `${layout.margemMm}mm`, boxSizing: 'border-box' }}>
         <div style={{ display: 'grid', gridTemplateColumns: `repeat(${layout.colunas}, ${layout.larguraMm}mm)`, gap: `${layout.espacoMm}mm` }}>
           {etiquetas.map((item, i) => (
             <div key={`${item.id}-${i}`} style={{ width: `${layout.larguraMm}mm`, height: `${layout.alturaMm}mm`, border: '0.2mm dashed #bbb', boxSizing: 'border-box', padding: '2mm', display: 'flex', gap: '2mm', alignItems: 'center', overflow: 'hidden', pageBreakInside: 'avoid' }}>
