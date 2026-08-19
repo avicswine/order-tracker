@@ -24,3 +24,20 @@ export function normalizarNumeroNf(entrada: string): string {
   const digitos = (entrada || '').replace(/\D/g, '')
   return digitos ? String(parseInt(digitos, 10)) : ''
 }
+
+// O QR Code da DANFE não é a chave pura: vem como URL (…?p=chave|versão|…) ou campos separados
+// por "|" (ex.: "A|3086…422|4|0|…"). Detecta esses formatos para não tratar como SKU errado.
+export function extrairChaveDeQrDanfe(entrada: string): string | null {
+  const texto = (entrada || '').trim()
+  if (!texto) return null
+  if (parsearChaveDanfe(texto)) return texto.replace(/\D/g, '')
+  const pareceQrDanfe = texto.includes('|') || /^https?:\/\//i.test(texto)
+  if (!pareceQrDanfe) return null
+  const chave = texto.match(/\d{44}/)
+  return chave ? chave[0] : null
+}
+
+// Códigos que claramente não são SKU de produto (DANFE bipada por engano na tela de separação)
+export function pareceCodigoDeNota(entrada: string): boolean {
+  return extrairChaveDeQrDanfe(entrada) !== null
+}

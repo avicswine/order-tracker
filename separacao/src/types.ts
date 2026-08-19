@@ -87,7 +87,7 @@ export interface Tarefa extends TarefaResumo {
 
 export interface ResultadoBipe {
   ok: boolean
-  motivo?: 'ITEM_NAO_PERTENCE' | 'ITEM_COMPLETO' | 'QTD_DIVERGENTE' | 'QTD_MANUAL_NAO_PERMITIDA' | 'BIPE_ANTES_DA_QTD' | 'ITEM_DIFERENTE_SELECIONADO'
+  motivo?: 'ITEM_NAO_PERTENCE' | 'ITEM_COMPLETO' | 'QTD_DIVERGENTE' | 'QTD_MANUAL_NAO_PERMITIDA' | 'BIPE_ANTES_DA_QTD' | 'ITEM_DIFERENTE_SELECIONADO' | 'CODIGO_DE_NOTA'
   mensagem: string
   item?: { id: string; sku: string; nome: string; qtdEsperada: number; qtdBipada: number; concluido: boolean }
   tarefaSeparada: boolean

@@ -85,7 +85,7 @@ export default function SepararFilaPage() {
         <button type="button" className={`btn-secondary shrink-0 !px-3 ${camera ? '!bg-brand-50 !border-brand-500' : ''}`} onClick={() => { destravarAudio(); setCamera(c => !c) }} title="Ler código de barras da DANFE pela câmera">📷</button>
         <button className="btn-primary shrink-0">Abrir</button>
       </form>
-      {camera && <div className="mb-3"><ScannerQr ativo={camera} onCodigo={v => localizar(undefined, v)} /></div>}
+      {camera && <div className="mb-3"><ScannerQr ativo={camera} modoCodigoBarras onCodigo={v => localizar(undefined, v)} /></div>}
 
       {empresas.length > 1 && (
         <div className="flex gap-2 mb-3 overflow-x-auto">

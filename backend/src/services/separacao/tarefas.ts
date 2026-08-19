@@ -7,7 +7,7 @@ import type { NfResumo } from './bling-tipos'
 import { getConfig } from './config'
 import { explodirItensNf } from './explosao'
 import { emitir } from './eventos'
-import { normalizarNumeroNf, parsearChaveDanfe } from './danfe'
+import { extrairChaveDeQrDanfe, normalizarNumeroNf, parsearChaveDanfe, pareceCodigoDeNota } from './danfe'
 import { dataBR, meiaNoiteBR, somarDias } from './datas'
 
 // Regras de negócio das tarefas de separação.
@@ -332,7 +332,9 @@ export async function diagnosticoBling() {
 }
 
 // Localiza a tarefa pelo que foi bipado/digitado: chave de acesso (44 dígitos) ou número da NF
-export async function localizarPorCodigo(codigo: string, companyKey?: string) {
+export async function localizarPorCodigo(codigoBruto: string, companyKey?: string) {
+  // Aceita: chave de 44 dígitos (código de barras da DANFE), QR da DANFE (com "|" ou URL) ou nº da NF
+  const codigo = extrairChaveDeQrDanfe(codigoBruto) ?? codigoBruto
   const chave = parsearChaveDanfe(codigo)
   const naoDescartadas = { notIn: [SeparacaoStatus.CANCELADA] }
 
@@ -468,7 +470,7 @@ export async function iniciar(tarefaId: string, operador: OperadorPayload) {
 
 export interface ResultadoBipe {
   ok: boolean
-  motivo?: 'ITEM_NAO_PERTENCE' | 'ITEM_COMPLETO' | 'QTD_DIVERGENTE' | 'QTD_MANUAL_NAO_PERMITIDA' | 'BIPE_ANTES_DA_QTD' | 'ITEM_DIFERENTE_SELECIONADO'
+  motivo?: 'ITEM_NAO_PERTENCE' | 'ITEM_COMPLETO' | 'QTD_DIVERGENTE' | 'QTD_MANUAL_NAO_PERMITIDA' | 'BIPE_ANTES_DA_QTD' | 'ITEM_DIFERENTE_SELECIONADO' | 'CODIGO_DE_NOTA'
   mensagem: string
   item?: { id: string; sku: string; nome: string; qtdEsperada: number; qtdBipada: number; concluido: boolean }
   tarefaSeparada: boolean
@@ -485,6 +487,18 @@ export async function bipar(tarefaId: string, operador: OperadorPayload, codigo:
   const sku = normalizarSku(codigo)
   const progressoAtual = () => resumoItens(t.itens)
   const item = t.itens.find(i => normalizarSku(i.sku) === sku)
+
+  // DANFE bipada por engano na tela de separação (chave de 44 dígitos ou QR da nota): avisa, não conta como erro
+  if (!item && pareceCodigoDeNota(codigo)) {
+    const chave = extrairChaveDeQrDanfe(codigo)
+    const daPropriaNota = !!chave && !!t.chaveAcesso && chave === t.chaveAcesso
+    return {
+      ok: false, motivo: 'CODIGO_DE_NOTA', tarefaSeparada: false, progresso: progressoAtual(),
+      mensagem: daPropriaNota
+        ? `Esta é a DANFE da própria NF ${t.nfNumero} — bipe agora o QR dos produtos`
+        : 'Isso é o código de uma nota fiscal, não de um produto',
+    }
+  }
 
   if (!item) {
     await registrarEvento({ tarefaId, operadorId: operador.id, sku: codigo.trim(), tipo: SeparacaoEventoTipo.BIPE_ERRADO, detalhe: 'não pertence à NF' })

@@ -99,12 +99,18 @@ export default function SepararTarefaPage() {
         const fala =
           r.motivo === 'ITEM_NAO_PERTENCE' ? 'Item errado'
           : r.motivo === 'ITEM_DIFERENTE_SELECIONADO' ? 'Não é o item selecionado'
+          : r.motivo === 'CODIGO_DE_NOTA' ? 'Isso é a nota, bipe o produto'
           : r.motivo === 'ITEM_COMPLETO' ? 'Item já completo'
           : r.motivo === 'BIPE_ANTES_DA_QTD' ? 'Bipe o item primeiro'
           : 'Confira a quantidade'
-        if (r.motivo === 'ITEM_DIFERENTE_SELECIONADO') {
+        // Laranja = aviso (mirou no alvo errado); vermelho = erro real (item não é da NF)
+        if (r.motivo === 'ITEM_DIFERENTE_SELECIONADO' || r.motivo === 'CODIGO_DE_NOTA') {
           feedbackAviso(fala)
-          mostrarOverlay({ tipo: 'aviso', titulo: 'NÃO É O SELECIONADO', detalhe: r.mensagem })
+          mostrarOverlay({
+            tipo: 'aviso',
+            titulo: r.motivo === 'CODIGO_DE_NOTA' ? 'ISSO É A NOTA' : 'NÃO É O SELECIONADO',
+            detalhe: r.mensagem,
+          })
         } else {
           feedbackErro(fala)
           mostrarOverlay({ tipo: 'erro', titulo: r.motivo === 'ITEM_NAO_PERTENCE' ? 'ITEM ERRADO' : 'ATENÇÃO', detalhe: r.mensagem })
