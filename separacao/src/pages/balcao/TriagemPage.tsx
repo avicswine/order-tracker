@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../../lib/api'
 import { useEventos } from '../../lib/useEventos'
 import ModalEstrutura from '../../components/ModalEstrutura'
@@ -26,6 +26,7 @@ function dataHora(iso: string | null) {
 
 // Jeovan marca aqui quais NFs vão para a separação por bipe.
 export default function TriagemPage() {
+  const navigate = useNavigate()
   const [tarefas, setTarefas] = useState<TarefaResumo[]>([])
   const [empresas, setEmpresas] = useState<Empresa[]>([])
   const [selecionadas, setSelecionadas] = useState<Set<string>>(new Set())
@@ -182,6 +183,14 @@ export default function TriagemPage() {
           <div className="font-semibold flex-1">Aguardando triagem <span className="text-slate-500 font-normal">({aguardando.length})</span></div>
           <button className="btn-primary !py-1.5 !px-3 text-sm" disabled={selecionadas.size === 0} onClick={() => triar([...selecionadas], 'separar')}>
             Enviar para separação ({selecionadas.size})
+          </button>
+          <button
+            className="btn-secondary !py-1.5 !px-3 text-sm"
+            disabled={selecionadas.size === 0}
+            title="Imprime as etiquetas de todos os SKUs dessas NFs que ainda não têm etiqueta"
+            onClick={() => navigate(`/etiquetas?nfs=${[...selecionadas].join(',')}&papel=zebra`)}
+          >
+            🏷 Imprimir etiquetas ({selecionadas.size})
           </button>
           <button className="btn-secondary !py-1.5 !px-3 text-sm" disabled={selecionadas.size === 0} onClick={() => triar([...selecionadas], 'ignorar')}>
             Ignorar ({selecionadas.size})

@@ -69,6 +69,45 @@ export async function listarSkusDaTarefa(tarefaId: string): Promise<{ companyKey
   return { companyKey: tarefa.companyKey, nfNumero: tarefa.nfNumero, itens }
 }
 
+// SKUs físicos de VÁRIAS NFs (imprimir de uma vez as etiquetas das NFs selecionadas na triagem).
+// Agrupa por SKU somando as unidades e contando em quantas NFs aparece.
+export async function listarSkusDeTarefas(tarefaIds: string[]): Promise<{ companyKeys: string[]; nfs: string[]; itens: EtiquetaPendente[] }> {
+  const tarefas = await prisma.separacaoTarefa.findMany({
+    where: { id: { in: tarefaIds } },
+    select: { id: true, companyKey: true, nfNumero: true, itens: { select: { sku: true, nome: true, fotoUrl: true, qtdEsperada: true } } },
+  })
+  if (tarefas.length === 0) return { companyKeys: [], nfs: [], itens: [] }
+
+  const porSku = new Map<string, EtiquetaPendente & { tarefas: Set<string> }>()
+  for (const t of tarefas) {
+    for (const i of t.itens) {
+      const chave = i.sku.trim().toLowerCase()
+      let e = porSku.get(chave)
+      if (!e) {
+        e = { sku: i.sku, nome: i.nome, fotoUrl: i.fotoUrl, nfs: 0, unidades: 0, impressoEm: null, tarefas: new Set() }
+        porSku.set(chave, e)
+      }
+      e.tarefas.add(t.id)
+      e.unidades += i.qtdEsperada
+      e.fotoUrl ||= i.fotoUrl
+    }
+  }
+
+  const companyKeys = [...new Set(tarefas.map(t => t.companyKey))]
+  const impressas = await prisma.separacaoEtiqueta.findMany({
+    where: { companyKey: { in: companyKeys }, sku: { in: [...porSku.values()].map(e => e.sku) } },
+    select: { sku: true, impressoEm: true },
+  })
+  const impressaPorSku = new Map(impressas.map(i => [i.sku.trim().toLowerCase(), i.impressoEm]))
+
+  const itens = [...porSku.entries()].map(([chave, e]) => {
+    const imp = impressaPorSku.get(chave) ?? null
+    return { sku: e.sku, nome: e.nome, fotoUrl: e.fotoUrl, nfs: e.tarefas.size, unidades: e.unidades, impressoEm: imp ? imp.toISOString() : null }
+  }).sort((a, b) => b.nfs - a.nfs || a.sku.localeCompare(b.sku))
+
+  return { companyKeys, nfs: tarefas.map(t => t.nfNumero), itens }
+}
+
 export async function marcarImpressas(companyKey: string, skus: string[], operadorId: string): Promise<number> {
   const unicos = [...new Set(skus.map(s => s.trim()).filter(Boolean))]
   let n = 0

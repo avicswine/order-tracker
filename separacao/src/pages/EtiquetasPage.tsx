@@ -68,8 +68,10 @@ export default function EtiquetasPage() {
   const [info, setInfo] = useState('')
   const [msg, setMsg] = useState('')
   const [searchParams] = useSearchParams()
-  const [nfId, setNfId] = useState<string | null>(searchParams.get('nf')) // vindo de "Etiquetas desta NF" ou da busca por número
-  const [fonte, setFonte] = useState<Fonte>(searchParams.get('nf') ? 'nf' : 'pendentes')
+  // ?nf=<id> (uma NF) ou ?nfs=<id,id,...> (lote selecionado na triagem)
+  const idsIniciais = (searchParams.get('nfs') ?? searchParams.get('nf') ?? '').split(',').filter(Boolean)
+  const [nfIds, setNfIds] = useState<string[]>(idsIniciais)
+  const [fonte, setFonte] = useState<Fonte>(idsIniciais.length ? 'nf' : 'pendentes')
   const [nfInfo, setNfInfo] = useState<{ nfNumero: string } | null>(null)
   const [nfBusca, setNfBusca] = useState('')
   const [diasPendentes, setDiasPendentes] = useState(1)
@@ -110,19 +112,34 @@ export default function EtiquetasPage() {
     }
   }
 
-  // SKUs de uma NF específica — pré-seleciona os que ainda não têm etiqueta impressa
+  // SKUs de uma ou várias NFs — pré-seleciona os que ainda não têm etiqueta impressa
   async function carregarDaNf() {
-    if (!nfId) return
+    if (nfIds.length === 0) return
     setCarregando(true); setErro('')
     try {
-      const r = await api.get<{ companyKey: string; nfNumero: string; itens: CatalogoItem[] }>(`/catalogo/nf/${nfId}`)
-      if (r.companyKey !== empresa) setEmpresa(r.companyKey)
-      setNfInfo({ nfNumero: r.nfNumero })
-      const lista = r.itens.map(i => ({ ...i, id: i.sku }))
+      let companyKey: string | undefined
+      let rotulo: string
+      let itensNf: CatalogoItem[]
+
+      if (nfIds.length === 1) {
+        const r = await api.get<{ companyKey: string; nfNumero: string; itens: CatalogoItem[] }>(`/catalogo/nf/${nfIds[0]}`)
+        companyKey = r.companyKey; itensNf = r.itens
+        setNfInfo({ nfNumero: r.nfNumero })
+        rotulo = `NF ${r.nfNumero}`
+      } else {
+        const r = await api.post<{ companyKeys: string[]; nfs: string[]; itens: CatalogoItem[]; falhas: number }>('/catalogo/nfs', { ids: nfIds })
+        companyKey = r.companyKeys[0]; itensNf = r.itens
+        setNfInfo(null)
+        rotulo = `${r.nfs.length} NF(s)`
+        if (r.falhas) setErro(`${r.falhas} NF(s) não puderam ser lidas no Bling e ficaram de fora.`)
+      }
+      if (companyKey && companyKey !== empresa) setEmpresa(companyKey)
+
+      const lista = itensNf.map(i => ({ ...i, id: i.sku }))
       setItens(lista)
       const semEtiqueta = lista.filter(i => !i.impressoEm)
       setSelecionados(new Map((incluirImpressos ? lista : semEtiqueta).map(i => [i.id, i])))
-      setInfo(`NF ${r.nfNumero}: ${lista.length} SKU(s) · ${semEtiqueta.length} sem etiqueta${incluirImpressos ? ' · todos selecionados' : semEtiqueta.length ? ' (já selecionados)' : ''}`)
+      setInfo(`${rotulo}: ${lista.length} SKU(s) · ${semEtiqueta.length} sem etiqueta${incluirImpressos ? ' · todos selecionados' : semEtiqueta.length ? ' (já selecionados)' : ''}`)
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Erro ao carregar NF')
     } finally {
@@ -139,7 +156,7 @@ export default function EtiquetasPage() {
     try {
       const r = await api.get<{ tarefas: { id: string; nfNumero: string; status: string }[] }>(`/tarefas/localizar?codigo=${encodeURIComponent(codigo)}${empresa ? `&empresa=${empresa}` : ''}`)
       if (r.tarefas.length === 0) { setItens([]); setNfInfo(null); return setErro('NF não encontrada na fila de separação. Use Balcão → Triagem → "Buscar NF no Bling" para importá-la.') }
-      setNfId(r.tarefas[0].id)
+      setNfIds([r.tarefas[0].id])
       setNfBusca('')
     } catch (err) {
       setErro(err instanceof Error ? err.message : 'Erro ao localizar NF')
@@ -147,7 +164,7 @@ export default function EtiquetasPage() {
   }
 
   const recarregar = (forcar = false) => (fonte === 'nf' ? carregarDaNf() : fonte === 'pendentes' ? carregarPendentes() : carregarCatalogo(forcar))
-  useEffect(() => { if (fonte !== 'nf') setSelecionados(new Map()); recarregar() }, [empresa, fonte, diasPendentes, incluirImpressos, nfId]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (fonte !== 'nf') setSelecionados(new Map()); recarregar() }, [empresa, fonte, diasPendentes, incluirImpressos, nfIds.join(',')]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function marcarImpressas(skus: string[]) {
     if (!empresa || skus.length === 0) return

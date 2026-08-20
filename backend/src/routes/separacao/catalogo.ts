@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express'
 import { requireSupervisor } from '../../middleware/requireOperador'
 import { bling } from '../../services/separacao/bling'
 import type { CatalogoItem } from '../../services/separacao/bling-tipos'
-import { desmarcarImpressas, listarSkusDaTarefa, listarSkusDoPeriodo, marcarImpressas } from '../../services/separacao/etiquetas'
+import { desmarcarImpressas, listarSkusDaTarefa, listarSkusDeTarefas, listarSkusDoPeriodo, marcarImpressas } from '../../services/separacao/etiquetas'
 import { garantirItensCarregados, precarregarItens } from '../../services/separacao/tarefas'
 
 // Catálogo de produtos (para imprimir etiquetas QR) — /api/separacao/catalogo, supervisor.
@@ -45,6 +45,29 @@ router.get('/nf/:tarefaId', async (req: Request, res: Response) => {
   } catch (err) {
     res.status(404).json({ error: err instanceof Error ? err.message : 'NF não encontrada' })
   }
+})
+
+const MAX_NFS_POR_LOTE = 60
+
+// POST /catalogo/nfs { ids: [] } — SKUs de várias NFs de uma vez (imprimir etiquetas do lote da triagem)
+router.post('/nfs', async (req: Request, res: Response) => {
+  const { ids } = req.body ?? {}
+  if (!Array.isArray(ids) || ids.length === 0 || !ids.every(i => typeof i === 'string')) {
+    return res.status(400).json({ error: 'Informe as NFs' })
+  }
+  const alvo = ids.slice(0, MAX_NFS_POR_LOTE)
+  // Carrega do Bling o que ainda não tiver itens (NFs recém-chegadas); segue mesmo se alguma falhar
+  const falhas: string[] = []
+  for (const id of alvo) {
+    try {
+      await garantirItensCarregados(id)
+    } catch (err) {
+      falhas.push(id)
+      console.warn('[Separação] Não foi possível carregar itens da tarefa', id, err instanceof Error ? err.message : err)
+    }
+  }
+  const dados = await listarSkusDeTarefas(alvo)
+  res.json({ ...dados, ignoradas: ids.length - alvo.length, falhas: falhas.length })
 })
 
 // POST /catalogo/pendentes/marcar { empresa, skus: [] } — registra como impressas
