@@ -43,8 +43,12 @@ const ALTURA_MAX_MM = 40
 const CHAVE_LAYOUT = 'separacao_etiquetas_layout'
 const CHAVE_EMPRESA = 'separacao_etiquetas_empresa'
 
-function carregarLayout(): Layout {
-  try { return { ...LAYOUT_PADRAO, ...JSON.parse(localStorage.getItem(CHAVE_LAYOUT) || '{}') } } catch { return LAYOUT_PADRAO }
+function carregarLayout(paginaForcada?: Pagina): Layout {
+  let salvo: Layout
+  try { salvo = { ...LAYOUT_PADRAO, ...JSON.parse(localStorage.getItem(CHAVE_LAYOUT) || '{}') } } catch { salvo = LAYOUT_PADRAO }
+  // ?papel=zebra (atalho da triagem) já abre configurado para a impressora de etiquetas
+  if (paginaForcada && salvo.pagina !== paginaForcada) return { ...salvo, pagina: paginaForcada, ...PRESETS[paginaForcada] }
+  return salvo
 }
 
 export default function EtiquetasPage() {
@@ -54,7 +58,10 @@ export default function EtiquetasPage() {
   const [busca, setBusca] = useState('')
   const [selecionados, setSelecionados] = useState<Map<string, CatalogoItem>>(new Map())
   const [copias, setCopias] = useState<Record<string, number>>({})
-  const [layout, setLayout] = useState<Layout>(carregarLayout)
+  const [layout, setLayout] = useState<Layout>(() => {
+    const papel = new URLSearchParams(window.location.search).get('papel')
+    return carregarLayout(papel === 'zebra' ? 'ZEBRA_10x15' : papel === 'a4' ? 'A4' : undefined)
+  })
   const [qrs, setQrs] = useState<Record<string, string>>({})
   const [carregando, setCarregando] = useState(false)
   const [erro, setErro] = useState('')

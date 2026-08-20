@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import Shell from '../components/Shell'
 import TarefaCard from '../components/TarefaCard'
 import ScannerQr from '../components/ScannerQr'
+import FotoDanfe from '../components/FotoDanfe'
 import { api } from '../lib/api'
 import { useEventos } from '../lib/useEventos'
 import { useAuth } from '../contexts/AuthContext'
@@ -85,7 +86,24 @@ export default function SepararFilaPage() {
         <button type="button" className={`btn-secondary shrink-0 !px-3 ${camera ? '!bg-brand-50 !border-brand-500' : ''}`} onClick={() => { destravarAudio(); setCamera(c => !c) }} title="Ler código de barras da DANFE pela câmera">📷</button>
         <button className="btn-primary shrink-0">Abrir</button>
       </form>
-      {camera && <div className="mb-3"><ScannerQr ativo={camera} modoCodigoBarras onCodigo={v => localizar(undefined, v)} /></div>}
+      {camera && (
+        <div className="mb-3">
+          <ScannerQr ativo={camera} modoCodigoBarras onCodigo={v => localizar(undefined, v)} />
+          <div className="mt-2">
+            <FotoDanfe
+              empresa={empresa || undefined}
+              onEncontrou={tarefas => {
+                const validas = tarefas.filter(t => t.status === 'PENDENTE' || t.status === 'EM_SEPARACAO')
+                if (validas.length === 1) return abrir(validas[0])
+                if (validas.length === 0) { feedbackErro(); setErro(`NF encontrada, mas está "${tarefas[0].status}". Peça ao balcão para liberar.`) }
+                else setErro('Mais de uma NF com esse número — selecione a empresa e tente de novo.')
+              }}
+              onErro={m => { feedbackErro(); setErro(m) }}
+            />
+            <p className="text-xs text-slate-500 mt-1">Se o código de barras não ler, tire uma foto da etiqueta: o sistema lê o número da nota.</p>
+          </div>
+        </div>
+      )}
 
       {empresas.length > 1 && (
         <div className="flex gap-2 mb-3 overflow-x-auto">

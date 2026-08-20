@@ -1,5 +1,6 @@
-import { Router, Request, Response, NextFunction } from 'express'
+import express, { Router, Request, Response, NextFunction } from 'express'
 import { SeparacaoStatus } from '@prisma/client'
+import { imagemDeBase64, lerDanfeDaImagem } from '../../services/separacao/ocr-danfe'
 import { requireSupervisor } from '../../middleware/requireOperador'
 import * as svc from '../../services/separacao/tarefas'
 import { barramento, type EventoSeparacao } from '../../services/separacao/eventos'
@@ -59,6 +60,25 @@ router.post('/sync', tratar(async (req, res) => {
   }))
 }))
 
+// POST /tarefas/ler-danfe { imagem } — foto da etiqueta DANFE → OCR → localiza a NF
+// (alternativa quando a câmera não decodifica o código de barras)
+router.post('/ler-danfe', express.json({ limit: '10mb' }), tratar(async (req, res) => {
+  const imagem = imagemDeBase64(typeof req.body?.imagem === 'string' ? req.body.imagem : '')
+  if (!imagem) return res.status(400).json({ error: 'Envie a foto da etiqueta' })
+
+  const leitura = await lerDanfeDaImagem(imagem)
+  const codigo = leitura.chave ?? leitura.numero
+  if (!codigo) {
+    return res.status(422).json({
+      error: 'Não consegui ler o número da nota na foto. Aproxime, evite sombra e tente de novo — ou digite o número.',
+      codigo: 'OCR_SEM_LEITURA', leitura,
+    })
+  }
+  const empresa = typeof req.body?.empresa === 'string' && req.body.empresa ? req.body.empresa : undefined
+  const localizado = await svc.localizarPorCodigo(codigo, empresa)
+  res.json({ ...localizado, leitura: { chave: leitura.chave, numero: leitura.numero, serie: leitura.serie } })
+}))
+
 // POST /tarefas/importar { empresa, numero } — busca uma NF pelo número no Bling e coloca na triagem
 router.post('/importar', requireSupervisor, tratar(async (req, res) => {
   const { empresa, numero } = req.body ?? {}
@@ -112,6 +132,17 @@ router.post('/triagem', requireSupervisor, tratar(async (req, res) => {
 
 router.get('/:id', tratar(async (req, res) => {
   res.json(await svc.obterTarefa(req.params.id))
+}))
+
+// GET /tarefas/:id/estrutura — itens da NF já explodidos (carrega do Bling se preciso), para conferir na triagem
+router.get('/:id/estrutura', tratar(async (req, res) => {
+  await svc.garantirItensCarregados(req.params.id)
+  const t = await svc.obterTarefa(req.params.id)
+  res.json({
+    nfNumero: t.nfNumero, clienteNome: t.clienteNome, canal: t.canal, valorNota: t.valorNota,
+    nfEmitidaEm: t.nfEmitidaEm, empresa: t.empresa, status: t.status,
+    itens: t.itens.map(i => ({ sku: i.sku, nome: i.nome, qtdEsperada: i.qtdEsperada, origemKit: i.origemKit, fotoUrl: i.fotoUrl, pesoUnit: i.pesoUnit })),
+  })
 }))
 
 router.post('/:id/iniciar', tratar(async (req, res) => {
