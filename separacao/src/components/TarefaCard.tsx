@@ -21,11 +21,12 @@ export function hora(iso: string | null | undefined) {
   return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 }
 
-export default function TarefaCard({ tarefa, onClick, destaque, acao }: {
+export default function TarefaCard({ tarefa, onClick, destaque, acao, onExcluir }: {
   tarefa: TarefaResumo
   onClick?: () => void
   destaque?: boolean
   acao?: React.ReactNode
+  onExcluir?: () => void   // lixeira no canto: desistir da separação desta NF
 }) {
   const p = tarefa.progresso
   const pct = p.unidadesEsperadas > 0 ? Math.round((p.unidadesBipadas / p.unidadesEsperadas) * 100) : 0
@@ -35,7 +36,7 @@ export default function TarefaCard({ tarefa, onClick, destaque, acao }: {
       className={`card p-3 ${onClick ? 'cursor-pointer active:bg-slate-50' : ''} ${destaque ? 'border-brand-500 ring-2 ring-brand-100' : ''}`}
     >
       <div className="flex items-start gap-2">
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 order-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-bold text-lg">NF {tarefa.nfNumero}</span>
             <span className="text-xs bg-slate-800 text-white rounded px-1.5 py-0.5">{tarefa.empresa?.code ?? tarefa.companyKey}</span>
@@ -49,6 +50,16 @@ export default function TarefaCard({ tarefa, onClick, destaque, acao }: {
           </div>
         </div>
         {acao}
+        {onExcluir && (
+          <button
+            className="order-2 shrink-0 -mt-1 -mr-1 p-2 text-slate-300 hover:text-red-600 active:text-red-700 text-lg leading-none"
+            title="Cancelar a separação desta NF"
+            aria-label="Cancelar separação"
+            onClick={e => { e.stopPropagation(); onExcluir() }}
+          >
+            🗑
+          </button>
+        )}
       </div>
       {tarefa.itensCarregados && p.total > 0 && (
         <div className="mt-2">

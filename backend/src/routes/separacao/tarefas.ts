@@ -163,6 +163,11 @@ router.post('/:id/bipar', tratar(async (req, res) => {
   res.json(await svc.bipar(req.params.id, req.operador!, codigo, qtdManual, selecionado))
 }))
 
+// POST /tarefas/:id/cancelar-separacao { remover?: boolean } — desiste da NF (lixeira na fila do celular)
+router.post('/:id/cancelar-separacao', tratar(async (req, res) => {
+  res.json(await svc.cancelarSeparacao(req.params.id, req.operador!, req.body?.remover === true))
+}))
+
 router.post('/:id/itens/:itemId/zerar', tratar(async (req, res) => {
   res.json(await svc.zerarItem(req.params.id, req.params.itemId, req.operador!))
 }))

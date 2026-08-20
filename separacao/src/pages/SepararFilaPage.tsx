@@ -21,6 +21,8 @@ export default function SepararFilaPage() {
   const [erro, setErro] = useState('')
   const [carregando, setCarregando] = useState(true)
   const [camera, setCamera] = useState(false)
+  const [cancelar, setCancelar] = useState<TarefaResumo | null>(null)
+  const [cancelando, setCancelando] = useState(false)
 
   const carregar = useCallback(async () => {
     try {
@@ -46,6 +48,23 @@ export default function SepararFilaPage() {
     } catch (e) {
       feedbackErro()
       setErro(e instanceof Error ? e.message : 'Não foi possível iniciar')
+    }
+  }
+
+  // Lixeira: desiste da NF. remover = tira da separação e devolve à triagem (só supervisor)
+  async function cancelarSeparacao(remover: boolean) {
+    if (!cancelar) return
+    setCancelando(true)
+    try {
+      await api.post(`/tarefas/${cancelar.id}/cancelar-separacao`, { remover })
+      setCancelar(null)
+      setErro('')
+      await carregar()
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Erro ao cancelar')
+      setCancelar(null)
+    } finally {
+      setCancelando(false)
     }
   }
 
@@ -120,7 +139,9 @@ export default function SepararFilaPage() {
         <>
           <div className="text-xs uppercase tracking-wide text-slate-500 mb-1">Continuar</div>
           <div className="space-y-2 mb-4">
-            {minhas.map(t => <TarefaCard key={t.id} tarefa={t} destaque onClick={() => navigate(`/separar/${t.id}`)} />)}
+            {minhas.map(t => (
+              <TarefaCard key={t.id} tarefa={t} destaque onClick={() => navigate(`/separar/${t.id}`)} onExcluir={() => setCancelar(t)} />
+            ))}
           </div>
         </>
       )}
@@ -131,8 +152,43 @@ export default function SepararFilaPage() {
         <div className="card p-6 text-center text-slate-500">Nenhuma NF liberada para separação no momento.</div>
       )}
       <div className="space-y-2">
-        {filtradas.map(t => <TarefaCard key={t.id} tarefa={t} onClick={() => abrir(t)} />)}
+        {filtradas.map(t => (
+          <TarefaCard
+            key={t.id}
+            tarefa={t}
+            onClick={() => abrir(t)}
+            onExcluir={t.status === 'EM_SEPARACAO' ? () => setCancelar(t) : undefined}
+          />
+        ))}
       </div>
+
+      {/* Confirmação da lixeira */}
+      {cancelar && (
+        <div className="fixed inset-0 z-40 bg-black/50 flex items-end sm:items-center justify-center p-4" onClick={() => setCancelar(null)}>
+          <div className="card w-full max-w-sm p-5" onClick={e => e.stopPropagation()}>
+            <div className="font-bold text-lg">Cancelar a separação da NF {cancelar.nfNumero}?</div>
+            <p className="text-sm text-slate-600 mt-1">
+              {cancelar.clienteNome}
+              {cancelar.progresso.unidadesBipadas > 0 && (
+                <span className="block mt-1 text-amber-700">
+                  Atenção: {cancelar.progresso.unidadesBipadas} unidade(s) já bipada(s) serão descartadas.
+                </span>
+              )}
+            </p>
+            <div className="mt-4 space-y-2">
+              <button className="btn-danger w-full" onClick={() => cancelarSeparacao(false)} disabled={cancelando}>
+                Voltar para a fila
+              </button>
+              {operador?.supervisor && (
+                <button className="btn-secondary w-full" onClick={() => cancelarSeparacao(true)} disabled={cancelando}>
+                  Tirar da separação (volta para a triagem)
+                </button>
+              )}
+              <button className="btn-secondary w-full" onClick={() => setCancelar(null)} disabled={cancelando}>Não, continuar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </Shell>
   )
 }

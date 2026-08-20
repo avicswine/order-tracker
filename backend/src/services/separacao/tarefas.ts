@@ -600,6 +600,41 @@ export async function zerarItem(tarefaId: string, itemId: string, operador: Oper
   return obterTarefa(tarefaId)
 }
 
+// Operador desiste de uma NF que abriu (por engano ou para outro pegar): descarta a contagem.
+// remover = true (só supervisor) tira da fila de separação e devolve para a triagem.
+export async function cancelarSeparacao(tarefaId: string, operador: OperadorPayload, remover = false) {
+  const t = await prisma.separacaoTarefa.findUnique({ where: { id: tarefaId } })
+  if (!t) throw new ErroSeparacao(404, 'NAO_ENCONTRADA', 'Tarefa não encontrada')
+  if (t.status !== SeparacaoStatus.EM_SEPARACAO && t.status !== SeparacaoStatus.SEPARADO) {
+    throw new ErroSeparacao(409, 'STATUS_INVALIDO', 'Esta NF não está em separação')
+  }
+  if (t.operadorId !== operador.id && !operador.supervisor) {
+    throw new ErroSeparacao(409, 'EM_SEPARACAO_POR_OUTRO', 'Esta NF está com outro operador')
+  }
+  if (remover && !operador.supervisor) {
+    throw new ErroSeparacao(403, 'SO_SUPERVISOR', 'Só supervisor pode tirar a NF da separação')
+  }
+
+  await prisma.separacaoItem.updateMany({
+    where: { tarefaId },
+    data: { qtdBipada: 0, qtdManual: false, concluidoEm: null, pesoLido: null, pesoOk: null },
+  })
+  await prisma.separacaoTarefa.update({
+    where: { id: tarefaId },
+    data: {
+      status: remover ? SeparacaoStatus.AGUARDANDO_TRIAGEM : SeparacaoStatus.PENDENTE,
+      operadorId: null, iniciadoEm: null, separadoEm: null,
+      ...(remover ? { triadoPorId: operador.id, triadoEm: new Date() } : {}),
+    },
+  })
+  await registrarEvento({
+    tarefaId, operadorId: operador.id, tipo: SeparacaoEventoTipo.REABERTO,
+    detalhe: remover ? 'separação cancelada e devolvida à triagem' : 'separação cancelada — voltou para a fila',
+  })
+  emitir({ tipo: 'tarefas', motivo: 'cancelou-separacao' })
+  return obterTarefa(tarefaId)
+}
+
 // ---------- balcão: finalizar / reabrir / peso ----------
 
 export async function finalizar(tarefaId: string, supervisor: OperadorPayload, opcoes: { liberar?: boolean; motivo?: string } = {}) {
