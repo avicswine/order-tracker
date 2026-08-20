@@ -15,12 +15,30 @@ export default function ConfigPage() {
   const [erro, setErro] = useState('')
   const [canaisVistos, setCanaisVistos] = useState<{ canal: string; quantidade: number }[]>([])
   const [diag, setDiag] = useState<Diagnostico | null>(null)
+  const [impressas, setImpressas] = useState<{ companyKey: string; total: number }[] | null>(null)
   const [diagnosticando, setDiagnosticando] = useState(false)
 
   useEffect(() => {
     api.get<Config>('/config').then(setCfg).catch(e => setErro(e.message))
     api.get<{ canal: string; quantidade: number }[]>('/tarefas/canais').then(setCanaisVistos).catch(() => undefined)
+    carregarImpressas()
   }, [])
+
+  function carregarImpressas() {
+    api.get<{ companyKey: string; total: number }[]>('/catalogo/impressas').then(setImpressas).catch(() => setImpressas([]))
+  }
+
+  async function limparEtiquetas() {
+    if (!window.confirm('Zerar o registro de etiquetas impressas de TODAS as empresas?\n\nTodos os SKUs voltam a aparecer como pendentes de etiqueta. Use quando a etiquetagem começar de verdade.')) return
+    setMsg(''); setErro('')
+    try {
+      const r = await api.delete<{ removidas: number }>('/catalogo/impressas')
+      setMsg(`Registro zerado (${r.removidas} SKU(s)). Todos voltam a aparecer como pendentes de etiqueta.`)
+      carregarImpressas()
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Erro ao limpar')
+    }
+  }
 
   async function salvar(e: FormEvent) {
     e.preventDefault()
@@ -108,6 +126,20 @@ export default function ConfigPage() {
         {msg && <div className="rounded-xl bg-green-50 text-green-700 px-4 py-2 text-sm">{msg}</div>}
         <button className="btn-primary w-full">Salvar</button>
       </form>
+
+      <div className="card p-4 mt-4">
+        <div className="font-semibold mb-1">Etiquetas de prateleira</div>
+        <p className="text-xs text-slate-500 mb-2">
+          O sistema guarda quais SKUs já tiveram etiqueta impressa, para não repetir. Enquanto vocês estão
+          testando (sem colar as etiquetas), esse registro fica com marcas indevidas — zere aqui quando começarem a etiquetar de verdade.
+        </p>
+        <div className="flex items-center gap-3 flex-wrap text-sm">
+          <span className="text-slate-600">
+            Registradas: {impressas === null ? '…' : impressas.length === 0 ? 'nenhuma' : impressas.map(i => `${i.companyKey}: ${i.total}`).join(' · ')}
+          </span>
+          <button className="btn-secondary !py-1.5 !px-3 text-sm ml-auto" onClick={limparEtiquetas}>Zerar registro de etiquetas impressas</button>
+        </div>
+      </div>
 
       <div className="card p-4 mt-4">
         <div className="flex items-center gap-3 mb-2">

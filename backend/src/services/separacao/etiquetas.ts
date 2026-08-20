@@ -126,3 +126,15 @@ export async function desmarcarImpressas(companyKey: string, skus: string[]): Pr
   const r = await prisma.separacaoEtiqueta.deleteMany({ where: { companyKey, sku: { in: skus } } })
   return r.count
 }
+
+// Zera o histórico de etiquetas impressas — usado quando a etiquetagem começa de verdade
+// (durante os testes, SKUs foram marcados como impressos sem que a etiqueta fosse colada).
+export async function limparRegistroImpressas(companyKey?: string): Promise<number> {
+  const r = await prisma.separacaoEtiqueta.deleteMany({ where: companyKey ? { companyKey } : {} })
+  return r.count
+}
+
+export async function contarImpressas(): Promise<{ companyKey: string; total: number }[]> {
+  const grupos = await prisma.separacaoEtiqueta.groupBy({ by: ['companyKey'], _count: { _all: true } })
+  return grupos.map(g => ({ companyKey: g.companyKey, total: g._count._all }))
+}

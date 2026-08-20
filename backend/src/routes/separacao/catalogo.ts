@@ -2,7 +2,10 @@ import { Router, Request, Response } from 'express'
 import { requireSupervisor } from '../../middleware/requireOperador'
 import { bling } from '../../services/separacao/bling'
 import type { CatalogoItem } from '../../services/separacao/bling-tipos'
-import { desmarcarImpressas, listarSkusDaTarefa, listarSkusDeTarefas, listarSkusDoPeriodo, marcarImpressas } from '../../services/separacao/etiquetas'
+import {
+  contarImpressas, desmarcarImpressas, limparRegistroImpressas,
+  listarSkusDaTarefa, listarSkusDeTarefas, listarSkusDoPeriodo, marcarImpressas,
+} from '../../services/separacao/etiquetas'
 import { garantirItensCarregados, precarregarItens } from '../../services/separacao/tarefas'
 
 // Catálogo de produtos (para imprimir etiquetas QR) — /api/separacao/catalogo, supervisor.
@@ -86,6 +89,17 @@ router.post('/pendentes/desmarcar', async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Informe empresa e skus' })
   }
   res.json({ desmarcadas: await desmarcarImpressas(empresa, skus) })
+})
+
+// GET /catalogo/impressas — quantas etiquetas estão registradas como impressas, por empresa
+router.get('/impressas', async (_req: Request, res: Response) => {
+  res.json(await contarImpressas())
+})
+
+// DELETE /catalogo/impressas?empresa=avic — zera o registro (recomeço da etiquetagem depois dos testes)
+router.delete('/impressas', async (req: Request, res: Response) => {
+  const empresa = typeof req.query.empresa === 'string' && req.query.empresa ? req.query.empresa : undefined
+  res.json({ removidas: await limparRegistroImpressas(empresa) })
 })
 
 // GET /catalogo?empresa=avic&busca=texto&forcar=1
