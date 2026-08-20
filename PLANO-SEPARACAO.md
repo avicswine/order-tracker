@@ -16,7 +16,7 @@ Criado em 2026-08-18. Objetivo: zerar envio de peça errada / quantidade errada 
 | 4 Balcão (triagem, fila, conferir/finalizar) | ✅ | Balança via Web Serial pronta, desligada por padrão (`balancaAtiva`) |
 | 5 Painel SSE | ✅ | Aba "Fila do dia" do balcão |
 | 6 Etiquetas QR | ✅ | Impressão pelo navegador. Papéis: A4 ou **Zebra 10×15 cm** (4 etiquetas de 90×30 mm por página). Abas: **Pendentes do dia** (SKUs das NFs sem etiqueta impressa), **Por NF** (digita/bipa a NF, já seleciona o que falta) e **Catálogo completo**. Registro do que já foi impresso em `separacao_etiquetas` |
-| 6b Triagem de NFs antigas | ✅ | Período personalizado (máx. 31 dias por busca no Bling) e busca por número. O filtro `numero` do Bling não responde nessa conta → fallback varre ~4 meses em blocos (leva ~10 s) |
+| 6b Triagem | ✅ | Calendário De/Até (padrão hoje) + atalhos hoje/ontem/7 dias; colunas de valor, data-hora e nº de itens; botão **📋 Itens** (estrutura da NF com kits explodidos) e **🏷 Etiquetas** (abre no papel Zebra com preview). Busca por número: o filtro `numero` do Bling não responde nessa conta → fallback varre ~4 meses em blocos (~10 s) |
 | 7 Integração (Sidebar, build raiz, static, `iniciar.bat`) | ✅ | Porta dev **5176** (5175 já era do BI) |
 | 8 Deploy | ✅ 2026-08-19 | Commits 08d1efb, 4a38bff, 3f7c7f8. Supervisor inicial "José" criado em produção |
 
@@ -27,8 +27,10 @@ Criado em 2026-08-18. Objetivo: zerar envio de peça errada / quantidade errada 
 - **SKU virtual `BASE.N`** (ex.: `RL040.15` = 15 × `RL040`): quando o produto não tem composição no Bling e o `BASE` existe, explode automaticamente. A prateleira só precisa do QR do `BASE`.
 - **Abrir NF**: aceita nº da NF, código de barras da chave (Code128, 44 dígitos) e QR da DANFE.
 
-### Leitura da chave da DANFE pela câmera
-A chave é um Code128 de 44 dígitos (barras finas). O leitor pede resolução Full HD, oferece **lanterna** e **zoom**, e usa mira horizontal. Se ainda assim falhar (etiqueta pequena/borrada), o operador digita o nº da NF. Ideia futura: imprimir na etiqueta de expedição um QR com o número da NF (bem mais tolerante que Code128).
+### Como abrir a NF na separação (3 caminhos)
+1. **Digitar o nº da NF** — sempre funciona.
+2. **Bipar pela câmera** — QR ou código de barras. A chave da DANFE é um Code128 de 44 dígitos (barras finas): o leitor pede Full HD e oferece lanterna e zoom, mas na prática **não decodifica** em etiqueta térmica pequena.
+3. **📸 Fotografar a etiqueta (OCR)** — caminho recomendado quando o código de barras não lê. Usa a câmera nativa do celular, envia a foto (reduzida para 1600 px) e o servidor lê os números impressos com Tesseract: extrai a chave de 44 dígitos ou o "Nº NFe". Endpoint `POST /tarefas/ler-danfe` (limite de corpo de 12 MB configurado no `server.ts` **antes** do parser global). Validado em produção: ~1 s por foto.
 
 ### Como rodar local
 - `iniciar.bat` (sobe backend, painel, portal e `separacao/` em modo celular/HTTPS) — ou `cd separacao && npm run dev` (http, só PC).
