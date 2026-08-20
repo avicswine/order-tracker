@@ -49,6 +49,9 @@ if (isProd) {
   app.use(cors({ origin: [process.env.FRONTEND_URL || 'http://localhost:5173', 'http://localhost:5174'] }))
 }
 
+// Foto da etiqueta DANFE (OCR) precisa de um limite maior — tem que vir ANTES do parser global,
+// senão o express.json padrão (100kb) rejeita a imagem com 413.
+app.use('/api/separacao/tarefas/ler-danfe', express.json({ limit: '12mb' }))
 app.use(express.json())
 
 app.use('/api/auth', authRouter)

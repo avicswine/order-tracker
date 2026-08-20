@@ -1,4 +1,4 @@
-import express, { Router, Request, Response, NextFunction } from 'express'
+import { Router, Request, Response, NextFunction } from 'express'
 import { SeparacaoStatus } from '@prisma/client'
 import { imagemDeBase64, lerDanfeDaImagem } from '../../services/separacao/ocr-danfe'
 import { requireSupervisor } from '../../middleware/requireOperador'
@@ -62,7 +62,8 @@ router.post('/sync', tratar(async (req, res) => {
 
 // POST /tarefas/ler-danfe { imagem } — foto da etiqueta DANFE → OCR → localiza a NF
 // (alternativa quando a câmera não decodifica o código de barras)
-router.post('/ler-danfe', express.json({ limit: '10mb' }), tratar(async (req, res) => {
+// (o limite de tamanho do corpo é configurado no server.ts, antes do parser global)
+router.post('/ler-danfe', tratar(async (req, res) => {
   const imagem = imagemDeBase64(typeof req.body?.imagem === 'string' ? req.body.imagem : '')
   if (!imagem) return res.status(400).json({ error: 'Envie a foto da etiqueta' })
 
