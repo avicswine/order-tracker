@@ -45,8 +45,38 @@ const STATUS_TABS: { key: PendenciaStatus | 'TODAS'; label: string }[] = [
   { key: 'TODAS', label: 'Todas' },
 ]
 
+const STATUS_LABEL: Record<PendenciaStatus, string> = {
+  ABERTA: 'Aberta',
+  EM_TRATAMENTO: 'Em tratamento',
+  RESOLVIDA: 'Resolvida',
+}
+
+const STATUS_BADGE: Record<PendenciaStatus, string> = {
+  ABERTA: 'bg-red-100 text-red-700',
+  EM_TRATAMENTO: 'bg-blue-100 text-blue-700',
+  RESOLVIDA: 'bg-green-100 text-green-700',
+}
+
 function fmtData(iso: string) {
   return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })
+}
+
+// Dias desde a criação; para resolvidas, quanto tempo levou até resolver
+function diasEmAberto(p: Pendencia): number {
+  const fim = p.status === 'RESOLVIDA' && p.resolvedAt ? new Date(p.resolvedAt).getTime() : Date.now()
+  return Math.max(0, Math.floor((fim - new Date(p.createdAt).getTime()) / 86400000))
+}
+
+const DIAS_ALERTA = 3   // a partir daqui fica âmbar
+const DIAS_CRITICO = 7  // a partir daqui fica vermelho
+
+function DiasBadge({ p }: { p: Pendencia }) {
+  const dias = diasEmAberto(p)
+  if (p.status === 'RESOLVIDA') {
+    return <span className="text-xs text-gray-400">{dias}d</span>
+  }
+  const cor = dias >= DIAS_CRITICO ? 'text-red-600 font-bold' : dias >= DIAS_ALERTA ? 'text-amber-600 font-semibold' : 'text-gray-500'
+  return <span className={`text-sm ${cor}`}>{dias === 0 ? 'hoje' : `${dias}d`}</span>
 }
 
 export function PendenciasPage() {
@@ -159,7 +189,9 @@ export function PendenciasPage() {
                   <th className="px-4 py-3 text-left font-medium text-gray-500">Empresa</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-500">Tipo</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-500">Origem</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-500">Status</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-500">Criada</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-500">Dias</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-500">Notas</th>
                   <th className="px-4 py-3 text-right font-medium text-gray-500">Ações</th>
                 </tr>
@@ -176,8 +208,25 @@ export function PendenciasPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{ORIGEM_LABEL[p.origem]}</td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap ${STATUS_BADGE[p.status]}`}>
+                        {STATUS_LABEL[p.status]}
+                      </span>
+                    </td>
                     <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{fmtData(p.createdAt)}</td>
-                    <td className="px-4 py-3 text-gray-500">{p.notas.length > 0 ? `💬 ${p.notas.length}` : '—'}</td>
+                    <td className="px-4 py-3 whitespace-nowrap"><DiasBadge p={p} /></td>
+                    <td className="px-4 py-3 text-gray-500 max-w-[260px]">
+                      {p.notas.length > 0 ? (
+                        <div
+                          className="truncate text-xs"
+                          title={p.notas.map((n) => `${fmtData(n.createdAt)} — ${n.texto}`).join('\n')}
+                        >
+                          💬{p.notas.length > 1 ? ` (${p.notas.length})` : ''} {p.notas[0].texto}
+                        </div>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                       {canWrite && p.status !== 'RESOLVIDA' && (
                         <button
