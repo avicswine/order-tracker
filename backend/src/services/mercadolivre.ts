@@ -1,6 +1,13 @@
 import axios from 'axios'
 import { prisma } from '../lib/prisma'
 import { PendenciaOrigem, PendenciaTipo } from '@prisma/client'
+import { buscarNfPorNumeroLoja } from '../routes/bling'
+
+// Chave da empresa no Bling (para buscar a NF do pedido ML)
+const COMPANY_BLING_KEY: Record<MlCompany, string> = {
+  avic: 'avic',
+  agro: 'agrogranja',
+}
 
 // Empresas com conta no Mercado Livre. Credenciais do app ML via env (Railway):
 //   AVIC_ML_CLIENT_ID / AVIC_ML_CLIENT_SECRET / AGRO_ML_CLIENT_ID / AGRO_ML_CLIENT_SECRET
@@ -153,6 +160,7 @@ export async function syncMlClaims(): Promise<{ criadas: number; erros: string[]
         // Enriquece com dados da venda (comprador + item) — best-effort
         let comprador = 'Cliente Mercado Livre'
         let item = ''
+        let packId: string | null = null
         if (claim.resource === 'order' && claim.resource_id) {
           try {
             const { data: order } = await axios.get(
@@ -162,8 +170,15 @@ export async function syncMlClaims(): Promise<{ criadas: number; erros: string[]
             const buyer = order?.buyer
             comprador = [buyer?.first_name, buyer?.last_name].filter(Boolean).join(' ') || buyer?.nickname || comprador
             item = order?.order_items?.[0]?.item?.title ?? ''
+            packId = order?.pack_id ? String(order.pack_id) : null
           } catch { /* segue sem enriquecer */ }
         }
+
+        // NF do pedido no Bling (numeroLoja = id do pedido/pack ML) — best-effort
+        const mlOrderId = claim.resource_id ? String(claim.resource_id) : null
+        const nfNumber = mlOrderId
+          ? await buscarNfPorNumeroLoja(COMPANY_BLING_KEY[company], [mlOrderId, ...(packId ? [packId] : [])])
+          : null
 
         await prisma.pendencia.create({
           data: {
@@ -172,7 +187,8 @@ export async function syncMlClaims(): Promise<{ criadas: number; erros: string[]
             tipo: PendenciaTipo.RECLAMACAO_ML,
             origem: PendenciaOrigem.MERCADO_LIVRE,
             mlClaimId: claimId,
-            mlOrderId: claim.resource_id ? String(claim.resource_id) : null,
+            mlOrderId,
+            nfNumber,
             descricao: [
               item && `Item: ${item}`,
               claim.reason_id && `Motivo: ${claim.reason_id}`,
@@ -181,7 +197,25 @@ export async function syncMlClaims(): Promise<{ criadas: number; erros: string[]
           },
         })
         criadas++
-        console.log(`[ML] Reclamação ${claimId} (${company.toUpperCase()}) → pendência criada`)
+        console.log(`[ML] Reclamação ${claimId} (${company.toUpperCase()}) → pendência criada${nfNumber ? ` (NF ${nfNumber})` : ''}`)
+      }
+
+      // Retro-preenche a NF de pendências ML antigas que ficaram sem número
+      const semNf = await prisma.pendencia.findMany({
+        where: {
+          origem: PendenciaOrigem.MERCADO_LIVRE,
+          senderCnpj: COMPANY_CNPJ[company],
+          nfNumber: null,
+          mlOrderId: { not: null },
+        },
+        take: 20,
+      })
+      for (const p of semNf) {
+        const nf = await buscarNfPorNumeroLoja(COMPANY_BLING_KEY[company], [p.mlOrderId!])
+        if (nf) {
+          await prisma.pendencia.update({ where: { id: p.id }, data: { nfNumber: nf } })
+          console.log(`[ML] Pendência ${p.mlClaimId} → NF ${nf} vinculada retroativamente`)
+        }
       }
     } catch (err) {
       const msg = axios.isAxiosError(err)

@@ -57,7 +57,7 @@ export const ordersApi = {
 
 // Pós-vendas
 export const pendenciasApi = {
-  list: (params?: { status?: PendenciaStatus; tipo?: PendenciaTipo; empresa?: string; search?: string }) =>
+  list: (params?: { status?: PendenciaStatus; tipo?: PendenciaTipo; empresa?: string; origem?: string; search?: string }) =>
     api.get<Pendencia[]>('/pendencias', { params }).then((r) => r.data),
   lookupNf: (nf: string, company?: string) =>
     api.get<PendenciaLookupOrder[]>(`/pendencias/lookup-nf/${encodeURIComponent(nf)}`, { params: { company } }).then((r) => r.data),

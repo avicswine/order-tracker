@@ -6,13 +6,14 @@ import { buscarNfNoBling, listarEmpresasBling } from './bling'
 
 const router = Router()
 
-// GET /pendencias?status=&tipo=&empresa=&search=
+// GET /pendencias?status=&tipo=&empresa=&origem=&search=
 router.get(
   '/',
   [
     query('status').optional().isIn(Object.values(PendenciaStatus)),
     query('tipo').optional().isIn(Object.values(PendenciaTipo)),
     query('empresa').optional().trim(),
+    query('origem').optional().isIn(Object.values(PendenciaOrigem)),
     query('search').optional().trim(),
   ],
   async (req: Request, res: Response) => {
@@ -23,6 +24,7 @@ router.get(
     if (req.query.status) where.status = req.query.status as PendenciaStatus
     if (req.query.tipo) where.tipo = req.query.tipo as PendenciaTipo
     if (req.query.empresa) where.senderCnpj = req.query.empresa as string
+    if (req.query.origem) where.origem = req.query.origem as PendenciaOrigem
     if (req.query.search) {
       const search = req.query.search as string
       where.OR = [

@@ -86,16 +86,18 @@ export function PendenciasPage() {
 
   const [tab, setTab] = useState<PendenciaStatus | 'TODAS'>('ABERTA')
   const [tipoFiltro, setTipoFiltro] = useState('')
+  const [origemFiltro, setOrigemFiltro] = useState('')
   const [search, setSearch] = useState('')
   const [formOpen, setFormOpen] = useState(false)
   const [detalhe, setDetalhe] = useState<Pendencia | null>(null)
 
   const { data: pendencias, isLoading } = useQuery({
-    queryKey: ['pendencias', tab, tipoFiltro, search],
+    queryKey: ['pendencias', tab, tipoFiltro, origemFiltro, search],
     queryFn: () =>
       pendenciasApi.list({
         ...(tab !== 'TODAS' && { status: tab }),
         ...(tipoFiltro && { tipo: tipoFiltro as PendenciaTipo }),
+        ...(origemFiltro && { origem: origemFiltro }),
         ...(search && { search }),
       }),
   })
@@ -157,6 +159,12 @@ export function PendenciasPage() {
             {Object.entries(TIPO_LABEL).map(([k, v]) => (
               <option key={k} value={k}>{v}</option>
             ))}
+          </select>
+          <select className="input !w-auto text-sm" value={origemFiltro} onChange={(e) => setOrigemFiltro(e.target.value)}>
+            <option value="">Todas as origens</option>
+            <option value="AUTO">🤖 Automática</option>
+            <option value="MANUAL">✍️ Manual</option>
+            <option value="MERCADO_LIVRE">🛒 Mercado Livre</option>
           </select>
           <input
             className="input !w-52 text-sm"

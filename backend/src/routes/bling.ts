@@ -142,6 +142,22 @@ export async function buscarNfNoBling(numero: string, companyKey?: string, maxDi
   return encontrados
 }
 
+// Busca o número da NF pelo "número da loja" (id do pedido no marketplace).
+// Usado para vincular reclamações do Mercado Livre à NF emitida no Bling.
+// Valida o numeroLoja no retorno — se a API ignorar o filtro, não retorna NF errada.
+export async function buscarNfPorNumeroLoja(companyKey: string, numerosLoja: string[]): Promise<string | null> {
+  if (!tokens[companyKey]) return null
+  for (const numeroLoja of numerosLoja.filter(Boolean)) {
+    try {
+      const data = (await blingGet(companyKey, `/nfe?pagina=1&limite=100&numeroLoja=${encodeURIComponent(numeroLoja)}`)) as BlingListResponse
+      const nfes = data?.data ?? []
+      const found = nfes.find((n) => String((n as { numeroLoja?: string | number }).numeroLoja ?? '') === numeroLoja)
+      if (found) return String(found.numero)
+    } catch { /* tenta o próximo candidato */ }
+  }
+  return null
+}
+
 // GET /api/bling/status - status de conexão de todas as empresas
 router.get('/status', (_req: Request, res: Response) => {
   const status = Object.entries(COMPANIES).map(([key, company]) => ({
