@@ -64,16 +64,17 @@ export interface Pendencia {
 }
 
 export interface PendenciaLookupOrder {
-  id: string
+  id: string | null            // null quando veio direto do Bling (NF fora do painel)
   orderNumber: string
   nfNumber: string | null
   customerName: string
   senderCnpj: string | null
-  status: OrderStatus
+  status: OrderStatus | null
   lastTracking: string | null
   estimatedDelivery: string | null
   hasOccurrence: boolean
   carrier: { name: string } | null
+  fonte: 'painel' | 'bling'
 }
 
 export interface StatusHistory {

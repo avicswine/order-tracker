@@ -83,6 +83,65 @@ export function listarEmpresasBling() {
   }))
 }
 
+// Busca uma NF direto no Bling pelo número, paginando a listagem (não há filtro por
+// número na API v3). Usado pelo lookup de pendências — cobre NFs que não entram no
+// painel (ex: Mercado Envios, sem transportadora rastreável).
+export interface NfBlingResult {
+  companyKey: string
+  companyCode: string
+  numero: string
+  customerName: string
+  customerEmail: string | null
+  customerPhone: string | null
+  senderCnpj: string
+  recipientCnpj: string | null
+  nfValue: number | null
+  nfIssuedAt: string | null
+}
+
+export async function buscarNfNoBling(numero: string, companyKey?: string, maxDias = 180): Promise<NfBlingResult[]> {
+  const alvo = String(parseInt(numero, 10))
+  if (!alvo || alvo === 'NaN') return []
+
+  const keys = companyKey
+    ? (tokens[companyKey] ? [companyKey] : [])
+    : Object.keys(COMPANIES).filter((key) => !!tokens[key])
+
+  const dataInicio = new Date()
+  dataInicio.setDate(dataInicio.getDate() - maxDias)
+  const dataInicioStr = dataInicio.toISOString().slice(0, 10)
+
+  const encontrados: NfBlingResult[] = []
+  for (const key of keys) {
+    const company = COMPANIES[key]
+    let pagina = 1
+    while (true) {
+      const data = (await blingGet(key, `/nfe?pagina=${pagina}&limite=100&dataEmissaoInicial=${dataInicioStr}`)) as BlingListResponse
+      const nfes: BlingNFe[] = data?.data ?? []
+      if (nfes.length === 0) break
+      const found = nfes.find((n) => String(parseInt(String(n.numero), 10)) === alvo)
+      if (found) {
+        encontrados.push({
+          companyKey: key,
+          companyCode: company.code,
+          numero: alvo,
+          customerName: found.contato?.nome ?? 'Cliente não informado',
+          customerEmail: found.contato?.email ?? null,
+          customerPhone: found.contato?.telefone?.replace(/\D/g, '') || null,
+          senderCnpj: company.cnpj.replace(/\D/g, ''),
+          recipientCnpj: (found.contato?.numeroDocumento ?? found.destinatario?.numeroDocumento)?.replace(/\D/g, '') || null,
+          nfValue: found.valor ?? null,
+          nfIssuedAt: found.dataEmissao ?? null,
+        })
+        break
+      }
+      if (nfes.length < 100) break
+      pagina++
+    }
+  }
+  return encontrados
+}
+
 // GET /api/bling/status - status de conexão de todas as empresas
 router.get('/status', (_req: Request, res: Response) => {
   const status = Object.entries(COMPANIES).map(([key, company]) => ({

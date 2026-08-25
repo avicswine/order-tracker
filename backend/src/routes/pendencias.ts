@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express'
 import { body, query, validationResult } from 'express-validator'
 import { prisma } from '../lib/prisma'
 import { PendenciaTipo, PendenciaStatus, PendenciaOrigem, Prisma } from '@prisma/client'
+import { buscarNfNoBling, listarEmpresasBling } from './bling'
 
 const router = Router()
 
@@ -51,14 +52,21 @@ router.get(
   }
 )
 
-// GET /pendencias/lookup-nf/:nf — dados do pedido pela NF para pré-preencher o formulário
+// GET /pendencias/lookup-nf/:nf?company=avic|agrogranja|equipage
+// Busca a NF no painel (tem rastreio) e, se não achar, direto no Bling — NFs sem
+// transportadora rastreável (ex: Mercado Envios) não entram no painel mas existem no Bling.
 router.get('/lookup-nf/:nf', async (req: Request, res: Response) => {
   const nf = String(parseInt(req.params.nf, 10))
   if (!nf || nf === 'NaN') return res.status(400).json({ error: 'NF inválida' })
+  const company = typeof req.query.company === 'string' ? req.query.company : undefined
+  const companyCnpj = company ? listarEmpresasBling().find((e) => e.key === company)?.cnpj : undefined
 
   try {
     const orders = await prisma.order.findMany({
-      where: { nfNumber: { in: [nf, nf.padStart(6, '0'), req.params.nf] } },
+      where: {
+        nfNumber: { in: [nf, nf.padStart(6, '0'), req.params.nf] },
+        ...(companyCnpj && { senderCnpj: companyCnpj }),
+      },
       select: {
         id: true, orderNumber: true, nfNumber: true, customerName: true, senderCnpj: true,
         status: true, lastTracking: true, estimatedDelivery: true, hasOccurrence: true,
@@ -66,7 +74,25 @@ router.get('/lookup-nf/:nf', async (req: Request, res: Response) => {
       },
       orderBy: { createdAt: 'desc' },
     })
-    res.json(orders)
+    if (orders.length > 0) {
+      return res.json(orders.map((o) => ({ ...o, fonte: 'painel' })))
+    }
+
+    // Não está no painel — busca direto no Bling
+    const doBling = await buscarNfNoBling(nf, company)
+    res.json(doBling.map((b) => ({
+      id: null,
+      orderNumber: `${b.companyCode}-NF-${b.numero.padStart(6, '0')}`,
+      nfNumber: b.numero,
+      customerName: b.customerName,
+      senderCnpj: b.senderCnpj,
+      status: null,
+      lastTracking: null,
+      estimatedDelivery: null,
+      hasOccurrence: false,
+      carrier: null,
+      fonte: 'bling',
+    })))
   } catch {
     res.status(500).json({ error: 'Falha na busca' })
   }

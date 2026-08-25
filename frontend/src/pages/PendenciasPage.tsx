@@ -264,6 +264,7 @@ function MlBanner({ canWrite }: { canWrite: boolean }) {
 function NovaPendenciaModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const qc = useQueryClient()
   const [nf, setNf] = useState('')
+  const [empresa, setEmpresa] = useState('')
   const [lookupResult, setLookupResult] = useState<PendenciaLookupOrder[] | null>(null)
   const [buscando, setBuscando] = useState(false)
   const [pedido, setPedido] = useState<PendenciaLookupOrder | null>(null)
@@ -272,14 +273,15 @@ function NovaPendenciaModal({ open, onClose }: { open: boolean; onClose: () => v
   const [descricao, setDescricao] = useState('')
 
   function reset() {
-    setNf(''); setLookupResult(null); setPedido(null); setCliente(''); setTipo('DEFEITO'); setDescricao('')
+    setNf(''); setEmpresa(''); setLookupResult(null); setPedido(null); setCliente(''); setTipo('DEFEITO'); setDescricao('')
   }
 
   async function buscarNf() {
     if (!nf.trim()) return
     setBuscando(true)
+    setLookupResult(null)
     try {
-      const results = await pendenciasApi.lookupNf(nf.trim())
+      const results = await pendenciasApi.lookupNf(nf.trim(), empresa || undefined)
       setLookupResult(results)
       if (results.length === 1) selecionarPedido(results[0])
     } finally {
@@ -299,7 +301,7 @@ function NovaPendenciaModal({ open, onClose }: { open: boolean; onClose: () => v
         customerName: cliente,
         tipo,
         nfNumber: pedido?.nfNumber ?? (nf.trim() || undefined),
-        orderId: pedido?.id,
+        orderId: pedido?.id ?? undefined,
         senderCnpj: pedido?.senderCnpj ?? undefined,
         descricao: descricao.trim() || undefined,
       }),
@@ -317,6 +319,12 @@ function NovaPendenciaModal({ open, onClose }: { open: boolean; onClose: () => v
         <div>
           <label className="label">Número da NF (busca os dados automaticamente)</label>
           <div className="flex gap-2">
+            <select className="input w-28" value={empresa} onChange={(e) => { setEmpresa(e.target.value); setPedido(null) }}>
+              <option value="">Todas</option>
+              <option value="avic">AVIC</option>
+              <option value="agrogranja">AGRO</option>
+              <option value="equipage">EQUI</option>
+            </select>
             <input
               className="input flex-1"
               placeholder="Ex: 11536"
@@ -328,14 +336,19 @@ function NovaPendenciaModal({ open, onClose }: { open: boolean; onClose: () => v
               {buscando ? <Spinner className="h-4 w-4" /> : 'Buscar'}
             </button>
           </div>
+          {buscando && (
+            <p className="mt-1 text-xs text-gray-400">Buscando no painel e no Bling — pode levar alguns segundos...</p>
+          )}
           {lookupResult && lookupResult.length === 0 && (
-            <p className="mt-1 text-xs text-amber-600">NF não encontrada no painel — preencha o cliente manualmente.</p>
+            <p className="mt-1 text-xs text-amber-600">
+              NF não encontrada no painel nem no Bling (últimos 6 meses){empresa ? '' : ' — tente selecionar a empresa'}. Preencha o cliente manualmente.
+            </p>
           )}
           {lookupResult && lookupResult.length > 1 && (
             <div className="mt-2 space-y-1">
               {lookupResult.map((o) => (
                 <button
-                  key={o.id}
+                  key={o.id ?? o.orderNumber}
                   type="button"
                   className="w-full rounded-lg border border-gray-200 px-3 py-2 text-left text-sm hover:bg-blue-50"
                   onClick={() => selecionarPedido(o)}
@@ -349,6 +362,7 @@ function NovaPendenciaModal({ open, onClose }: { open: boolean; onClose: () => v
             <div className="mt-2 rounded-lg bg-blue-50 border border-blue-200 px-3 py-2 text-xs text-blue-800">
               ✓ <b>{pedido.orderNumber}</b> — {pedido.customerName}
               {pedido.carrier && <> · {pedido.carrier.name}</>}
+              {pedido.fonte === 'bling' && <> · <span className="text-blue-500">via Bling (sem rastreio no painel)</span></>}
               {pedido.lastTracking && <div className="mt-1 text-blue-600 truncate">Rastreio: {pedido.lastTracking}</div>}
             </div>
           )}
