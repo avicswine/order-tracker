@@ -541,7 +541,19 @@ function DetalheModal({ pendencia, canWrite, onClose, onStatus }: {
             </div>
           )}
           {pendencia.mlClaimId && (
-            <div className="col-span-2 text-xs text-gray-500">Reclamação ML #{pendencia.mlClaimId}{pendencia.mlOrderId ? ` · Venda ${pendencia.mlOrderId}` : ''}</div>
+            <div className="col-span-2 flex items-center gap-2 text-xs text-gray-500">
+              <span>Reclamação ML #{pendencia.mlClaimId}{pendencia.mlOrderId ? ` · Venda ${pendencia.mlOrderId}` : ''}</span>
+              {pendencia.mlOrderId && (
+                <a
+                  href={`https://www.mercadolivre.com.br/vendas/${pendencia.mlOrderId}/detalhe`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-blue-600 hover:underline"
+                >
+                  Abrir no Mercado Livre ↗
+                </a>
+              )}
+            </div>
           )}
         </div>
 
