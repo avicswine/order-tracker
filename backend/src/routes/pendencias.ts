@@ -13,7 +13,10 @@ router.get(
     query('status').optional().isIn(Object.values(PendenciaStatus)),
     query('tipo').optional().isIn(Object.values(PendenciaTipo)),
     query('empresa').optional().trim(),
-    query('origem').optional().isIn(Object.values(PendenciaOrigem)),
+    // Aceita uma ou mais origens separadas por vírgula (ex: origem=AUTO,MANUAL)
+    query('origem').optional().custom((v: string) =>
+      String(v).split(',').every((o) => (Object.values(PendenciaOrigem) as string[]).includes(o))
+    ),
     query('search').optional().trim(),
   ],
   async (req: Request, res: Response) => {
@@ -24,7 +27,10 @@ router.get(
     if (req.query.status) where.status = req.query.status as PendenciaStatus
     if (req.query.tipo) where.tipo = req.query.tipo as PendenciaTipo
     if (req.query.empresa) where.senderCnpj = req.query.empresa as string
-    if (req.query.origem) where.origem = req.query.origem as PendenciaOrigem
+    if (req.query.origem) {
+      const origens = String(req.query.origem).split(',') as PendenciaOrigem[]
+      where.origem = origens.length === 1 ? origens[0] : { in: origens }
+    }
     if (req.query.search) {
       const search = req.query.search as string
       where.OR = [

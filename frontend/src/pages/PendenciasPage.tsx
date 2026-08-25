@@ -86,7 +86,7 @@ export function PendenciasPage() {
 
   const [tab, setTab] = useState<PendenciaStatus | 'TODAS'>('ABERTA')
   const [tipoFiltro, setTipoFiltro] = useState('')
-  const [origemFiltro, setOrigemFiltro] = useState('')
+  const [origemFiltro, setOrigemFiltro] = useState<string[]>([])
   const [search, setSearch] = useState('')
   const [formOpen, setFormOpen] = useState(false)
   const [detalhe, setDetalhe] = useState<Pendencia | null>(null)
@@ -97,7 +97,7 @@ export function PendenciasPage() {
       pendenciasApi.list({
         ...(tab !== 'TODAS' && { status: tab }),
         ...(tipoFiltro && { tipo: tipoFiltro as PendenciaTipo }),
-        ...(origemFiltro && { origem: origemFiltro }),
+        ...(origemFiltro.length > 0 && { origem: origemFiltro.join(',') }),
         ...(search && { search }),
       }),
   })
@@ -160,12 +160,25 @@ export function PendenciasPage() {
               <option key={k} value={k}>{v}</option>
             ))}
           </select>
-          <select className="input !w-auto text-sm" value={origemFiltro} onChange={(e) => setOrigemFiltro(e.target.value)}>
-            <option value="">Todas as origens</option>
-            <option value="AUTO">🤖 Automática</option>
-            <option value="MANUAL">✍️ Manual</option>
-            <option value="MERCADO_LIVRE">🛒 Mercado Livre</option>
-          </select>
+          <div className="flex items-center gap-1">
+            {([['AUTO', '🤖 Auto'], ['MANUAL', '✍️ Manual'], ['MERCADO_LIVRE', '🛒 ML']] as const).map(([k, label]) => {
+              const ativo = origemFiltro.includes(k)
+              return (
+                <button
+                  key={k}
+                  onClick={() => setOrigemFiltro((atual) => ativo ? atual.filter((o) => o !== k) : [...atual, k])}
+                  className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors border ${
+                    ativo
+                      ? 'bg-blue-600 border-blue-600 text-white'
+                      : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
+                  }`}
+                  title={ativo ? 'Clique para remover o filtro' : 'Clique para filtrar por esta origem'}
+                >
+                  {label}
+                </button>
+              )
+            })}
+          </div>
           <input
             className="input !w-52 text-sm"
             placeholder="Buscar NF ou cliente..."
