@@ -154,8 +154,16 @@ export async function syncMlClaims(): Promise<{ criadas: number; erros: string[]
       const claims = (data?.data ?? []) as MlClaim[]
       for (const claim of claims) {
         const claimId = String(claim.id)
+        const dataAberturaMl = claim.date_created ? new Date(claim.date_created) : null
         const jaExiste = await prisma.pendencia.findUnique({ where: { mlClaimId: claimId } })
-        if (jaExiste) continue
+        if (jaExiste) {
+          // Corrige a data de pendências antigas gravadas com a hora do sync
+          if (dataAberturaMl && Math.abs(jaExiste.createdAt.getTime() - dataAberturaMl.getTime()) > 3600000) {
+            await prisma.pendencia.update({ where: { id: jaExiste.id }, data: { createdAt: dataAberturaMl } })
+            console.log(`[ML] Pendência ${claimId} → data corrigida para abertura no ML (${dataAberturaMl.toLocaleDateString('pt-BR')})`)
+          }
+          continue
+        }
 
         // Enriquece com dados da venda (comprador + item) — best-effort
         let comprador = 'Cliente Mercado Livre'
@@ -189,6 +197,7 @@ export async function syncMlClaims(): Promise<{ criadas: number; erros: string[]
             mlClaimId: claimId,
             mlOrderId,
             nfNumber,
+            ...(dataAberturaMl && { createdAt: dataAberturaMl }), // data real de abertura no ML
             descricao: [
               item && `Item: ${item}`,
               claim.reason_id && `Motivo: ${claim.reason_id}`,

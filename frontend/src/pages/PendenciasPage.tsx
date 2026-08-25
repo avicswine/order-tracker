@@ -231,6 +231,8 @@ export function PendenciasPage() {
                         >
                           💬{p.notas.length > 1 ? ` (${p.notas.length})` : ''} {p.notas[0].texto}
                         </div>
+                      ) : p.descricao ? (
+                        <div className="truncate text-xs" title={p.descricao}>📝 {p.descricao}</div>
                       ) : (
                         '—'
                       )}
