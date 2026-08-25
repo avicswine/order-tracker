@@ -142,19 +142,36 @@ export async function buscarNfNoBling(numero: string, companyKey?: string, maxDi
   return encontrados
 }
 
-// Busca o número da NF pelo "número da loja" (id do pedido no marketplace).
-// Usado para vincular reclamações do Mercado Livre à NF emitida no Bling.
-// Valida o numeroLoja no retorno — se a API ignorar o filtro, não retorna NF errada.
-export async function buscarNfPorNumeroLoja(companyKey: string, numerosLoja: string[]): Promise<string | null> {
+// Busca o número da NF pelo "número da loja" (id do pedido ou do pack no marketplace).
+// A listagem de NFs não filtra por numeroLoja, mas os PEDIDOS DE VENDA carregam esse
+// campo (no ML, o pack_id). Caminho: pagina pedidos → acha numeroLoja → detalhe traz
+// notaFiscal.id → busca o número da NF. Usado para vincular reclamações ML à NF.
+export async function buscarNfPorNumeroLoja(companyKey: string, numerosLoja: string[], maxDias = 90): Promise<string | null> {
   if (!tokens[companyKey]) return null
-  for (const numeroLoja of numerosLoja.filter(Boolean)) {
-    try {
-      const data = (await blingGet(companyKey, `/nfe?pagina=1&limite=100&numeroLoja=${encodeURIComponent(numeroLoja)}`)) as BlingListResponse
-      const nfes = data?.data ?? []
-      const found = nfes.find((n) => String((n as { numeroLoja?: string | number }).numeroLoja ?? '') === numeroLoja)
-      if (found) return String(found.numero)
-    } catch { /* tenta o próximo candidato */ }
-  }
+  const alvos = new Set(numerosLoja.filter(Boolean))
+  if (alvos.size === 0) return null
+
+  const dataInicio = new Date()
+  dataInicio.setDate(dataInicio.getDate() - maxDias)
+  const dataInicioStr = dataInicio.toISOString().slice(0, 10)
+
+  type PedidoVenda = { id: number; numeroLoja?: string | number }
+  try {
+    for (let pagina = 1; pagina <= 15; pagina++) {
+      const data = (await blingGet(companyKey, `/pedidos/vendas?pagina=${pagina}&limite=100&dataInicial=${dataInicioStr}`)) as { data?: PedidoVenda[] }
+      const pedidos = data?.data ?? []
+      if (pedidos.length === 0) break
+      const found = pedidos.find((p) => alvos.has(String(p.numeroLoja ?? '')))
+      if (found) {
+        const det = (await blingGet(companyKey, `/pedidos/vendas/${found.id}`)) as { data?: { notaFiscal?: { id?: number } } }
+        const nfId = det?.data?.notaFiscal?.id ?? 0
+        if (!nfId) return null // pedido ainda sem NF emitida
+        const nfe = (await blingGet(companyKey, `/nfe/${nfId}`)) as { data?: { numero?: number | string } }
+        return nfe?.data?.numero != null ? String(nfe.data.numero) : null
+      }
+      if (pedidos.length < 100) break
+    }
+  } catch { /* melhor seguir sem NF do que quebrar o sync de reclamações */ }
   return null
 }
 

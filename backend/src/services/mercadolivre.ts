@@ -211,7 +211,16 @@ export async function syncMlClaims(): Promise<{ criadas: number; erros: string[]
         take: 20,
       })
       for (const p of semNf) {
-        const nf = await buscarNfPorNumeroLoja(COMPANY_BLING_KEY[company], [p.mlOrderId!])
+        // O numeroLoja no Bling guarda o pack_id do ML — busca no pedido antes de cruzar
+        const candidatos = [p.mlOrderId!]
+        try {
+          const { data: order } = await axios.get(
+            `https://api.mercadolibre.com/orders/${p.mlOrderId}`,
+            { headers: { Authorization: `Bearer ${accessToken}` }, timeout: 15000 }
+          )
+          if (order?.pack_id) candidatos.push(String(order.pack_id))
+        } catch { /* segue só com o id do pedido */ }
+        const nf = await buscarNfPorNumeroLoja(COMPANY_BLING_KEY[company], candidatos)
         if (nf) {
           await prisma.pendencia.update({ where: { id: p.id }, data: { nfNumber: nf } })
           console.log(`[ML] Pendência ${p.mlClaimId} → NF ${nf} vinculada retroativamente`)
