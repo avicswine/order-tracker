@@ -51,6 +51,7 @@ model Order {
   updatedAt         DateTime      @updatedAt
   statusHistory     StatusHistory[]
   notifications     OrderNotification[]
+  pendencias        Pendencia[]
 
   @@index([status])
   @@index([nfNumber])
@@ -270,6 +271,76 @@ enum SeparacaoEventoTipo {
   FINALIZADO
   CANCELADO
   REABERTO
+}
+
+// Pendência de pós-venda: problema com uma venda (atraso, extravio, defeito, reclamação ML...)
+model Pendencia {
+  id           String           @id @default(cuid())
+  orderId      String?
+  order        Order?           @relation(fields: [orderId], references: [id])
+  nfNumber     String?          // NF digitada (quando não há pedido vinculado)
+  customerName String
+  senderCnpj   String?          // empresa (AVIC/AGRO/EQUI)
+  tipo         PendenciaTipo
+  origem       PendenciaOrigem
+  status       PendenciaStatus  @default(ABERTA)
+  descricao    String?
+  mlClaimId    String?          @unique // id da reclamação no Mercado Livre (dedup)
+  mlOrderId    String?          // id da venda no ML
+  resolvedAt   DateTime?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  notas        PendenciaNota[]
+
+  @@index([status])
+  @@index([senderCnpj, status])
+  @@map("pendencias")
+}
+
+// Anotação com data no histórico de uma pendência
+model PendenciaNota {
+  id          String    @id @default(cuid())
+  pendenciaId String
+  pendencia   Pendencia @relation(fields: [pendenciaId], references: [id], onDelete: Cascade)
+  texto       String
+  autor       String?   // nome do usuário que anotou
+  createdAt   DateTime  @default(now())
+
+  @@map("pendencia_notas")
+}
+
+// Tokens OAuth do Mercado Livre por empresa (avic/agro) — chain própria do order-tracker
+model MlToken {
+  companyKey   String   @id // "avic" | "agro"
+  accessToken  String
+  refreshToken String
+  userId       String   // seller id no ML
+  expiresAt    DateTime
+  updatedAt    DateTime @updatedAt
+
+  @@map("ml_tokens")
+}
+
+enum PendenciaTipo {
+  ATRASO
+  OCORRENCIA
+  DEFEITO
+  ITEM_FALTANTE
+  DEVOLUCAO
+  RECLAMACAO_ML
+  OUTRO
+}
+
+enum PendenciaOrigem {
+  AUTO          // criada pelo rastreamento (ocorrência/atraso)
+  MANUAL
+  MERCADO_LIVRE
+}
+
+enum PendenciaStatus {
+  ABERTA
+  EM_TRATAMENTO
+  RESOLVIDA
 }
 
 enum UserRole {

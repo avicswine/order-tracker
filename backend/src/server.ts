@@ -13,6 +13,9 @@ import publicRouter from './routes/public'
 import setupRouter from './routes/setup'
 import whatsappRouter from './routes/whatsapp'
 import notificationsRouter from './routes/notifications'
+import pendenciasRouter from './routes/pendencias'
+import mlRouter, { mlPublicRouter } from './routes/ml'
+import { syncMlClaims } from './services/mercadolivre'
 import separacaoRouter from './routes/separacao'
 import { iniciarSyncPeriodico as iniciarSyncSeparacao } from './services/separacao/tarefas'
 import { requireAuth } from './middleware/auth'
@@ -64,6 +67,9 @@ app.use('/api/bling', requireAuth, blingRouter)
 app.use('/api/tracking', requireAuth, trackingRouter)
 app.use('/api/whatsapp', requireAuth, whatsappRouter)
 app.use('/api/notifications', requireAuth, notificationsRouter)
+app.use('/api/pendencias', requireAuth, pendenciasRouter)
+app.use('/api/ml', mlPublicRouter) // callback OAuth do ML (público — o navegador chega sem JWT)
+app.use('/api/ml', requireAuth, mlRouter)
 app.use('/api/separacao', separacaoRouter) // auth própria (operador + PIN) dentro do router
 
 app.get('/api/health', (_req, res) => {
@@ -101,6 +107,10 @@ app.listen(Number(PORT), '0.0.0.0', () => {
     console.log('[Cron] Iniciando sync de rastreamento...')
     const tracking = await runTrackingSync()
     console.log(`[Cron] Rastreamento concluído — atualizados: ${tracking.atualizados}, erros: ${tracking.erros}, total: ${tracking.total}`)
+
+    console.log('[Cron] Iniciando sync de reclamações ML...')
+    const ml = await syncMlClaims()
+    console.log(`[Cron] ML concluído — pendências criadas: ${ml.criadas}${ml.erros.length ? `, erros: ${ml.erros.length}` : ''}`)
   })
   console.log('[Cron] Sync automático agendado a cada 2 horas (Bling + rastreamento)')
 

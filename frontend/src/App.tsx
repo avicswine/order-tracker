@@ -8,6 +8,7 @@ import { CarriersPage } from './pages/CarriersPage'
 import { RankingPage } from './pages/RankingPage'
 import { WhatsAppPage } from './pages/WhatsAppPage'
 import { LogsPage } from './pages/LogsPage'
+import { PendenciasPage } from './pages/PendenciasPage'
 
 export default function App() {
   return (
@@ -22,6 +23,7 @@ export default function App() {
                 <Layout>
                   <Routes>
                     <Route path="/" element={<OrdersPage />} />
+                    <Route path="/pendencias" element={<PendenciasPage />} />
                     <Route path="/carriers" element={<CarriersPage />} />
                     <Route path="/ranking" element={<RankingPage />} />
                     <Route path="/whatsapp" element={<WhatsAppPage />} />

@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { Carrier, CarrierRanking, Order, OrderFilters, OrdersResponse, OrderSummary, OrderStatus } from '../types'
+import type { Carrier, CarrierRanking, Order, OrderFilters, OrdersResponse, OrderSummary, OrderStatus, Pendencia, PendenciaLookupOrder, PendenciaNota, PendenciaStatus, PendenciaTipo } from '../types'
 
 const TOKEN_KEY = 'order_tracker_token'
 
@@ -53,4 +53,27 @@ export const ordersApi = {
   updateStatus: (id: string, status: OrderStatus, note?: string) =>
     api.patch<Order>(`/orders/${id}/status`, { status, note }).then((r) => r.data),
   delete: (id: string) => api.delete(`/orders/${id}`),
+}
+
+// Pós-vendas
+export const pendenciasApi = {
+  list: (params?: { status?: PendenciaStatus; tipo?: PendenciaTipo; empresa?: string; search?: string }) =>
+    api.get<Pendencia[]>('/pendencias', { params }).then((r) => r.data),
+  lookupNf: (nf: string) =>
+    api.get<PendenciaLookupOrder[]>(`/pendencias/lookup-nf/${encodeURIComponent(nf)}`).then((r) => r.data),
+  create: (data: { customerName: string; tipo: PendenciaTipo; nfNumber?: string; orderId?: string; senderCnpj?: string; descricao?: string }) =>
+    api.post<Pendencia>('/pendencias', data).then((r) => r.data),
+  update: (id: string, data: { status?: PendenciaStatus; tipo?: PendenciaTipo; descricao?: string }) =>
+    api.patch<Pendencia>(`/pendencias/${id}`, data).then((r) => r.data),
+  addNota: (id: string, texto: string) =>
+    api.post<PendenciaNota>(`/pendencias/${id}/notas`, { texto }).then((r) => r.data),
+  delete: (id: string) => api.delete(`/pendencias/${id}`),
+}
+
+// Mercado Livre
+export const mlApi = {
+  status: () =>
+    api.get<Record<string, { configurado: boolean; autorizado: boolean; userId: string | null }>>('/ml/status').then((r) => r.data),
+  authUrl: (company: string) => api.get<{ url: string }>(`/ml/auth/${company}`).then((r) => r.data.url),
+  sync: () => api.post<{ criadas: number; erros: string[] }>('/ml/sync').then((r) => r.data),
 }

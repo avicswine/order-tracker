@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma'
 import { trackSSW, trackSenior, trackWithPuppeteer, trackSaoMiguel, trackAtualCargas, trackRodonaves, trackBraspress, trackModular } from '../services/tracking'
 import { OrderStatus, TrackingSystem, Prisma } from '@prisma/client'
 import { notifyOrderUpdate, notifyCarrier } from '../services/notifier'
+import { criarPendenciaAuto, resolverPendenciasAutoSeEntregue } from '../services/pendencias'
 
 const router = Router()
 
@@ -14,6 +15,9 @@ const TRACKING_CONCURRENCY = 5
 // NFs muito antigas podem estar com status de rastreio desatualizado (ex: já entregues
 // mas ainda marcadas como atrasadas), então não devem gerar aviso retroativo.
 const CARRIER_NOTIFY_MAX_AGE_DAYS = 60
+
+// Atraso só vira pendência de pós-venda com 3+ dias — atrasos curtos costumam se resolver sozinhos
+const PENDENCIA_ATRASO_MIN_DIAS = 3
 
 export async function runTrackingSync(onProgress?: ProgressCallback, systems?: TrackingSystem[]): Promise<{ atualizados: number; erros: number; total: number }> {
   const orders = await prisma.order.findMany({
@@ -203,6 +207,28 @@ export async function runTrackingSync(onProgress?: ProgressCallback, systems?: T
           notifyCarrier(base, 'OCORRENCIA').catch(err => console.error(`[Notifier] Erro aviso transportadora (ocorrência) ${order.orderNumber}:`, err))
         } else if (atrasado) {
           notifyCarrier(base, 'ATRASO').catch(err => console.error(`[Notifier] Erro aviso transportadora (atraso) ${order.orderNumber}:`, err))
+        }
+      }
+
+      // Pendências de pós-venda automáticas (mesma janela de recência do aviso à transportadora):
+      // ocorrência cria na hora; atraso só com 3+ dias da previsão. Entrega resolve as automáticas.
+      if (!semDados && nfRecente) {
+        const estimatedDelivery = (updates.estimatedDelivery as Date | undefined) ?? order.estimatedDelivery
+        const statusFinal = (updates.status as OrderStatus | undefined) ?? order.status
+        const pendBase = {
+          id: order.id, nfNumber: order.nfNumber, customerName: order.customerName,
+          senderCnpj: order.senderCnpj, lastTracking: lastEvent,
+        }
+        if (statusFinal === OrderStatus.DELIVERED) {
+          resolverPendenciasAutoSeEntregue(order.id, statusFinal).catch(err => console.error(`[Pendencias] Erro ao resolver ${order.orderNumber}:`, err))
+        } else if (result.hasOccurrence) {
+          criarPendenciaAuto(pendBase, 'OCORRENCIA').catch(err => console.error(`[Pendencias] Erro (ocorrência) ${order.orderNumber}:`, err))
+        } else if (statusFinal !== OrderStatus.CANCELLED && estimatedDelivery) {
+          const hoje = new Date(); hoje.setHours(0, 0, 0, 0)
+          const diasAtraso = Math.floor((hoje.getTime() - new Date(estimatedDelivery).setHours(0, 0, 0, 0)) / 86400000)
+          if (diasAtraso >= PENDENCIA_ATRASO_MIN_DIAS) {
+            criarPendenciaAuto(pendBase, 'ATRASO').catch(err => console.error(`[Pendencias] Erro (atraso) ${order.orderNumber}:`, err))
+          }
         }
       }
 

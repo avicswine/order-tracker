@@ -24,6 +24,58 @@ export interface Carrier {
   _count?: { orders: number }
 }
 
+// Pós-vendas
+export type PendenciaTipo = 'ATRASO' | 'OCORRENCIA' | 'DEFEITO' | 'ITEM_FALTANTE' | 'DEVOLUCAO' | 'RECLAMACAO_ML' | 'OUTRO'
+export type PendenciaOrigem = 'AUTO' | 'MANUAL' | 'MERCADO_LIVRE'
+export type PendenciaStatus = 'ABERTA' | 'EM_TRATAMENTO' | 'RESOLVIDA'
+
+export interface PendenciaNota {
+  id: string
+  pendenciaId: string
+  texto: string
+  autor: string | null
+  createdAt: string
+}
+
+export interface Pendencia {
+  id: string
+  orderId: string | null
+  nfNumber: string | null
+  customerName: string
+  senderCnpj: string | null
+  tipo: PendenciaTipo
+  origem: PendenciaOrigem
+  status: PendenciaStatus
+  descricao: string | null
+  mlClaimId: string | null
+  mlOrderId: string | null
+  resolvedAt: string | null
+  createdAt: string
+  updatedAt: string
+  order?: {
+    id: string
+    orderNumber: string
+    status: OrderStatus
+    lastTracking: string | null
+    estimatedDelivery: string | null
+    carrier: { name: string } | null
+  } | null
+  notas: PendenciaNota[]
+}
+
+export interface PendenciaLookupOrder {
+  id: string
+  orderNumber: string
+  nfNumber: string | null
+  customerName: string
+  senderCnpj: string | null
+  status: OrderStatus
+  lastTracking: string | null
+  estimatedDelivery: string | null
+  hasOccurrence: boolean
+  carrier: { name: string } | null
+}
+
 export interface StatusHistory {
   id: string
   orderId: string
