@@ -137,7 +137,7 @@ export function PendenciasPage() {
         )}
       </div>
 
-      <MlBanner canWrite={canWrite} />
+      <MlBanner canWrite={canWrite} pos="topo" />
 
       {/* Abas de status */}
       <div className="flex items-center gap-2 flex-wrap">
@@ -256,6 +256,8 @@ export function PendenciasPage() {
         )}
       </div>
 
+      <MlBanner canWrite={canWrite} pos="rodape" />
+
       <NovaPendenciaModal open={formOpen} onClose={() => setFormOpen(false)} />
       {detalhe && (
         <DetalheModal
@@ -269,8 +271,10 @@ export function PendenciasPage() {
   )
 }
 
-// --- Banner de integração ML ---
-function MlBanner({ canWrite }: { canWrite: boolean }) {
+// --- Integração ML ---
+// pos="topo": banner amarelo, só aparece enquanto há empresa por conectar (chamada pra ação)
+// pos="rodape": linha discreta no fim da página quando está tudo conectado
+function MlBanner({ canWrite, pos }: { canWrite: boolean; pos: 'topo' | 'rodape' }) {
   const qc = useQueryClient()
   const { data: status } = useQuery({ queryKey: ['ml-status'], queryFn: mlApi.status, staleTime: 60000 })
   const syncMutation = useMutation({
@@ -284,34 +288,47 @@ function MlBanner({ canWrite }: { canWrite: boolean }) {
   if (!status) return null
   const naoAutorizadas = Object.entries(status).filter(([, s]) => s.configurado && !s.autorizado)
   const autorizadas = Object.entries(status).filter(([, s]) => s.autorizado)
+  const pendenteConexao = naoAutorizadas.length > 0 || (autorizadas.length === 0 && naoAutorizadas.length === 0)
 
   async function conectar(company: string) {
     const url = await mlApi.authUrl(company)
     window.open(url, '_blank')
   }
 
+  // Topo: só enquanto precisa de ação (conectar empresa ou configurar credenciais)
+  if (pos === 'topo') {
+    if (!pendenteConexao) return null
+    return (
+      <div className="flex items-center gap-3 flex-wrap rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-2.5 text-sm">
+        <span className="font-medium text-yellow-800">🛒 Mercado Livre:</span>
+        {canWrite && naoAutorizadas.map(([c]) => (
+          <button key={c} className="rounded-lg bg-yellow-400 px-3 py-1 text-xs font-semibold text-yellow-900 hover:bg-yellow-500" onClick={() => conectar(c)}>
+            Conectar {c.toUpperCase()}
+          </button>
+        ))}
+        {autorizadas.length === 0 && naoAutorizadas.length === 0 && (
+          <span className="text-yellow-700">credenciais não configuradas no servidor</span>
+        )}
+      </div>
+    )
+  }
+
+  // Rodapé: discreto, quando está tudo conectado
+  if (pendenteConexao) return null
   return (
-    <div className="flex items-center gap-3 flex-wrap rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-2.5 text-sm">
-      <span className="font-medium text-yellow-800">🛒 Mercado Livre:</span>
+    <div className="flex items-center gap-2 text-xs text-gray-400">
+      <span>🛒 Mercado Livre:</span>
       {autorizadas.map(([c]) => (
-        <span key={c} className="text-green-700 font-medium">✓ {c.toUpperCase()} conectado</span>
+        <span key={c}>{c.toUpperCase()} ✓</span>
       ))}
-      {canWrite && naoAutorizadas.map(([c]) => (
-        <button key={c} className="rounded-lg bg-yellow-400 px-3 py-1 text-xs font-semibold text-yellow-900 hover:bg-yellow-500" onClick={() => conectar(c)}>
-          Conectar {c.toUpperCase()}
-        </button>
-      ))}
-      {autorizadas.length > 0 && canWrite && (
+      {canWrite && (
         <button
-          className="ml-auto rounded-lg bg-white border border-yellow-300 px-3 py-1 text-xs font-medium text-yellow-800 hover:bg-yellow-100"
+          className="ml-1 underline hover:text-gray-600"
           onClick={() => syncMutation.mutate()}
           disabled={syncMutation.isPending}
         >
-          {syncMutation.isPending ? 'Sincronizando...' : 'Buscar reclamações agora'}
+          {syncMutation.isPending ? 'sincronizando...' : 'buscar reclamações'}
         </button>
-      )}
-      {autorizadas.length === 0 && naoAutorizadas.length === 0 && (
-        <span className="text-yellow-700">credenciais não configuradas no servidor</span>
       )}
     </div>
   )
