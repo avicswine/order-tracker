@@ -364,6 +364,9 @@ export function PendenciasPage() {
               <tbody className="divide-y divide-gray-100">
                 {pendencias.map((p) => {
                   const empresa = empresaSigla(p.senderCnpj)
+                  // Coluna Notas mostra só o andamento real — registros de troca de
+                  // responsável (👤) ficam apenas no histórico do detalhe
+                  const notasReais = p.notas.filter((n) => !n.texto.startsWith('👤'))
                   return (
                   <tr key={p.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setDetalhe(p)}>
                     {canWrite && (
@@ -418,13 +421,13 @@ export function PendenciasPage() {
                     <td className="px-2 py-2 text-gray-500 whitespace-nowrap">{fmtData(p.createdAt)}</td>
                     <td className="px-2 py-2 whitespace-nowrap"><DiasBadge p={p} /></td>
                     <td className="px-2 py-2 text-gray-500 min-w-[180px]">
-                      {p.notas.length > 0 ? (
+                      {notasReais.length > 0 ? (
                         <div
                           className="text-xs leading-snug"
                           style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
-                          title={p.notas.map((n) => `${fmtData(n.createdAt)} — ${n.texto}`).join('\n')}
+                          title={notasReais.map((n) => `${fmtData(n.createdAt)} — ${n.texto}`).join('\n')}
                         >
-                          💬{p.notas.length > 1 ? ` (${p.notas.length})` : ''} {p.notas[0].texto}
+                          💬{notasReais.length > 1 ? ` (${notasReais.length})` : ''} {notasReais[0].texto}
                         </div>
                       ) : p.descricao ? (
                         <div
