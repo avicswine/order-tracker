@@ -220,7 +220,7 @@ export function PendenciasPage() {
               <tbody className="divide-y divide-gray-100">
                 {pendencias.map((p) => (
                   <tr key={p.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setDetalhe(p)}>
-                    <td className="px-4 py-3 font-medium text-gray-900">{p.nfNumber ?? (p.mlOrderId ? `ML ${p.mlOrderId}` : '—')}</td>
+                    <td className="px-4 py-3 font-medium text-gray-900">{p.nfNumber ?? '—'}</td>
                     <td className="px-4 py-3 text-gray-700 max-w-[220px] truncate">{p.customerName}</td>
                     <td className="px-4 py-3 text-gray-500">{p.senderCnpj ? (EMPRESA_LABEL[p.senderCnpj] ?? '—') : '—'}</td>
                     <td className="px-4 py-3">
