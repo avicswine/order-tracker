@@ -103,6 +103,18 @@ function diasEmAberto(p: Pendencia): number {
 const DIAS_ALERTA = 3   // a partir daqui fica âmbar
 const DIAS_CRITICO = 7  // a partir daqui fica vermelho
 
+// Prazo máximo para responder ao Mercado Livre — cor por urgência
+function PrazoMl({ p }: { p: Pendencia }) {
+  if (!p.mlDueDate || p.status === 'RESOLVIDA') return null
+  const prazo = new Date(p.mlDueDate)
+  const horas = (prazo.getTime() - Date.now()) / 3600000
+  const cor = horas <= 0 ? 'text-red-600 font-bold' : horas <= 24 ? 'text-red-600 font-semibold' : horas <= 48 ? 'text-amber-600 font-semibold' : 'text-gray-500'
+  const texto = horas <= 0
+    ? 'prazo ML vencido!'
+    : `ML até ${prazo.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} ${prazo.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+  return <div className={`text-[10px] leading-tight mt-0.5 whitespace-nowrap ${cor}`} title="Prazo máximo para responder ao Mercado Livre">⏳ {texto}</div>
+}
+
 function DiasBadge({ p }: { p: Pendencia }) {
   const dias = diasEmAberto(p)
   if (p.status === 'RESOLVIDA') {
@@ -125,6 +137,7 @@ export function PendenciasPage() {
   const [detalhe, setDetalhe] = useState<Pendencia | null>(null)
   const [selecionadas, setSelecionadas] = useState<string[]>([])
   const [resolver, setResolver] = useState<Pendencia | null>(null) // pendência aguardando texto de conclusão
+  const [mensagensDe, setMensagensDe] = useState<Pendencia | null>(null) // pendência com thread ML aberta
   const [bulkStatus, setBulkStatus] = useState('')
   const [bulkResp, setBulkResp] = useState('')
 
@@ -403,6 +416,7 @@ export function PendenciasPage() {
                       <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium whitespace-nowrap ${STATUS_BADGE[p.status]}`}>
                         {STATUS_LABEL[p.status]}
                       </span>
+                      <PrazoMl p={p} />
                     </td>
                     <td className="px-2 py-2 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                       {canWrite ? (
@@ -443,6 +457,18 @@ export function PendenciasPage() {
                     </td>
                     <td className="px-2 py-2 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+                        {p.mlClaimId && (
+                          <button
+                            className="rounded-lg p-1 text-yellow-500 hover:bg-yellow-50"
+                            title="Mensagens da reclamação no ML"
+                            onClick={() => setMensagensDe(p)}
+                          >
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                            </svg>
+                          </button>
+                        )}
                         {canWrite && p.status !== 'RESOLVIDA' && (
                           <button
                             className="rounded-lg bg-green-50 px-2.5 py-1 text-[11px] font-medium text-green-700 hover:bg-green-100"
@@ -501,6 +527,7 @@ export function PendenciasPage() {
           onConfirm={(texto, quem) => resolverMutation.mutate({ pendencia: resolver, texto, quem })}
         />
       )}
+      {mensagensDe && <MensagensMlModal pendencia={mensagensDe} onClose={() => setMensagensDe(null)} />}
     </div>
   )
 }
@@ -565,6 +592,66 @@ function MlBanner({ canWrite, pos }: { canWrite: boolean; pos: 'topo' | 'rodape'
         </button>
       )}
     </div>
+  )
+}
+
+// --- Modal de mensagens da reclamação ML ---
+function MensagensMlModal({ pendencia, onClose }: { pendencia: Pendencia; onClose: () => void }) {
+  const { data: mensagens, isLoading, isError, error } = useQuery({
+    queryKey: ['ml-mensagens', pendencia.id],
+    queryFn: () => mlApi.mensagens(pendencia.id),
+    staleTime: 60000,
+    retry: false,
+  })
+
+  const DE_LABEL: Record<string, { nome: string; cor: string }> = {
+    comprador: { nome: 'Comprador', cor: 'bg-gray-100 text-gray-800' },
+    vendedor: { nome: 'Nós', cor: 'bg-blue-50 text-blue-800 border border-blue-100' },
+    mediador: { nome: 'Mercado Livre', cor: 'bg-yellow-50 text-yellow-800 border border-yellow-100' },
+  }
+
+  return (
+    <Modal open onClose={onClose} title={`Mensagens ML — ${pendencia.nfNumber ? `NF ${pendencia.nfNumber}` : pendencia.customerName}`}>
+      <div className="space-y-3">
+        <PrazoMl p={pendencia} />
+        {isLoading && <div className="flex justify-center py-8"><Spinner className="h-6 w-6" /></div>}
+        {isError && (
+          <p className="text-sm text-red-600">
+            {error instanceof Error && 'response' in (error as object)
+              ? ((error as { response?: { data?: { error?: string } } }).response?.data?.error ?? 'Falha ao buscar mensagens no ML.')
+              : 'Falha ao buscar mensagens no ML.'}
+          </p>
+        )}
+        {mensagens && mensagens.length === 0 && (
+          <p className="text-sm text-gray-500">Nenhuma mensagem nesta reclamação ainda.</p>
+        )}
+        {mensagens && mensagens.length > 0 && (
+          <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+            {mensagens.map((m, i) => {
+              const de = DE_LABEL[m.de] ?? DE_LABEL.comprador
+              return (
+                <div key={i} className={`rounded-lg px-3 py-2 text-sm ${de.cor} ${m.de === 'vendedor' ? 'ml-8' : 'mr-8'}`}>
+                  <p className="whitespace-pre-wrap">{m.texto}</p>
+                  <p className="mt-1 text-[10px] opacity-70">
+                    {de.nome}{m.data ? ` · ${new Date(m.data).toLocaleString('pt-BR')}` : ''}
+                  </p>
+                </div>
+              )
+            })}
+          </div>
+        )}
+        {pendencia.mlOrderId && (
+          <a
+            href={`https://www.mercadolivre.com.br/vendas/${pendencia.mlOrderId}/detalhe`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block text-xs font-medium text-blue-600 hover:underline"
+          >
+            Responder no Mercado Livre ↗
+          </a>
+        )}
+      </div>
+    </Modal>
   )
 }
 
@@ -832,6 +919,7 @@ function DetalheModal({ pendencia, canWrite, onClose, onStatus, onResponsavel }:
               {pendencia.descricao}
             </div>
           )}
+          {pendencia.mlClaimId && <div className="col-span-2"><PrazoMl p={pendencia} /></div>}
           {pendencia.mlClaimId && (
             <div className="col-span-2 flex items-center gap-2 text-xs text-gray-500">
               <span>Reclamação ML #{pendencia.mlClaimId}{pendencia.mlOrderId ? ` · Venda ${pendencia.mlOrderId}` : ''}</span>

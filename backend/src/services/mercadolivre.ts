@@ -133,6 +133,67 @@ interface MlClaim {
   status: string
   stage: string
   date_created: string
+  due_date?: string | null
+  players?: { role?: string; available_actions?: { due_date?: string | null }[] }[]
+}
+
+// Prazo máximo do vendedor para agir na reclamação: menor due_date entre as
+// ações disponíveis dos players que não são o comprador (complainant)
+function extrairPrazoMl(claim: MlClaim): Date | null {
+  const datas: number[] = []
+  for (const pl of claim.players ?? []) {
+    if (pl.role === 'complainant') continue
+    for (const a of pl.available_actions ?? []) {
+      if (a.due_date) {
+        const t = new Date(a.due_date).getTime()
+        if (!isNaN(t)) datas.push(t)
+      }
+    }
+  }
+  if (datas.length === 0 && claim.due_date) {
+    const t = new Date(claim.due_date).getTime()
+    if (!isNaN(t)) datas.push(t)
+  }
+  return datas.length > 0 ? new Date(Math.min(...datas)) : null
+}
+
+// Mensagens da reclamação (thread do pós-venda no ML)
+export interface MlMensagem {
+  de: 'comprador' | 'vendedor' | 'mediador'
+  texto: string
+  data: string | null
+}
+
+const CNPJ_TO_COMPANY: Record<string, MlCompany> = {
+  '47715256000149': 'avic',
+  '54695386000122': 'agro',
+}
+
+export async function mlClaimMessages(pendenciaId: string): Promise<MlMensagem[]> {
+  const p = await prisma.pendencia.findUnique({
+    where: { id: pendenciaId },
+    select: { mlClaimId: true, senderCnpj: true },
+  })
+  if (!p?.mlClaimId) throw new Error('Pendência sem reclamação ML vinculada')
+  const company = p.senderCnpj ? CNPJ_TO_COMPANY[p.senderCnpj.replace(/\D/g, '')] : undefined
+  if (!company) throw new Error('Empresa da pendência não tem conta ML')
+  const accessToken = await mlAccessToken(company)
+  if (!accessToken) throw new Error(`Conta ML de ${company.toUpperCase()} não autorizada`)
+
+  const { data } = await axios.get(
+    `https://api.mercadolibre.com/post-purchase/v1/claims/${p.mlClaimId}/messages`,
+    { headers: { Authorization: `Bearer ${accessToken}` }, timeout: 20000 }
+  )
+
+  const lista = (Array.isArray(data) ? data : (data?.data ?? [])) as Record<string, unknown>[]
+  return lista.map((m) => {
+    const role = String(m.sender_role ?? '')
+    return {
+      de: role === 'complainant' ? 'comprador' as const : role === 'mediator' ? 'mediador' as const : 'vendedor' as const,
+      texto: String(m.message ?? m.text ?? ''),
+      data: (m.date_created as string | undefined) ?? null,
+    }
+  }).filter((m) => m.texto)
 }
 
 // Busca reclamações abertas no ML e cria pendências (dedup por mlClaimId)
@@ -155,12 +216,20 @@ export async function syncMlClaims(): Promise<{ criadas: number; erros: string[]
       for (const claim of claims) {
         const claimId = String(claim.id)
         const dataAberturaMl = claim.date_created ? new Date(claim.date_created) : null
+        const prazoMl = extrairPrazoMl(claim)
         const jaExiste = await prisma.pendencia.findUnique({ where: { mlClaimId: claimId } })
         if (jaExiste) {
+          const updates: Record<string, unknown> = {}
           // Corrige a data de pendências antigas gravadas com a hora do sync
           if (dataAberturaMl && Math.abs(jaExiste.createdAt.getTime() - dataAberturaMl.getTime()) > 3600000) {
-            await prisma.pendencia.update({ where: { id: jaExiste.id }, data: { createdAt: dataAberturaMl } })
-            console.log(`[ML] Pendência ${claimId} → data corrigida para abertura no ML (${dataAberturaMl.toLocaleDateString('pt-BR')})`)
+            updates.createdAt = dataAberturaMl
+          }
+          // Prazo de resposta muda conforme a reclamação avança — mantém atualizado
+          if ((prazoMl?.getTime() ?? null) !== (jaExiste.mlDueDate?.getTime() ?? null)) {
+            updates.mlDueDate = prazoMl
+          }
+          if (Object.keys(updates).length > 0) {
+            await prisma.pendencia.update({ where: { id: jaExiste.id }, data: updates })
           }
           continue
         }
@@ -197,6 +266,7 @@ export async function syncMlClaims(): Promise<{ criadas: number; erros: string[]
             mlClaimId: claimId,
             mlOrderId,
             nfNumber,
+            mlDueDate: prazoMl,
             ...(dataAberturaMl && { createdAt: dataAberturaMl }), // data real de abertura no ML
             descricao: [
               item && `Item: ${item}`,

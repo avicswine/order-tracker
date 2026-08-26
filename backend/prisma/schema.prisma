@@ -288,6 +288,7 @@ model Pendencia {
   descricao    String?
   mlClaimId    String?          @unique // id da reclamação no Mercado Livre (dedup)
   mlOrderId    String?          // id da venda no ML
+  mlDueDate    DateTime?        // prazo máximo para responder ao ML
   resolvedAt   DateTime?
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt

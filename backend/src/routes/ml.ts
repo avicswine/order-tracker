@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express'
 import crypto from 'crypto'
-import { mlAuthUrl, mlExchangeCode, mlStatus, syncMlClaims, ML_COMPANIES, type MlCompany } from '../services/mercadolivre'
+import { mlAuthUrl, mlExchangeCode, mlStatus, syncMlClaims, mlClaimMessages, ML_COMPANIES, type MlCompany } from '../services/mercadolivre'
 
 // Rotas autenticadas (montadas com requireAuth)
 const router = Router()
@@ -38,6 +38,16 @@ router.get('/auth/:company', (req: Request, res: Response) => {
 router.post('/sync', async (_req: Request, res: Response) => {
   const result = await syncMlClaims()
   res.json(result)
+})
+
+// GET /ml/pendencias/:id/mensagens — thread de mensagens da reclamação no ML
+router.get('/pendencias/:id/mensagens', async (req: Request, res: Response) => {
+  try {
+    const mensagens = await mlClaimMessages(req.params.id)
+    res.json({ mensagens })
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : 'Falha ao buscar mensagens' })
+  }
 })
 
 // Router público — callback do OAuth (o navegador chega sem nosso JWT)

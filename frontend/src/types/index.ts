@@ -50,6 +50,7 @@ export interface Pendencia {
   descricao: string | null
   mlClaimId: string | null
   mlOrderId: string | null
+  mlDueDate: string | null
   resolvedAt: string | null
   createdAt: string
   updatedAt: string
