@@ -20,7 +20,8 @@ export async function criarPendenciaAuto(order: {
       orderId: order.id,
       nfNumber: order.nfNumber,
       customerName: order.customerName,
-      senderCnpj: order.senderCnpj,
+      // Sempre só dígitos — a tabela orders guarda formatado (47.715.256/0001-49)
+      senderCnpj: order.senderCnpj?.replace(/\D/g, '') ?? null,
       tipo,
       origem: PendenciaOrigem.AUTO,
       descricao: order.lastTracking ?? null,

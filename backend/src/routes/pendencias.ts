@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express'
 import { body, query, validationResult } from 'express-validator'
 import { prisma } from '../lib/prisma'
 import { PendenciaTipo, PendenciaStatus, PendenciaOrigem, Prisma } from '@prisma/client'
-import { buscarNfNoBling, listarEmpresasBling } from './bling'
+import { buscarNfNoBling, listarEmpresasBling, blingGet } from './bling'
 
 const router = Router()
 
@@ -10,7 +10,10 @@ const router = Router()
 router.get(
   '/',
   [
-    query('status').optional().isIn(Object.values(PendenciaStatus)),
+    // Aceita um ou mais status separados por vírgula (ex: status=ABERTA,EM_TRATAMENTO)
+    query('status').optional().custom((v: string) =>
+      String(v).split(',').every((s) => (Object.values(PendenciaStatus) as string[]).includes(s))
+    ),
     query('tipo').optional().isIn(Object.values(PendenciaTipo)),
     query('empresa').optional().trim(),
     // Aceita uma ou mais origens separadas por vírgula (ex: origem=AUTO,MANUAL)
@@ -24,7 +27,10 @@ router.get(
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() })
 
     const where: Prisma.PendenciaWhereInput = {}
-    if (req.query.status) where.status = req.query.status as PendenciaStatus
+    if (req.query.status) {
+      const sts = String(req.query.status).split(',') as PendenciaStatus[]
+      where.status = sts.length === 1 ? sts[0] : { in: sts }
+    }
     if (req.query.tipo) where.tipo = req.query.tipo as PendenciaTipo
     if (req.query.empresa) where.senderCnpj = req.query.empresa as string
     if (req.query.origem) {
@@ -116,6 +122,7 @@ router.post(
     body('orderId').optional({ values: 'falsy' }).trim(),
     body('senderCnpj').optional({ values: 'falsy' }).trim(),
     body('descricao').optional({ values: 'falsy' }).trim(),
+    body('responsavel').optional({ values: 'falsy' }).trim(),
   ],
   async (req: Request, res: Response) => {
     const errors = validationResult(req)
@@ -127,16 +134,66 @@ router.post(
           orderId: req.body.orderId || null,
           nfNumber: req.body.nfNumber || null,
           customerName: req.body.customerName,
-          senderCnpj: req.body.senderCnpj || null,
+          senderCnpj: req.body.senderCnpj ? String(req.body.senderCnpj).replace(/\D/g, '') : null,
           tipo: req.body.tipo,
           origem: PendenciaOrigem.MANUAL,
           descricao: req.body.descricao || null,
+          responsavel: req.body.responsavel || null,
         },
         include: { order: { select: { orderNumber: true } } },
       })
       res.status(201).json(pendencia)
     } catch {
       res.status(500).json({ error: 'Falha ao criar pendência' })
+    }
+  }
+)
+
+// PATCH /pendencias/bulk — altera status/responsável de várias de uma vez
+// (registrado antes de /:id para 'bulk' não ser interpretado como id)
+router.patch(
+  '/bulk',
+  [
+    body('ids').isArray({ min: 1 }).withMessage('Informe ids: string[]'),
+    body('status').optional().isIn(Object.values(PendenciaStatus)),
+    body('responsavel').optional({ values: 'falsy' }).trim(),
+    body('nota').optional({ values: 'falsy' }).trim(),
+  ],
+  async (req: Request, res: Response) => {
+    const errors = validationResult(req)
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() })
+
+    const ids = (req.body.ids as string[]).filter((i) => typeof i === 'string')
+    const status = req.body.status as PendenciaStatus | undefined
+    if (!status && !req.body.responsavel) {
+      return res.status(400).json({ error: 'Informe status e/ou responsavel' })
+    }
+
+    try {
+      const result = await prisma.pendencia.updateMany({
+        where: { id: { in: ids } },
+        data: {
+          ...(status !== undefined && {
+            status,
+            resolvedAt: status === PendenciaStatus.RESOLVIDA ? new Date() : null,
+          }),
+          ...(req.body.responsavel && { responsavel: req.body.responsavel }),
+        },
+      })
+
+      // Nota opcional (ex: texto de conclusão) replicada em cada pendência
+      if (req.body.nota) {
+        const user = req.user?.id
+          ? await prisma.user.findUnique({ where: { id: req.user.id }, select: { name: true } })
+          : null
+        await prisma.pendenciaNota.createMany({
+          data: ids.map((pendenciaId) => ({ pendenciaId, texto: req.body.nota, autor: user?.name ?? null })),
+        })
+      }
+
+      res.json({ atualizadas: result.count })
+    } catch {
+      res.status(500).json({ error: 'Falha na atualização em massa' })
     }
   }
 )
@@ -148,6 +205,7 @@ router.patch(
     body('status').optional().isIn(Object.values(PendenciaStatus)),
     body('tipo').optional().isIn(Object.values(PendenciaTipo)),
     body('descricao').optional({ values: 'falsy' }).trim(),
+    body('responsavel').optional({ values: 'null' }).trim(),
   ],
   async (req: Request, res: Response) => {
     const errors = validationResult(req)
@@ -164,6 +222,7 @@ router.patch(
           }),
           ...(req.body.tipo !== undefined && { tipo: req.body.tipo }),
           ...(req.body.descricao !== undefined && { descricao: req.body.descricao || null }),
+          ...(req.body.responsavel !== undefined && { responsavel: req.body.responsavel || null }),
         },
       })
       res.json(pendencia)
@@ -175,6 +234,44 @@ router.patch(
     }
   }
 )
+
+// GET /pendencias/:id/danfe — resolve a URL do DANFE (painel ou Bling) para abrir a NF em PDF
+router.get('/:id/danfe', async (req: Request, res: Response) => {
+  try {
+    const p = await prisma.pendencia.findUnique({
+      where: { id: req.params.id },
+      include: { order: { select: { linkDanfe: true } } },
+    })
+    if (!p) return res.status(404).json({ error: 'Pendência não encontrada' })
+    if (p.order?.linkDanfe) return res.json({ url: p.order.linkDanfe })
+    if (!p.nfNumber) return res.status(404).json({ error: 'Pendência sem NF' })
+
+    // Pedido no painel com a mesma NF/empresa
+    const order = await prisma.order.findFirst({
+      where: {
+        nfNumber: { in: [p.nfNumber, p.nfNumber.padStart(6, '0'), String(parseInt(p.nfNumber, 10))] },
+        ...(p.senderCnpj && { senderCnpj: p.senderCnpj }),
+        linkDanfe: { not: null },
+      },
+      select: { linkDanfe: true },
+    })
+    if (order?.linkDanfe) return res.json({ url: order.linkDanfe })
+
+    // Direto no Bling: acha a NF pelo número e pega o linkDanfe no detalhe
+    const companyKey = p.senderCnpj
+      ? listarEmpresasBling().find((e) => e.cnpj === p.senderCnpj)?.key
+      : undefined
+    const matches = await buscarNfNoBling(p.nfNumber, companyKey)
+    if (matches[0]) {
+      const det = (await blingGet(matches[0].companyKey, `/nfe/${matches[0].blingId}`)) as { data?: { linkDanfe?: string } }
+      if (det?.data?.linkDanfe) return res.json({ url: det.data.linkDanfe })
+    }
+
+    res.status(404).json({ error: 'DANFE não encontrado' })
+  } catch {
+    res.status(500).json({ error: 'Falha ao buscar DANFE' })
+  }
+})
 
 // POST /pendencias/:id/notas — adiciona anotação ao histórico
 router.post(

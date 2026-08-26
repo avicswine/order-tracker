@@ -57,14 +57,18 @@ export const ordersApi = {
 
 // Pós-vendas
 export const pendenciasApi = {
-  list: (params?: { status?: PendenciaStatus; tipo?: PendenciaTipo; empresa?: string; origem?: string; search?: string }) =>
+  list: (params?: { status?: string; tipo?: PendenciaTipo; empresa?: string; origem?: string; search?: string }) =>
     api.get<Pendencia[]>('/pendencias', { params }).then((r) => r.data),
   lookupNf: (nf: string, company?: string) =>
     api.get<PendenciaLookupOrder[]>(`/pendencias/lookup-nf/${encodeURIComponent(nf)}`, { params: { company } }).then((r) => r.data),
-  create: (data: { customerName: string; tipo: PendenciaTipo; nfNumber?: string; orderId?: string; senderCnpj?: string; descricao?: string }) =>
+  create: (data: { customerName: string; tipo: PendenciaTipo; nfNumber?: string; orderId?: string; senderCnpj?: string; descricao?: string; responsavel?: string }) =>
     api.post<Pendencia>('/pendencias', data).then((r) => r.data),
-  update: (id: string, data: { status?: PendenciaStatus; tipo?: PendenciaTipo; descricao?: string }) =>
+  update: (id: string, data: { status?: PendenciaStatus; tipo?: PendenciaTipo; descricao?: string; responsavel?: string | null }) =>
     api.patch<Pendencia>(`/pendencias/${id}`, data).then((r) => r.data),
+  bulk: (data: { ids: string[]; status?: PendenciaStatus; responsavel?: string; nota?: string }) =>
+    api.patch<{ atualizadas: number }>('/pendencias/bulk', data).then((r) => r.data),
+  danfe: (id: string) =>
+    api.get<{ url: string }>(`/pendencias/${id}/danfe`).then((r) => r.data),
   addNota: (id: string, texto: string) =>
     api.post<PendenciaNota>(`/pendencias/${id}/notas`, { texto }).then((r) => r.data),
   delete: (id: string) => api.delete(`/pendencias/${id}`),

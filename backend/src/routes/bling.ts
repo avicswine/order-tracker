@@ -89,6 +89,7 @@ export function listarEmpresasBling() {
 export interface NfBlingResult {
   companyKey: string
   companyCode: string
+  blingId: number
   numero: string
   customerName: string
   customerEmail: string | null
@@ -124,6 +125,7 @@ export async function buscarNfNoBling(numero: string, companyKey?: string, maxDi
         encontrados.push({
           companyKey: key,
           companyCode: company.code,
+          blingId: found.id,
           numero: alvo,
           customerName: found.contato?.nome ?? 'Cliente não informado',
           customerEmail: found.contato?.email ?? null,

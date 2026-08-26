@@ -38,12 +38,39 @@ const ORIGEM_LABEL: Record<string, string> = {
   MERCADO_LIVRE: '🛒 Mercado Livre',
 }
 
-const STATUS_TABS: { key: PendenciaStatus | 'TODAS'; label: string }[] = [
+// Abreviações para a tabela (libera espaço para a coluna Notas)
+const ORIGEM_ABREV: Record<string, string> = {
+  AUTO: 'Aut',
+  MANUAL: 'Man',
+  MERCADO_LIVRE: 'ML',
+}
+
+const EMPRESA_COR: Record<string, string> = {
+  AVIC: 'bg-black text-white',
+  AGRO: 'bg-red-600 text-white',
+  EQUI: 'bg-orange-500 text-white',
+}
+
+const RESPONSAVEIS = ['José', 'Micheli', 'Jeovan']
+
+type TabKey = 'ATIVAS' | PendenciaStatus | 'TODAS'
+
+const STATUS_TABS: { key: TabKey; label: string }[] = [
+  { key: 'ATIVAS', label: 'Ativas' },
   { key: 'ABERTA', label: 'Abertas' },
   { key: 'EM_TRATAMENTO', label: 'Em tratamento' },
   { key: 'RESOLVIDA', label: 'Resolvidas' },
   { key: 'TODAS', label: 'Todas' },
 ]
+
+// Filtro de status enviado à API por aba
+const TAB_STATUS: Record<TabKey, string | undefined> = {
+  ATIVAS: 'ABERTA,EM_TRATAMENTO',
+  ABERTA: 'ABERTA',
+  EM_TRATAMENTO: 'EM_TRATAMENTO',
+  RESOLVIDA: 'RESOLVIDA',
+  TODAS: undefined,
+}
 
 const STATUS_LABEL: Record<PendenciaStatus, string> = {
   ABERTA: 'Aberta',
@@ -59,6 +86,12 @@ const STATUS_BADGE: Record<PendenciaStatus, string> = {
 
 function fmtData(iso: string) {
   return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })
+}
+
+// Sigla da empresa a partir do CNPJ, aceitando formatado ou só dígitos
+function empresaSigla(cnpj: string | null): string | null {
+  if (!cnpj) return null
+  return EMPRESA_LABEL[cnpj.replace(/\D/g, '')] ?? null
 }
 
 // Dias desde a criação; para resolvidas, quanto tempo levou até resolver
@@ -84,18 +117,22 @@ export function PendenciasPage() {
   const canWrite = user?.role === 'ADMIN'
   const qc = useQueryClient()
 
-  const [tab, setTab] = useState<PendenciaStatus | 'TODAS'>('ABERTA')
+  const [tab, setTab] = useState<TabKey>('TODAS')
   const [tipoFiltro, setTipoFiltro] = useState('')
   const [origemFiltro, setOrigemFiltro] = useState<string[]>([])
   const [search, setSearch] = useState('')
   const [formOpen, setFormOpen] = useState(false)
   const [detalhe, setDetalhe] = useState<Pendencia | null>(null)
+  const [selecionadas, setSelecionadas] = useState<string[]>([])
+  const [resolver, setResolver] = useState<Pendencia | null>(null) // pendência aguardando texto de conclusão
+  const [bulkStatus, setBulkStatus] = useState('')
+  const [bulkResp, setBulkResp] = useState('')
 
   const { data: pendencias, isLoading } = useQuery({
     queryKey: ['pendencias', tab, tipoFiltro, origemFiltro, search],
     queryFn: () =>
       pendenciasApi.list({
-        ...(tab !== 'TODAS' && { status: tab }),
+        ...(TAB_STATUS[tab] && { status: TAB_STATUS[tab] }),
         ...(tipoFiltro && { tipo: tipoFiltro as PendenciaTipo }),
         ...(origemFiltro.length > 0 && { origem: origemFiltro.join(',') }),
         ...(search && { search }),
@@ -108,8 +145,11 @@ export function PendenciasPage() {
     queryFn: () => pendenciasApi.list(),
     refetchInterval: 60000,
   })
-  const contagem = (s: PendenciaStatus | 'TODAS') =>
-    s === 'TODAS' ? (todas?.length ?? 0) : (todas?.filter((p) => p.status === s).length ?? 0)
+  const contagem = (s: TabKey) => {
+    if (s === 'TODAS') return todas?.length ?? 0
+    if (s === 'ATIVAS') return todas?.filter((p) => p.status !== 'RESOLVIDA').length ?? 0
+    return todas?.filter((p) => p.status === s).length ?? 0
+  }
 
   const statusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: PendenciaStatus }) => pendenciasApi.update(id, { status }),
@@ -118,6 +158,75 @@ export function PendenciasPage() {
       setDetalhe((d) => (d && d.id === atualizada.id ? { ...d, status: atualizada.status } : d))
     },
   })
+
+  // Troca de responsável sempre registra a alteração no histórico de anotações
+  const respMutation = useMutation({
+    mutationFn: async ({ pendencia, responsavel }: { pendencia: Pendencia; responsavel: string | null }) => {
+      if ((pendencia.responsavel ?? null) !== responsavel) {
+        await pendenciasApi.addNota(pendencia.id, `👤 Responsável: ${pendencia.responsavel ?? 'ninguém'} → ${responsavel ?? 'ninguém'}`)
+      }
+      return pendenciasApi.update(pendencia.id, { responsavel })
+    },
+    onSuccess: (atualizada) => {
+      qc.invalidateQueries({ queryKey: ['pendencias'] })
+      setDetalhe((d) => (d && d.id === atualizada.id ? { ...d, responsavel: atualizada.responsavel } : d))
+    },
+  })
+
+  const bulkMutation = useMutation({
+    mutationFn: (data: { ids: string[]; status?: PendenciaStatus; responsavel?: string; nota?: string }) => pendenciasApi.bulk(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['pendencias'] })
+      setSelecionadas([]); setBulkStatus(''); setBulkResp('')
+    },
+  })
+
+  // Resolver com texto de conclusão (nota assinada + responsável + status)
+  const resolverMutation = useMutation({
+    mutationFn: async ({ pendencia, texto, quem }: { pendencia: Pendencia; texto: string; quem: string }) => {
+      const nota = texto.trim() ? `✅ Conclusão (${quem}): ${texto.trim()}` : `✅ Concluída por ${quem}`
+      await pendenciasApi.addNota(pendencia.id, nota)
+      return pendenciasApi.update(pendencia.id, { status: 'RESOLVIDA', responsavel: quem })
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['pendencias'] })
+      setResolver(null)
+      setDetalhe(null)
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => pendenciasApi.delete(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['pendencias'] })
+      setSelecionadas((s) => s.filter((id) => (pendencias ?? []).some((p) => p.id === id)))
+    },
+  })
+
+  function excluir(p: Pendencia) {
+    if (confirm(`Excluir a pendência ${p.nfNumber ? `da NF ${p.nfNumber}` : `de ${p.customerName}`}? Essa ação não pode ser desfeita.`)) {
+      deleteMutation.mutate(p.id)
+    }
+  }
+
+  // Abrir DANFE da NF (painel ou Bling)
+  async function abrirDanfe(p: Pendencia) {
+    try {
+      const { url } = await pendenciasApi.danfe(p.id)
+      window.open(url, '_blank', 'noopener')
+    } catch {
+      alert('DANFE não disponível para esta NF.')
+    }
+  }
+
+  const idsVisiveis = (pendencias ?? []).map((p) => p.id)
+  const todasMarcadas = idsVisiveis.length > 0 && idsVisiveis.every((id) => selecionadas.includes(id))
+  function toggleTodas() {
+    setSelecionadas(todasMarcadas ? [] : idsVisiveis)
+  }
+  function toggleUma(id: string) {
+    setSelecionadas((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]))
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -188,6 +297,35 @@ export function PendenciasPage() {
         </div>
       </div>
 
+      {/* Barra de ações em massa */}
+      {selecionadas.length > 0 && (
+        <div className="flex items-center gap-3 flex-wrap rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm">
+          <span className="font-medium text-blue-800">{selecionadas.length} selecionada{selecionadas.length > 1 ? 's' : ''}</span>
+          <select className="input !w-auto text-sm" value={bulkStatus} onChange={(e) => setBulkStatus(e.target.value)}>
+            <option value="">Mudar status...</option>
+            <option value="ABERTA">Aberta</option>
+            <option value="EM_TRATAMENTO">Em tratamento</option>
+            <option value="RESOLVIDA">Resolvida</option>
+          </select>
+          <select className="input !w-auto text-sm" value={bulkResp} onChange={(e) => setBulkResp(e.target.value)}>
+            <option value="">Atribuir a...</option>
+            {RESPONSAVEIS.map((r) => <option key={r} value={r}>{r}</option>)}
+          </select>
+          <button
+            className="btn-primary !py-1.5 text-xs"
+            disabled={(!bulkStatus && !bulkResp) || bulkMutation.isPending}
+            onClick={() => bulkMutation.mutate({
+              ids: selecionadas,
+              ...(bulkStatus && { status: bulkStatus as PendenciaStatus }),
+              ...(bulkResp && { responsavel: bulkResp, nota: `👤 Responsável definido em massa: ${bulkResp}` }),
+            })}
+          >
+            {bulkMutation.isPending ? <Spinner className="h-4 w-4" /> : 'Aplicar'}
+          </button>
+          <button className="text-xs text-gray-500 underline" onClick={() => setSelecionadas([])}>Limpar seleção</button>
+        </div>
+      )}
+
       {/* Tabela */}
       <div className="card overflow-hidden">
         {isLoading ? (
@@ -202,69 +340,134 @@ export function PendenciasPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-xs">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="px-4 py-3 text-left font-medium text-gray-500">NF</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-500">Cliente</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-500">Empresa</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-500">Tipo</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-500">Origem</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-500">Status</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-500">Criada</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-500">Dias</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-500">Notas</th>
-                  <th className="px-4 py-3 text-right font-medium text-gray-500">Ações</th>
+                  {canWrite && (
+                    <th className="px-2 py-2 w-8">
+                      <input type="checkbox" className="h-4 w-4 rounded border-gray-300" checked={todasMarcadas} onChange={toggleTodas} />
+                    </th>
+                  )}
+                  <th className="px-2 py-2 text-left font-medium text-gray-500">Empresa</th>
+                  <th className="px-2 py-2 text-left font-medium text-gray-500">NF</th>
+                  <th className="px-2 py-2 text-left font-medium text-gray-500">Cliente</th>
+                  <th className="px-2 py-2 text-left font-medium text-gray-500">Tipo</th>
+                  <th className="px-2 py-2 text-left font-medium text-gray-500" title="Origem">Orig.</th>
+                  <th className="px-2 py-2 text-left font-medium text-gray-500">Status</th>
+                  <th className="px-2 py-2 text-left font-medium text-gray-500" title="Responsável">Resp.</th>
+                  <th className="px-2 py-2 text-left font-medium text-gray-500">Criada</th>
+                  <th className="px-2 py-2 text-left font-medium text-gray-500">Dias</th>
+                  <th className="px-2 py-2 text-left font-medium text-gray-500 w-full">Notas</th>
+                  <th className="px-2 py-2 text-right font-medium text-gray-500">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {pendencias.map((p) => (
+                {pendencias.map((p) => {
+                  const empresa = empresaSigla(p.senderCnpj)
+                  return (
                   <tr key={p.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setDetalhe(p)}>
-                    <td className="px-4 py-3 font-medium text-gray-900">{p.nfNumber ?? '—'}</td>
-                    <td className="px-4 py-3 text-gray-700 max-w-[220px] truncate">{p.customerName}</td>
-                    <td className="px-4 py-3 text-gray-500">{p.senderCnpj ? (EMPRESA_LABEL[p.senderCnpj] ?? '—') : '—'}</td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${TIPO_BADGE[p.tipo]}`}>
+                    {canWrite && (
+                      <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
+                        <input type="checkbox" className="h-4 w-4 rounded border-gray-300" checked={selecionadas.includes(p.id)} onChange={() => toggleUma(p.id)} />
+                      </td>
+                    )}
+                    <td className="px-2 py-2">
+                      {empresa ? (
+                        <span className={`inline-flex rounded px-1.5 py-0.5 text-[11px] font-bold ${EMPRESA_COR[empresa] ?? 'bg-gray-200 text-gray-600'}`}>
+                          {empresa}
+                        </span>
+                      ) : '—'}
+                    </td>
+                    <td className="px-2 py-2 font-medium whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                      {p.nfNumber ? (
+                        <button
+                          className="text-blue-600 hover:underline"
+                          title="Abrir DANFE (PDF)"
+                          onClick={() => abrirDanfe(p)}
+                        >
+                          {p.nfNumber}
+                        </button>
+                      ) : '—'}
+                    </td>
+                    <td className="px-2 py-2 text-gray-700 max-w-[150px] truncate" title={p.customerName}>{p.customerName}</td>
+                    <td className="px-2 py-2">
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium whitespace-nowrap ${TIPO_BADGE[p.tipo]}`}>
                         {TIPO_LABEL[p.tipo]}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{ORIGEM_LABEL[p.origem]}</td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap ${STATUS_BADGE[p.status]}`}>
+                    <td className="px-2 py-2 text-gray-500 whitespace-nowrap" title={ORIGEM_LABEL[p.origem]}>{ORIGEM_ABREV[p.origem] ?? p.origem}</td>
+                    <td className="px-2 py-2">
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium whitespace-nowrap ${STATUS_BADGE[p.status]}`}>
                         {STATUS_LABEL[p.status]}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{fmtData(p.createdAt)}</td>
-                    <td className="px-4 py-3 whitespace-nowrap"><DiasBadge p={p} /></td>
-                    <td className="px-4 py-3 text-gray-500 max-w-[260px]">
+                    <td className="px-2 py-2 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                      {canWrite ? (
+                        <select
+                          className="rounded border border-gray-200 bg-transparent px-1 py-0.5 text-xs text-gray-700 hover:border-gray-300"
+                          value={p.responsavel ?? ''}
+                          onChange={(e) => respMutation.mutate({ pendencia: p, responsavel: e.target.value || null })}
+                        >
+                          <option value="">—</option>
+                          {RESPONSAVEIS.map((r) => <option key={r} value={r}>{r}</option>)}
+                        </select>
+                      ) : (
+                        <span className="text-gray-600">{p.responsavel ?? '—'}</span>
+                      )}
+                    </td>
+                    <td className="px-2 py-2 text-gray-500 whitespace-nowrap">{fmtData(p.createdAt)}</td>
+                    <td className="px-2 py-2 whitespace-nowrap"><DiasBadge p={p} /></td>
+                    <td className="px-2 py-2 text-gray-500 min-w-[180px]">
                       {p.notas.length > 0 ? (
                         <div
-                          className="truncate text-xs"
+                          className="text-xs leading-snug"
+                          style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
                           title={p.notas.map((n) => `${fmtData(n.createdAt)} — ${n.texto}`).join('\n')}
                         >
                           💬{p.notas.length > 1 ? ` (${p.notas.length})` : ''} {p.notas[0].texto}
                         </div>
                       ) : p.descricao ? (
-                        <div className="truncate text-xs" title={p.descricao}>📝 {p.descricao}</div>
+                        <div
+                          className="text-xs leading-snug"
+                          style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                          title={p.descricao}
+                        >
+                          📝 {p.descricao}
+                        </div>
                       ) : (
                         '—'
                       )}
                     </td>
-                    <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
-                      {canWrite && p.status !== 'RESOLVIDA' && (
-                        <button
-                          className="rounded-lg bg-green-50 px-3 py-1 text-xs font-medium text-green-700 hover:bg-green-100"
-                          onClick={() => statusMutation.mutate({ id: p.id, status: 'RESOLVIDA' })}
-                        >
-                          Resolver
-                        </button>
-                      )}
-                      {p.status === 'RESOLVIDA' && (
-                        <span className="text-xs text-green-600 font-medium">✓ {p.resolvedAt ? fmtData(p.resolvedAt) : ''}</span>
-                      )}
+                    <td className="px-2 py-2 text-right" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+                        {canWrite && p.status !== 'RESOLVIDA' && (
+                          <button
+                            className="rounded-lg bg-green-50 px-2.5 py-1 text-[11px] font-medium text-green-700 hover:bg-green-100"
+                            onClick={() => setResolver(p)}
+                          >
+                            Resolver
+                          </button>
+                        )}
+                        {p.status === 'RESOLVIDA' && (
+                          <span className="text-[11px] text-green-600 font-medium">✓ {p.resolvedAt ? fmtData(p.resolvedAt) : ''}</span>
+                        )}
+                        {canWrite && (
+                          <button
+                            className="rounded-lg p-1 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                            title="Excluir pendência"
+                            onClick={() => excluir(p)}
+                          >
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -279,7 +482,20 @@ export function PendenciasPage() {
           pendencia={detalhe}
           canWrite={canWrite}
           onClose={() => setDetalhe(null)}
-          onStatus={(status) => statusMutation.mutate({ id: detalhe.id, status })}
+          onStatus={(status) => {
+            // Resolver pede o texto de conclusão antes de mudar o status
+            if (status === 'RESOLVIDA' && detalhe.status !== 'RESOLVIDA') setResolver(detalhe)
+            else statusMutation.mutate({ id: detalhe.id, status })
+          }}
+          onResponsavel={(responsavel) => respMutation.mutate({ pendencia: detalhe, responsavel })}
+        />
+      )}
+      {resolver && (
+        <ResolverModal
+          pendencia={resolver}
+          pending={resolverMutation.isPending}
+          onClose={() => setResolver(null)}
+          onConfirm={(texto, quem) => resolverMutation.mutate({ pendencia: resolver, texto, quem })}
         />
       )}
     </div>
@@ -349,6 +565,52 @@ function MlBanner({ canWrite, pos }: { canWrite: boolean; pos: 'topo' | 'rodape'
   )
 }
 
+// --- Modal de conclusão (Resolver) ---
+function ResolverModal({ pendencia, pending, onClose, onConfirm }: {
+  pendencia: Pendencia
+  pending: boolean
+  onClose: () => void
+  onConfirm: (texto: string, quem: string) => void
+}) {
+  const [texto, setTexto] = useState('')
+  const [quem, setQuem] = useState(pendencia.responsavel ?? '')
+  return (
+    <Modal open onClose={onClose} title={`Resolver — ${pendencia.nfNumber ? `NF ${pendencia.nfNumber}` : pendencia.customerName}`}>
+      <div className="space-y-4">
+        <div>
+          <label className="label">Quem concluiu? *</label>
+          <select className="input" value={quem} onChange={(e) => setQuem(e.target.value)}>
+            <option value="">Selecione...</option>
+            {RESPONSAVEIS.map((r) => <option key={r} value={r}>{r}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="label">Como foi resolvido?</label>
+          <textarea
+            className="input min-h-[90px]"
+            placeholder="Ex: cliente recebeu o motor novo; transportadora reembolsou o extravio..."
+            value={texto}
+            onChange={(e) => setTexto(e.target.value)}
+            autoFocus
+          />
+          <p className="mt-1 text-xs text-gray-400">O texto entra no histórico de anotações como conclusão.</p>
+        </div>
+        <div className="flex justify-end gap-3">
+          <button className="btn-secondary" onClick={onClose}>Cancelar</button>
+          <button
+            className="btn-primary !bg-green-600 hover:!bg-green-700"
+            disabled={pending || !quem}
+            title={!quem ? 'Selecione quem concluiu' : undefined}
+            onClick={() => onConfirm(texto, quem)}
+          >
+            {pending ? <Spinner className="h-4 w-4" /> : 'Marcar como resolvida'}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
 // --- Modal de criação ---
 function NovaPendenciaModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const qc = useQueryClient()
@@ -359,10 +621,11 @@ function NovaPendenciaModal({ open, onClose }: { open: boolean; onClose: () => v
   const [pedido, setPedido] = useState<PendenciaLookupOrder | null>(null)
   const [cliente, setCliente] = useState('')
   const [tipo, setTipo] = useState<PendenciaTipo>('DEFEITO')
+  const [responsavel, setResponsavel] = useState('')
   const [descricao, setDescricao] = useState('')
 
   function reset() {
-    setNf(''); setEmpresa(''); setLookupResult(null); setPedido(null); setCliente(''); setTipo('DEFEITO'); setDescricao('')
+    setNf(''); setEmpresa(''); setLookupResult(null); setPedido(null); setCliente(''); setTipo('DEFEITO'); setResponsavel(''); setDescricao('')
   }
 
   async function buscarNf() {
@@ -392,6 +655,7 @@ function NovaPendenciaModal({ open, onClose }: { open: boolean; onClose: () => v
         nfNumber: pedido?.nfNumber ?? (nf.trim() || undefined),
         orderId: pedido?.id ?? undefined,
         senderCnpj: pedido?.senderCnpj ?? undefined,
+        responsavel: responsavel || undefined,
         descricao: descricao.trim() || undefined,
       }),
     onSuccess: () => {
@@ -462,13 +726,22 @@ function NovaPendenciaModal({ open, onClose }: { open: boolean; onClose: () => v
           <input className="input" placeholder="Nome do cliente" value={cliente} onChange={(e) => setCliente(e.target.value)} />
         </div>
 
-        <div>
-          <label className="label">Tipo *</label>
-          <select className="input" value={tipo} onChange={(e) => setTipo(e.target.value as PendenciaTipo)}>
-            {Object.entries(TIPO_LABEL).filter(([k]) => k !== 'RECLAMACAO_ML').map(([k, v]) => (
-              <option key={k} value={k}>{v}</option>
-            ))}
-          </select>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="label">Tipo *</label>
+            <select className="input" value={tipo} onChange={(e) => setTipo(e.target.value as PendenciaTipo)}>
+              {Object.entries(TIPO_LABEL).filter(([k]) => k !== 'RECLAMACAO_ML').map(([k, v]) => (
+                <option key={k} value={k}>{v}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="label">Responsável</label>
+            <select className="input" value={responsavel} onChange={(e) => setResponsavel(e.target.value)}>
+              <option value="">Ninguém</option>
+              {RESPONSAVEIS.map((r) => <option key={r} value={r}>{r}</option>)}
+            </select>
+          </div>
         </div>
 
         <div>
@@ -500,11 +773,12 @@ function NovaPendenciaModal({ open, onClose }: { open: boolean; onClose: () => v
 }
 
 // --- Modal de detalhe com histórico de anotações ---
-function DetalheModal({ pendencia, canWrite, onClose, onStatus }: {
+function DetalheModal({ pendencia, canWrite, onClose, onStatus, onResponsavel }: {
   pendencia: Pendencia
   canWrite: boolean
   onClose: () => void
   onStatus: (s: PendenciaStatus) => void
+  onResponsavel: (r: string | null) => void
 }) {
   const qc = useQueryClient()
   const [novaNota, setNovaNota] = useState('')
@@ -524,9 +798,24 @@ function DetalheModal({ pendencia, canWrite, onClose, onStatus }: {
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div><span className="text-gray-500">Cliente:</span> <span className="font-medium">{pendencia.customerName}</span></div>
-          <div><span className="text-gray-500">Empresa:</span> {pendencia.senderCnpj ? (EMPRESA_LABEL[pendencia.senderCnpj] ?? '—') : '—'}</div>
+          <div><span className="text-gray-500">Empresa:</span> {empresaSigla(pendencia.senderCnpj) ?? '—'}</div>
           <div><span className="text-gray-500">Origem:</span> {ORIGEM_LABEL[pendencia.origem]}</div>
           <div><span className="text-gray-500">Criada em:</span> {fmtData(pendencia.createdAt)}</div>
+          <div className="col-span-2 flex items-center gap-2">
+            <span className="text-gray-500">Responsável:</span>
+            {canWrite ? (
+              <select
+                className="input !w-auto !py-1 text-sm"
+                value={pendencia.responsavel ?? ''}
+                onChange={(e) => onResponsavel(e.target.value || null)}
+              >
+                <option value="">Ninguém</option>
+                {RESPONSAVEIS.map((r) => <option key={r} value={r}>{r}</option>)}
+              </select>
+            ) : (
+              <span className="font-medium">{pendencia.responsavel ?? '—'}</span>
+            )}
+          </div>
           {pendencia.order?.carrier && (
             <div className="col-span-2"><span className="text-gray-500">Transportadora:</span> {pendencia.order.carrier.name}</div>
           )}

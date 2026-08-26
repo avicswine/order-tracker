@@ -284,6 +284,7 @@ model Pendencia {
   tipo         PendenciaTipo
   origem       PendenciaOrigem
   status       PendenciaStatus  @default(ABERTA)
+  responsavel  String?          // quem está tratando (José, Micheli, Jeovan)
   descricao    String?
   mlClaimId    String?          @unique // id da reclamação no Mercado Livre (dedup)
   mlOrderId    String?          // id da venda no ML

@@ -46,6 +46,7 @@ export interface Pendencia {
   tipo: PendenciaTipo
   origem: PendenciaOrigem
   status: PendenciaStatus
+  responsavel: string | null
   descricao: string | null
   mlClaimId: string | null
   mlOrderId: string | null
