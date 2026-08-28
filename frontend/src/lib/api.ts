@@ -82,4 +82,15 @@ export const mlApi = {
   sync: () => api.post<{ criadas: number; erros: string[] }>('/ml/sync').then((r) => r.data),
   mensagens: (pendenciaId: string) =>
     api.get<{ mensagens: { de: string; texto: string; data: string | null }[] }>(`/ml/pendencias/${pendenciaId}/mensagens`).then((r) => r.data.mensagens),
+  mensagensNaoLidas: () =>
+    api.get<{ conversas: MlConversa[]; erros: string[] }>('/ml/mensagens').then((r) => r.data),
+}
+
+export interface MlConversa {
+  company: string
+  packId: string
+  comprador: string
+  item: string
+  naoLidas: number
+  mensagens: { de: string; texto: string; data: string | null }[]
 }

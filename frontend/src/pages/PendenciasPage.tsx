@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { pendenciasApi, mlApi } from '../lib/api'
+import { pendenciasApi, mlApi, type MlConversa } from '../lib/api'
 import { Modal } from '../components/ui/Modal'
 import { Spinner } from '../components/ui/Spinner'
 import { useAuth } from '../contexts/AuthContext'
@@ -138,6 +138,16 @@ export function PendenciasPage() {
   const [selecionadas, setSelecionadas] = useState<string[]>([])
   const [resolver, setResolver] = useState<Pendencia | null>(null) // pendência aguardando texto de conclusão
   const [mensagensDe, setMensagensDe] = useState<Pendencia | null>(null) // pendência com thread ML aberta
+  const [inboxAberto, setInboxAberto] = useState(false) // janela de mensagens pós-venda não lidas
+
+  // Mensagens pós-venda não lidas no ML — atualiza sozinho a cada 5 min
+  const { data: inbox } = useQuery({
+    queryKey: ['ml-inbox'],
+    queryFn: mlApi.mensagensNaoLidas,
+    refetchInterval: 5 * 60 * 1000,
+    staleTime: 4 * 60 * 1000,
+  })
+  const inboxTotal = inbox?.conversas.length ?? 0
   const [bulkStatus, setBulkStatus] = useState('')
   const [bulkResp, setBulkResp] = useState('')
 
@@ -249,14 +259,32 @@ export function PendenciasPage() {
           <h1 className="text-2xl font-bold text-gray-900">Pós-vendas</h1>
           <p className="text-sm text-gray-500 mt-0.5">Pendências de vendas: atrasos, extravios, defeitos e reclamações</p>
         </div>
-        {canWrite && (
-          <button className="btn-primary" onClick={() => setFormOpen(true)}>
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Nova Pendência
+        <div className="flex items-center gap-2">
+          <button
+            className={`relative rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${
+              inboxTotal > 0
+                ? 'border-yellow-300 bg-yellow-50 text-yellow-800 hover:bg-yellow-100'
+                : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+            }`}
+            onClick={() => setInboxAberto(true)}
+            title="Mensagens de compradores no pós-venda do ML ainda não lidas"
+          >
+            💬 Mensagens ML
+            {inboxTotal > 0 && (
+              <span className="absolute -top-2 -right-2 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-[11px] font-bold text-white">
+                {inboxTotal}
+              </span>
+            )}
           </button>
-        )}
+          {canWrite && (
+            <button className="btn-primary" onClick={() => setFormOpen(true)}>
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Nova Pendência
+            </button>
+          )}
+        </div>
       </div>
 
       <MlBanner canWrite={canWrite} pos="topo" />
@@ -528,6 +556,7 @@ export function PendenciasPage() {
         />
       )}
       {mensagensDe && <MensagensMlModal pendencia={mensagensDe} onClose={() => setMensagensDe(null)} />}
+      {inboxAberto && <InboxMlModal conversas={inbox?.conversas ?? []} erros={inbox?.erros ?? []} onClose={() => setInboxAberto(false)} />}
     </div>
   )
 }
@@ -592,6 +621,76 @@ function MlBanner({ canWrite, pos }: { canWrite: boolean; pos: 'topo' | 'rodape'
         </button>
       )}
     </div>
+  )
+}
+
+// --- Janela de mensagens pós-venda não lidas (inbox ML) ---
+function InboxMlModal({ conversas, erros, onClose }: { conversas: MlConversa[]; erros: string[]; onClose: () => void }) {
+  const [aberta, setAberta] = useState<string | null>(null)
+  return (
+    <Modal open onClose={onClose} title={`Mensagens ML não lidas (${conversas.length})`}>
+      <div className="space-y-3">
+        <p className="text-xs text-gray-400">
+          Mensagens de compradores no pós-venda que ainda não foram lidas. Consultar aqui <b>não</b> marca como lida no ML.
+        </p>
+        {erros.length > 0 && (
+          <p className="text-xs text-amber-600">Aviso: {erros.join(' · ')}</p>
+        )}
+        {conversas.length === 0 && (
+          <p className="py-6 text-center text-sm text-gray-500">Nenhuma mensagem pendente 🎉</p>
+        )}
+        <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+          {conversas.map((c) => {
+            const ultima = c.mensagens[c.mensagens.length - 1]
+            const expandida = aberta === c.packId
+            return (
+              <div key={c.packId} className="rounded-lg border border-gray-200">
+                <button
+                  className="w-full px-3 py-2 text-left hover:bg-gray-50"
+                  onClick={() => setAberta(expandida ? null : c.packId)}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${EMPRESA_COR[c.company] ?? 'bg-gray-200 text-gray-600'}`}>{c.company}</span>
+                    <span className="text-sm font-medium text-gray-800 truncate">{c.comprador}</span>
+                    <span className="ml-auto rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-600 whitespace-nowrap">
+                      {c.naoLidas} não lida{c.naoLidas > 1 ? 's' : ''}
+                    </span>
+                  </div>
+                  {c.item && <p className="mt-0.5 text-xs text-gray-500 truncate">{c.item}</p>}
+                  {ultima && !expandida && (
+                    <p className="mt-1 text-xs text-gray-600 truncate">
+                      {ultima.de === 'vendedor' ? 'Você: ' : ''}{ultima.texto}
+                    </p>
+                  )}
+                </button>
+                {expandida && (
+                  <div className="border-t border-gray-100 px-3 py-2 space-y-1.5">
+                    {c.mensagens.map((m, i) => (
+                      <div key={i} className={`rounded-lg px-2.5 py-1.5 text-xs ${
+                        m.de === 'vendedor' ? 'ml-6 bg-blue-50 text-blue-800' : 'mr-6 bg-gray-100 text-gray-700'
+                      }`}>
+                        <p className="whitespace-pre-wrap">{m.texto}</p>
+                        <p className="mt-0.5 text-[10px] opacity-60">
+                          {m.de === 'vendedor' ? 'Você' : c.comprador}{m.data ? ` · ${new Date(m.data).toLocaleString('pt-BR')}` : ''}
+                        </p>
+                      </div>
+                    ))}
+                    <a
+                      href={`https://www.mercadolivre.com.br/vendas/${c.packId}/detalhe`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-block pt-1 text-xs font-medium text-blue-600 hover:underline"
+                    >
+                      Responder no Mercado Livre ↗
+                    </a>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </Modal>
   )
 }
 

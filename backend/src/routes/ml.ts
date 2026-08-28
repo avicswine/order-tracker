@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express'
 import crypto from 'crypto'
-import { mlAuthUrl, mlExchangeCode, mlStatus, syncMlClaims, mlClaimMessages, ML_COMPANIES, type MlCompany } from '../services/mercadolivre'
+import { mlAuthUrl, mlExchangeCode, mlStatus, syncMlClaims, mlClaimMessages, mlMensagensNaoLidas, ML_COMPANIES, type MlCompany } from '../services/mercadolivre'
 
 // Rotas autenticadas (montadas com requireAuth)
 const router = Router()
@@ -38,6 +38,15 @@ router.get('/auth/:company', (req: Request, res: Response) => {
 router.post('/sync', async (_req: Request, res: Response) => {
   const result = await syncMlClaims()
   res.json(result)
+})
+
+// GET /ml/mensagens — conversas pós-venda com mensagens não lidas (todas as contas)
+router.get('/mensagens', async (_req: Request, res: Response) => {
+  try {
+    res.json(await mlMensagensNaoLidas())
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Falha ao buscar mensagens' })
+  }
 })
 
 // GET /ml/pendencias/:id/mensagens — thread de mensagens da reclamação no ML

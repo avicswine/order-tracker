@@ -196,6 +196,83 @@ export async function mlClaimMessages(pendenciaId: string): Promise<MlMensagem[]
   }).filter((m) => m.texto)
 }
 
+// Conversas pós-venda com mensagens NÃO LIDAS — o que o ML não notifica direito.
+// mark_as_read=false: consultar pelo painel NÃO marca como lida no ML.
+export interface MlConversa {
+  company: string          // AVIC | AGRO
+  packId: string
+  comprador: string
+  item: string
+  naoLidas: number
+  mensagens: MlMensagem[]  // até 10, da mais antiga para a mais recente
+}
+
+export async function mlMensagensNaoLidas(): Promise<{ conversas: MlConversa[]; erros: string[] }> {
+  const conversas: MlConversa[] = []
+  const erros: string[] = []
+
+  for (const company of ML_COMPANIES) {
+    try {
+      const token = await prisma.mlToken.findUnique({ where: { companyKey: company } })
+      if (!token) continue
+      const accessToken = await mlAccessToken(company)
+      if (!accessToken) continue
+      const H = { headers: { Authorization: `Bearer ${accessToken}` }, timeout: 20000 }
+
+      const { data: unread } = await axios.get(
+        'https://api.mercadolibre.com/messages/unread?role=seller&tag=post_sale', H)
+      const results = (unread?.results ?? []) as { resource?: string; count?: number }[]
+
+      for (const r of results.slice(0, 20)) {
+        const packId = String(r.resource ?? '').replace(/\D/g, '')
+        if (!packId) continue
+        try {
+          const { data: th } = await axios.get(
+            `https://api.mercadolibre.com/messages/packs/${packId}/sellers/${token.userId}?tag=post_sale&mark_as_read=false&limit=10`, H)
+          const msgs = (th?.messages ?? []) as { from?: { user_id?: unknown }; text?: unknown; message_date?: { received?: string; created?: string } }[]
+
+          // Comprador + item: o pack aponta a order (pedido simples: o próprio id é a order)
+          let comprador = 'Cliente ML'
+          let item = ''
+          let orderId = packId
+          try {
+            const { data: pack } = await axios.get(`https://api.mercadolibre.com/packs/${packId}`, H)
+            if (pack?.orders?.[0]?.id) orderId = String(pack.orders[0].id)
+          } catch { /* sem pack — segue com o próprio id */ }
+          try {
+            const { data: order } = await axios.get(`https://api.mercadolibre.com/orders/${orderId}`, H)
+            const buyer = order?.buyer
+            comprador = [buyer?.first_name, buyer?.last_name].filter(Boolean).join(' ') || buyer?.nickname || comprador
+            item = order?.order_items?.[0]?.item?.title ?? ''
+          } catch { /* segue sem enriquecer */ }
+
+          const mensagens = msgs
+            .map((m) => ({
+              de: String(m.from?.user_id ?? '') === String(token.userId) ? 'vendedor' as const : 'comprador' as const,
+              texto: String(m.text ?? ''),
+              data: m.message_date?.received ?? m.message_date?.created ?? null,
+            }))
+            .filter((m) => m.texto)
+            .sort((a, b) => String(a.data ?? '').localeCompare(String(b.data ?? '')))
+
+          conversas.push({
+            company: company.toUpperCase(),
+            packId, comprador, item,
+            naoLidas: r.count ?? 1,
+            mensagens,
+          })
+        } catch (e) {
+          erros.push(`${company}/${packId}: ${axios.isAxiosError(e) ? `HTTP ${e.response?.status}` : String(e)}`)
+        }
+      }
+    } catch (e) {
+      erros.push(`${company}: ${axios.isAxiosError(e) ? `HTTP ${e.response?.status}` : String(e)}`)
+    }
+  }
+
+  return { conversas, erros }
+}
+
 // Busca reclamações abertas no ML e cria pendências (dedup por mlClaimId)
 export async function syncMlClaims(): Promise<{ criadas: number; erros: string[] }> {
   let criadas = 0
