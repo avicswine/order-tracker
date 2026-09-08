@@ -16,8 +16,9 @@ const TRACKING_CONCURRENCY = 5
 // mas ainda marcadas como atrasadas), então não devem gerar aviso retroativo.
 const CARRIER_NOTIFY_MAX_AGE_DAYS = 60
 
-// Atraso só vira pendência de pós-venda com 3+ dias — atrasos curtos costumam se resolver sozinhos
-const PENDENCIA_ATRASO_MIN_DIAS = 3
+// Atraso só gera aviso (WhatsApp à transportadora e pendência de pós-venda) com
+// 3+ dias — atrasos curtos costumam se resolver sozinhos
+const ATRASO_MIN_DIAS = 3
 
 export async function runTrackingSync(onProgress?: ProgressCallback, systems?: TrackingSystem[]): Promise<{ atualizados: number; erros: number; total: number }> {
   const orders = await prisma.order.findMany({
@@ -196,7 +197,10 @@ export async function runTrackingSync(onProgress?: ProgressCallback, systems?: T
         const statusFinal = (updates.status as OrderStatus | undefined) ?? order.status
         const entregueOuCancelado = statusFinal === OrderStatus.DELIVERED || statusFinal === OrderStatus.CANCELLED
         const hoje = new Date(); hoje.setHours(0, 0, 0, 0)
-        const atrasado = !entregueOuCancelado && estimatedDelivery && new Date(estimatedDelivery) < hoje
+        const diasAtraso = estimatedDelivery
+          ? Math.floor((hoje.getTime() - new Date(estimatedDelivery).setHours(0, 0, 0, 0)) / 86400000)
+          : 0
+        const atrasado = !entregueOuCancelado && diasAtraso >= ATRASO_MIN_DIAS
         const carrierMin = { name: carrier.name, whatsappResponsavel: carrier.whatsappResponsavel }
         const base = {
           id: order.id, orderNumber: order.orderNumber, nfNumber: order.nfNumber,
@@ -226,7 +230,7 @@ export async function runTrackingSync(onProgress?: ProgressCallback, systems?: T
         } else if (statusFinal !== OrderStatus.CANCELLED && estimatedDelivery) {
           const hoje = new Date(); hoje.setHours(0, 0, 0, 0)
           const diasAtraso = Math.floor((hoje.getTime() - new Date(estimatedDelivery).setHours(0, 0, 0, 0)) / 86400000)
-          if (diasAtraso >= PENDENCIA_ATRASO_MIN_DIAS) {
+          if (diasAtraso >= ATRASO_MIN_DIAS) {
             criarPendenciaAuto(pendBase, 'ATRASO').catch(err => console.error(`[Pendencias] Erro (atraso) ${order.orderNumber}:`, err))
           }
         }
