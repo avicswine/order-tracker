@@ -19,7 +19,13 @@ interface WppInstance {
   numero: string | null
   reconnecting: boolean
   reconnectAttempts: number
+  qrCiclos: number   // ciclos de QR expirados sem escanear (trava o loop infinito)
 }
+
+// Sem sessão, cada ciclo gera ~6 QRs e expira (408). Ficar em loop infinito martela
+// o WhatsApp e provoca o bloqueio "não é possível conectar novos dispositivos".
+// Após N ciclos sem escanear, pausa — o botão Reiniciar do painel religa na hora.
+const QR_MAX_CICLOS = 3
 
 const instances: Partial<Record<WppCompany, WppInstance>> = {}
 
@@ -191,12 +197,14 @@ async function startInstance(company: WppCompany): Promise<void> {
         inst.status = 'pronto'
         inst.qrDataUrl = null
         inst.reconnectAttempts = 0
+        inst.qrCiclos = 0
         const num = sock.user?.id?.split(':')[0] ?? null
         inst.numero = num ? formatNumber(num) : null
         console.log(`[WhatsApp/${company}] ✅ Conectado — ${inst.numero ?? 'número desconhecido'}`)
       }
 
       if (connection === 'close') {
+        const estavaEmQr = inst.status === 'qr'
         inst.status = 'desconectado'
         inst.qrDataUrl = null
         inst.numero = null
@@ -209,6 +217,15 @@ async function startInstance(company: WppCompany): Promise<void> {
         console.log(`[WhatsApp/${company}] Desconectado (${statusCode}) ${loggedOut ? '— sessão encerrada' : '— reconectando...'}`)
 
         if (loggedOut) await clearAuth(company)
+
+        // QR expirou sem ninguém escanear — conta o ciclo e pausa após o limite
+        if (estavaEmQr && !loggedOut) {
+          inst.qrCiclos++
+          if (inst.qrCiclos >= QR_MAX_CICLOS) {
+            console.log(`[WhatsApp/${company}] QR não escaneado após ${inst.qrCiclos} ciclos — pausado. Use "Reiniciar" no painel na hora de escanear.`)
+            return
+          }
+        }
 
         if (!inst.reconnecting) {
           inst.reconnecting = true
@@ -241,7 +258,7 @@ async function startInstance(company: WppCompany): Promise<void> {
 export function initWhatsApp() {
   console.log('[WhatsApp] Iniciando instâncias AVIC e AGRO (Baileys)...')
   for (const company of ['avic', 'agro'] as WppCompany[]) {
-    instances[company] = { sock: null, status: 'iniciando', qrDataUrl: null, numero: null, reconnecting: false, reconnectAttempts: 0 }
+    instances[company] = { sock: null, status: 'iniciando', qrDataUrl: null, numero: null, reconnecting: false, reconnectAttempts: 0, qrCiclos: 0 }
     startInstance(company).catch(err =>
       console.error(`[WhatsApp/${company}] Falha ao iniciar:`, err?.message)
     )
@@ -265,6 +282,8 @@ export async function restartInstance(company: WppCompany) {
     const sock = inst.sock
     inst.sock = null            // Bloqueia backups de sessão disparados pelo end()
     inst.reconnecting = false
+    inst.reconnectAttempts = 0
+    inst.qrCiclos = 0           // reabre a janela de QR pausada
     if (sock) try { await sock.end(undefined) } catch { /* ignora */ }
   }
   await startInstance(company)
@@ -281,7 +300,11 @@ export async function logoutInstance(company: WppCompany) {
     }
   }
   await clearAuth(company)
-  if (inst) inst.reconnecting = false
+  if (inst) {
+    inst.reconnecting = false
+    inst.reconnectAttempts = 0
+    inst.qrCiclos = 0
+  }
   await startInstance(company)
 }
 
