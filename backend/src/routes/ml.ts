@@ -170,15 +170,34 @@ export const mlPublicRouter = Router()
 // O cmvsync roda no PC do José, sem URL pública. O ML entrega aqui (endereço fixo do
 // Railway) e o cmvsync busca de poucos em poucos segundos — PC desligado não perde nada.
 // Responde 200 sempre e na hora: o ML reenvia por dias quando não recebe 200.
+// Tópicos que o cmvsync realmente consome hoje. O ML pode ficar com TODOS marcados (é
+// melhor: não precisa voltar ao painel a cada evolução), mas só estes entram na fila —
+// senão uma enxurrada de avisos inúteis atrasaria os de preço, que são o que importa.
+// Para habilitar um tópico novo, acrescente aqui (ou na env ML_NOTIF_TOPICS).
+const TOPICOS_ACEITOS = new Set(
+  (process.env.ML_NOTIF_TOPICS?.trim() ||
+   'items,items_prices,price_suggestion,prices,promotions,seller_promotions')
+    .split(',').map((t) => t.trim().toLowerCase()).filter(Boolean),
+)
+let _notifIgnoradas = 0
+
 mlPublicRouter.post('/notificacoes', async (req: Request, res: Response) => {
   res.status(200).send('')          // responde primeiro; grava depois
   const b = (req.body ?? {}) as Record<string, unknown>
   const resource = String(b.resource ?? '')
+  const topic = String(b.topic ?? 'items').toLowerCase()
   if (!resource) return
+  if (!TOPICOS_ACEITOS.has(topic)) {
+    // descartado de propósito: conta e registra de vez em quando, p/ sabermos o volume
+    if (++_notifIgnoradas % 200 === 1) {
+      console.log(`[ML notif] ${_notifIgnoradas} aviso(s) de tópico não usado descartado(s) (último: ${topic})`)
+    }
+    return
+  }
   try {
     await prisma.mlNotificacao.create({
       data: {
-        topic: String(b.topic ?? 'items'),
+        topic,
         resource,
         mlUserId: b.user_id != null ? String(b.user_id) : null,
         payload: b as object,
