@@ -15,7 +15,8 @@ import whatsappRouter from './routes/whatsapp'
 import notificationsRouter from './routes/notifications'
 import pendenciasRouter from './routes/pendencias'
 import mlRouter, { mlPublicRouter } from './routes/ml'
-import { syncMlClaims } from './services/mercadolivre'
+import { syncMlClaims, mlAtualizarPendentes, mlVarrerMensagens } from './services/mercadolivre'
+import { cicloEnviosMl } from './services/mlEnvios'
 import separacaoRouter from './routes/separacao'
 import { iniciarSyncPeriodico as iniciarSyncSeparacao } from './services/separacao/tarefas'
 import { requireAuth } from './middleware/auth'
@@ -113,6 +114,38 @@ app.listen(Number(PORT), '0.0.0.0', () => {
     console.log(`[Cron] ML concluído — pendências criadas: ${ml.criadas}${ml.erros.length ? `, erros: ${ml.erros.length}` : ''}`)
   })
   console.log('[Cron] Sync automático agendado a cada 2 horas (Bling + rastreamento)')
+
+  // Mensagens pós-venda ML sem resposta: checagem leve a cada 10 min + varredura
+  // completa (30 dias) uma vez ao dia. Na 1ª subida (tabela vazia), varre já.
+  cron.schedule('*/10 * * * *', () => {
+    mlAtualizarPendentes().catch(err => console.error('[Cron] Mensagens ML:', err))
+  })
+  cron.schedule('40 7 * * *', () => {
+    mlVarrerMensagens(30).catch(err => console.error('[Cron] Varredura mensagens ML:', err))
+  })
+  setTimeout(async () => {
+    try {
+      const total = await prisma.mlConversaPendente.count()
+      if (total === 0) await mlVarrerMensagens(30)
+    } catch (err) { console.error('[Startup] Varredura mensagens ML:', err) }
+  }, 30000)
+
+  // ME1: avisa o ML quando a transportadora despacha/entrega (obrigação do vendedor).
+  // Só liga com ML_ENVIOS_AUTO=1 — sem a variável, roda apenas sob demanda pelo painel.
+  if (process.env.ML_ENVIOS_AUTO === '1') {
+    cron.schedule('15,45 * * * *', () => {
+      cicloEnviosMl(false)
+        .then(r => {
+          if (r.vinculados || r.processados) {
+            console.log(`[Cron ME1] vinculados: ${r.vinculados}, notificados: ${r.processados}`)
+          }
+        })
+        .catch(err => console.error('[Cron ME1]', err))
+    })
+    console.log('[Cron] ME1: avisos de envio ao Mercado Livre a cada 30 min')
+  } else {
+    console.log('[Cron] ME1: automático DESLIGADO (defina ML_ENVIOS_AUTO=1 para ativar)')
+  }
 
   // Módulo de separação: busca NFs novas do dia no intervalo configurado (padrão 3 min)
   iniciarSyncSeparacao()

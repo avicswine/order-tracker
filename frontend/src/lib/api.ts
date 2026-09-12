@@ -84,6 +84,12 @@ export const mlApi = {
     api.get<{ mensagens: { de: string; texto: string; data: string | null }[] }>(`/ml/pendencias/${pendenciaId}/mensagens`).then((r) => r.data.mensagens),
   mensagensNaoLidas: () =>
     api.get<{ conversas: MlConversa[]; erros: string[] }>('/ml/mensagens').then((r) => r.data),
+  varrerMensagens: (dias = 30) =>
+    api.post<{ verificadas: number; pendentes: number; erros: string[] }>('/ml/mensagens/varrer', { dias }, { timeout: 300000 }).then((r) => r.data),
+  responderPendencia: (pendenciaId: string, texto: string) =>
+    api.post<{ ok: boolean }>(`/ml/pendencias/${pendenciaId}/responder`, { texto }).then((r) => r.data),
+  responderConversa: (company: string, packId: string, texto: string) =>
+    api.post<{ ok: boolean }>(`/ml/conversas/${company.toLowerCase()}/${packId}/responder`, { texto }).then((r) => r.data),
 }
 
 export interface MlConversa {

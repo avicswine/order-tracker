@@ -267,7 +267,7 @@ export function PendenciasPage() {
                 : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
             }`}
             onClick={() => setInboxAberto(true)}
-            title="Mensagens de compradores no pós-venda do ML ainda não lidas"
+            title="Conversas do pós-venda do ML aguardando resposta"
           >
             💬 Mensagens ML
             {inboxTotal > 0 && (
@@ -624,20 +624,38 @@ function MlBanner({ canWrite, pos }: { canWrite: boolean; pos: 'topo' | 'rodape'
   )
 }
 
-// --- Janela de mensagens pós-venda não lidas (inbox ML) ---
+// --- Janela de mensagens pós-venda sem resposta (inbox ML) ---
 function InboxMlModal({ conversas, erros, onClose }: { conversas: MlConversa[]; erros: string[]; onClose: () => void }) {
+  const qc = useQueryClient()
   const [aberta, setAberta] = useState<string | null>(null)
+  const varredura = useMutation({
+    mutationFn: () => mlApi.varrerMensagens(30),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ['ml-inbox'] })
+      alert(`Varredura concluída: ${r.verificadas} conversas verificadas, ${r.pendentes} sem resposta.`)
+    },
+  })
   return (
-    <Modal open onClose={onClose} title={`Mensagens ML não lidas (${conversas.length})`}>
+    <Modal open onClose={onClose} title={`Mensagens ML sem resposta (${conversas.length})`}>
       <div className="space-y-3">
-        <p className="text-xs text-gray-400">
-          Mensagens de compradores no pós-venda que ainda não foram lidas. Consultar aqui <b>não</b> marca como lida no ML.
-        </p>
+        <div className="flex items-start justify-between gap-3">
+          <p className="text-xs text-gray-400">
+            Conversas do pós-venda em que a última mensagem é do comprador (lidas ou não). Consultar aqui <b>não</b> marca como lida no ML.
+          </p>
+          <button
+            className="btn-secondary !py-1 text-xs whitespace-nowrap"
+            disabled={varredura.isPending}
+            title="Varre todos os pedidos dos últimos 30 dias no ML — pega também mensagens já lidas sem resposta. Pode levar 1-2 min."
+            onClick={() => varredura.mutate()}
+          >
+            {varredura.isPending ? <Spinner className="h-4 w-4" /> : '🔄 Varrer 30 dias'}
+          </button>
+        </div>
         {erros.length > 0 && (
           <p className="text-xs text-amber-600">Aviso: {erros.join(' · ')}</p>
         )}
         {conversas.length === 0 && (
-          <p className="py-6 text-center text-sm text-gray-500">Nenhuma mensagem pendente 🎉</p>
+          <p className="py-6 text-center text-sm text-gray-500">Nenhuma mensagem aguardando resposta 🎉</p>
         )}
         <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
           {conversas.map((c) => {
@@ -653,7 +671,7 @@ function InboxMlModal({ conversas, erros, onClose }: { conversas: MlConversa[]; 
                     <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${EMPRESA_COR[c.company] ?? 'bg-gray-200 text-gray-600'}`}>{c.company}</span>
                     <span className="text-sm font-medium text-gray-800 truncate">{c.comprador}</span>
                     <span className="ml-auto rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-600 whitespace-nowrap">
-                      {c.naoLidas} não lida{c.naoLidas > 1 ? 's' : ''}
+                      {c.naoLidas} sem resposta
                     </span>
                   </div>
                   {c.item && <p className="mt-0.5 text-xs text-gray-500 truncate">{c.item}</p>}
@@ -675,13 +693,19 @@ function InboxMlModal({ conversas, erros, onClose }: { conversas: MlConversa[]; 
                         </p>
                       </div>
                     ))}
+                    <CaixaResposta
+                      onEnviar={async (t) => {
+                        await mlApi.responderConversa(c.company, c.packId, t)
+                        await qc.invalidateQueries({ queryKey: ['ml-inbox'] })
+                      }}
+                    />
                     <a
                       href={`https://www.mercadolivre.com.br/vendas/${c.packId}/detalhe`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-block pt-1 text-xs font-medium text-blue-600 hover:underline"
                     >
-                      Responder no Mercado Livre ↗
+                      abrir no Mercado Livre ↗
                     </a>
                   </div>
                 )}
@@ -696,6 +720,7 @@ function InboxMlModal({ conversas, erros, onClose }: { conversas: MlConversa[]; 
 
 // --- Modal de mensagens da reclamação ML ---
 function MensagensMlModal({ pendencia, onClose }: { pendencia: Pendencia; onClose: () => void }) {
+  const qc = useQueryClient()
   const { data: mensagens, isLoading, isError, error } = useQuery({
     queryKey: ['ml-mensagens', pendencia.id],
     queryFn: () => mlApi.mensagens(pendencia.id),
@@ -739,6 +764,14 @@ function MensagensMlModal({ pendencia, onClose }: { pendencia: Pendencia; onClos
             })}
           </div>
         )}
+        {!isError && !isLoading && (
+          <CaixaResposta
+            onEnviar={async (t) => {
+              await mlApi.responderPendencia(pendencia.id, t)
+              await qc.invalidateQueries({ queryKey: ['ml-mensagens', pendencia.id] })
+            }}
+          />
+        )}
         {pendencia.mlOrderId && (
           <a
             href={`https://www.mercadolivre.com.br/vendas/${pendencia.mlOrderId}/detalhe`}
@@ -746,7 +779,7 @@ function MensagensMlModal({ pendencia, onClose }: { pendencia: Pendencia; onClos
             rel="noopener noreferrer"
             className="inline-block text-xs font-medium text-blue-600 hover:underline"
           >
-            Responder no Mercado Livre ↗
+            abrir no Mercado Livre ↗
           </a>
         )}
       </div>
@@ -1089,5 +1122,48 @@ function DetalheModal({ pendencia, canWrite, onClose, onStatus, onResponsavel }:
         </div>
       </div>
     </Modal>
+  )
+}
+
+
+// Caixa de resposta compartilhada: manda a mensagem DIRETO ao ML (reclamação ou pós-venda)
+function CaixaResposta({ onEnviar }: { onEnviar: (texto: string) => Promise<unknown> }) {
+  const [texto, setTexto] = useState('')
+  const [enviando, setEnviando] = useState(false)
+  const [erro, setErro] = useState<string | null>(null)
+  const enviar = async () => {
+    const t = texto.trim()
+    if (!t || enviando) return
+    setEnviando(true)
+    setErro(null)
+    try {
+      await onEnviar(t)
+      setTexto('')
+    } catch (e) {
+      setErro((e as { response?: { data?: { error?: string } } })?.response?.data?.error ?? 'Falha ao enviar')
+    } finally {
+      setEnviando(false)
+    }
+  }
+  return (
+    <div className="pt-2 space-y-1">
+      <div className="flex gap-2">
+        <textarea
+          value={texto}
+          onChange={(e) => setTexto(e.target.value)}
+          rows={2}
+          placeholder="Escreva a resposta — vai direto para o Mercado Livre"
+          className="flex-1 rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm resize-y focus:outline-none focus:ring-1 focus:ring-blue-400"
+        />
+        <button
+          className="self-end rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-40"
+          disabled={enviando || !texto.trim()}
+          onClick={enviar}
+        >
+          {enviando ? <Spinner className="h-4 w-4" /> : 'Enviar'}
+        </button>
+      </div>
+      {erro && <p className="text-xs text-red-600">{erro}</p>}
+    </div>
   )
 }

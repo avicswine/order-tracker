@@ -40,8 +40,8 @@ async function deleteToken(companyKey: string) {
 
 const BLING_REDIRECT_URI = process.env.BLING_REDIRECT_URI!
 const BLING_API = 'https://api.bling.com.br/Api/v3'
-const BLING_AUTH_URL = 'https://www.bling.com.br/Api/v3/oauth/authorize'
-const BLING_TOKEN_URL = 'https://www.bling.com.br/Api/v3/oauth/token'
+const BLING_AUTH_URL = 'https://api.bling.com.br/Api/v3/oauth/authorize'
+const BLING_TOKEN_URL = 'https://api.bling.com.br/Api/v3/oauth/token'
 
 // Transportadoras ignoradas no sync (sem API de rastreamento e sem interesse)
 const CARRIERS_BLOCKED = ['GARBERG', 'TNT', 'HS MOVERE', 'PAC']
@@ -175,6 +175,49 @@ export async function buscarNfPorNumeroLoja(companyKey: string, numerosLoja: str
     }
   } catch { /* melhor seguir sem NF do que quebrar o sync de reclamações */ }
   return null
+}
+
+// Versão em LOTE do anterior: recebe vários numeroLoja e devolve {numeroLoja → nº da NF}.
+// Usada pelo ME1 (services/mlEnvios): varre a listagem de pedidos UMA vez e só busca o
+// detalhe dos pedidos que casaram — ME1 são poucas vendas, então sai barato.
+export async function buscarNfsPorNumerosLoja(
+  companyKey: string,
+  numerosLoja: string[],
+  maxDias = 90,
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>()
+  if (!tokens[companyKey]) return out
+  const alvos = new Set(numerosLoja.filter(Boolean))
+  if (alvos.size === 0) return out
+
+  const dataInicio = new Date()
+  dataInicio.setDate(dataInicio.getDate() - maxDias)
+  const dataInicioStr = dataInicio.toISOString().slice(0, 10)
+
+  type PedidoVenda = { id: number; numeroLoja?: string | number }
+  const casados: { pedidoId: number; numeroLoja: string }[] = []
+  try {
+    for (let pagina = 1; pagina <= 15 && casados.length < alvos.size; pagina++) {
+      const data = (await blingGet(companyKey, `/pedidos/vendas?pagina=${pagina}&limite=100&dataInicial=${dataInicioStr}`)) as { data?: PedidoVenda[] }
+      const pedidos = data?.data ?? []
+      if (pedidos.length === 0) break
+      for (const p of pedidos) {
+        const nl = String(p.numeroLoja ?? '')
+        if (alvos.has(nl) && !casados.some((c) => c.numeroLoja === nl)) {
+          casados.push({ pedidoId: p.id, numeroLoja: nl })
+        }
+      }
+      if (pedidos.length < 100) break
+    }
+    for (const c of casados) {
+      const det = (await blingGet(companyKey, `/pedidos/vendas/${c.pedidoId}`)) as { data?: { notaFiscal?: { id?: number } } }
+      const nfId = det?.data?.notaFiscal?.id ?? 0
+      if (!nfId) continue // ainda sem NF emitida — tenta de novo no próximo ciclo
+      const nfe = (await blingGet(companyKey, `/nfe/${nfId}`)) as { data?: { numero?: number | string } }
+      if (nfe?.data?.numero != null) out.set(c.numeroLoja, String(nfe.data.numero))
+    }
+  } catch { /* melhor devolver o que casou do que quebrar o ciclo inteiro */ }
+  return out
 }
 
 // GET /api/bling/status - status de conexão de todas as empresas

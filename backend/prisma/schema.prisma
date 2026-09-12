@@ -47,6 +47,15 @@ model Order {
   hasOccurrence     Boolean   @default(false)
   linkDanfe         String?       // URL do DANFE no Bling (para envio na notificação FATURADO)
   nfKey             String?       // chave de acesso da NF-e (44 dígitos) — usada no rastreio Modular
+  // Mercado Envios 1: o ML exige que o VENDEDOR informe shipped/delivered (sujeito a
+  // penalidade). Ligação: numeroLoja do pedido Bling = order/pack id do ML.
+  mlCompany             String?    // avic | agro — conta ML dona da venda
+  mlOrderId             String?    // order (ou pack) id do ML
+  mlShipmentId          String?    // shipment ME1 notificado
+  mlShippedNotifiedAt   DateTime?  // quando avisamos "a caminho" (idempotência)
+  mlDeliveredNotifiedAt DateTime?  // quando avisamos "entregue" (irreversível no ML)
+  mlEnvioErro           String?    // último erro de notificação, p/ diagnóstico
+  mlVinculoTentadoAt    DateTime?  // última tentativa de casar com uma venda ML
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
   statusHistory     StatusHistory[]
@@ -56,6 +65,7 @@ model Order {
   @@index([status])
   @@index([nfNumber])
   @@index([estimatedDelivery, status])
+  @@index([mlShipmentId])
   @@map("orders")
 }
 
@@ -312,6 +322,23 @@ model PendenciaNota {
 }
 
 // Tokens OAuth do Mercado Livre por empresa (avic/agro) — chain própria do order-tracker
+// Conversas do pós-venda ML aguardando resposta do vendedor (última mensagem é do
+// comprador). Alimentada por varredura de pedidos recentes + checagem periódica.
+model MlConversaPendente {
+  packId     String    @id
+  company    String    // AVIC | AGRO
+  comprador  String
+  item       String?
+  naoLidas   Int       @default(1)  // msgs do comprador sem resposta no fim da conversa
+  mensagens  Json?     // últimas mensagens p/ exibição no painel
+  ultimaEm   DateTime?
+  respondida Boolean   @default(false)
+  updatedAt  DateTime  @updatedAt
+
+  @@index([respondida])
+  @@map("ml_conversas_pendentes")
+}
+
 model MlToken {
   companyKey   String   @id // "avic" | "agro"
   accessToken  String

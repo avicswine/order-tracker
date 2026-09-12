@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express'
 import crypto from 'crypto'
-import { mlAuthUrl, mlExchangeCode, mlStatus, syncMlClaims, mlClaimMessages, mlMensagensNaoLidas, ML_COMPANIES, type MlCompany } from '../services/mercadolivre'
+import { mlAuthUrl, mlExchangeCode, mlStatus, syncMlClaims, mlClaimMessages, mlClaimResponder, mlConversaResponder, mlConversasPendentes, mlVarrerMensagens, ML_COMPANIES, type MlCompany } from '../services/mercadolivre'
+import { cicloEnviosMl, notificarStatusMl, PORTAL_URL, TRACKING_MSG, type MlEnvioStatus } from '../services/mlEnvios'
+import { prisma } from '../lib/prisma'
 
 // Rotas autenticadas (montadas com requireAuth)
 const router = Router()
@@ -40,12 +42,23 @@ router.post('/sync', async (_req: Request, res: Response) => {
   res.json(result)
 })
 
-// GET /ml/mensagens — conversas pós-venda com mensagens não lidas (todas as contas)
+// GET /ml/mensagens — conversas pós-venda sem resposta (do banco; rápido)
 router.get('/mensagens', async (_req: Request, res: Response) => {
   try {
-    res.json(await mlMensagensNaoLidas())
+    res.json(await mlConversasPendentes())
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : 'Falha ao buscar mensagens' })
+  }
+})
+
+// POST /ml/mensagens/varrer — varre os pedidos dos últimos N dias no ML (pega
+// também mensagens já lidas mas sem resposta). Pode levar 1-2 min.
+router.post('/mensagens/varrer', async (req: Request, res: Response) => {
+  const dias = Math.max(7, Math.min(Number(req.body?.dias) || 30, 60))
+  try {
+    res.json(await mlVarrerMensagens(dias))
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Falha na varredura' })
   }
 })
 
@@ -56,6 +69,97 @@ router.get('/pendencias/:id/mensagens', async (req: Request, res: Response) => {
     res.json({ mensagens })
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : 'Falha ao buscar mensagens' })
+  }
+})
+
+// POST /ml/pendencias/:id/responder — responde a reclamação direto do painel
+router.post('/pendencias/:id/responder', async (req: Request, res: Response) => {
+  const texto = String(req.body?.texto ?? '').trim()
+  if (!texto) { res.status(400).json({ error: 'Escreva a mensagem' }); return }
+  try {
+    await mlClaimResponder(req.params.id, texto.slice(0, 2000))
+    res.json({ ok: true })
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : 'Falha ao responder' })
+  }
+})
+
+// POST /ml/conversas/:company/:packId/responder — responde o pós-venda direto do painel
+router.post('/conversas/:company/:packId/responder', async (req: Request, res: Response) => {
+  const texto = String(req.body?.texto ?? '').trim()
+  const company = String(req.params.company ?? '').toLowerCase() as MlCompany
+  if (!texto) { res.status(400).json({ error: 'Escreva a mensagem' }); return }
+  if (!ML_COMPANIES.includes(company)) { res.status(400).json({ error: 'Empresa inválida' }); return }
+  try {
+    await mlConversaResponder(company, req.params.packId, texto.slice(0, 2000))
+    res.json({ ok: true })
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : 'Falha ao responder' })
+  }
+})
+
+// ── Mercado Envios 1: avisa o ML do andamento do envio (obrigatório p/ o vendedor) ──
+
+// GET /ml/envios/pendentes — o que está esperando ser avisado ao ML
+router.get('/envios/pendentes', async (_req: Request, res: Response) => {
+  const pendentes = await prisma.order.findMany({
+    where: { mlShipmentId: { not: null } },
+    select: {
+      id: true, orderNumber: true, nfNumber: true, customerName: true, status: true,
+      shippedAt: true, deliveredAt: true, lastTracking: true, mlCompany: true,
+      mlOrderId: true, mlShipmentId: true, mlShippedNotifiedAt: true,
+      mlDeliveredNotifiedAt: true, mlEnvioErro: true,
+    },
+    orderBy: { shippedAt: 'desc' },
+    take: 100,
+  })
+  res.json({
+    pendentes,
+    config: { portalUrl: PORTAL_URL, trackingMsg: TRACKING_MSG, auto: process.env.ML_ENVIOS_AUTO === '1' },
+  })
+})
+
+// POST /ml/envios/sincronizar — casa vendas ME1 e avisa o ML. { dryRun: true } só simula.
+router.post('/envios/sincronizar', async (req: Request, res: Response) => {
+  const dryRun = req.body?.dryRun !== false   // padrão SIMULA: disparo real é explícito
+  try {
+    res.json(await cicloEnviosMl(dryRun))
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Falha no ciclo ME1' })
+  }
+})
+
+// POST /ml/envios/:orderId/notificar — disparo manual de um pedido específico
+router.post('/envios/:orderId/notificar', async (req: Request, res: Response) => {
+  const status = String(req.body?.status ?? '') as MlEnvioStatus
+  if (!['shipped', 'delivered', 'not_delivered'].includes(status)) {
+    res.status(400).json({ error: 'status deve ser shipped, delivered ou not_delivered' }); return
+  }
+  const order = await prisma.order.findUnique({
+    where: { id: req.params.orderId },
+    select: { id: true, mlCompany: true, mlShipmentId: true, shippedAt: true, deliveredAt: true, lastTracking: true },
+  })
+  if (!order?.mlShipmentId || !order.mlCompany) {
+    res.status(400).json({ error: 'Pedido sem venda ME1 vinculada' }); return
+  }
+  try {
+    await notificarStatusMl(order.mlCompany as MlCompany, order.mlShipmentId, status, {
+      date: status === 'delivered' ? order.deliveredAt : order.shippedAt,
+      substatus: req.body?.substatus ?? null,
+      comment: order.lastTracking ?? undefined,
+      comTracking: status === 'shipped',
+    })
+    await prisma.order.update({
+      where: { id: order.id },
+      data: {
+        mlEnvioErro: null,
+        ...(status === 'shipped' ? { mlShippedNotifiedAt: new Date() } : {}),
+        ...(status === 'delivered' ? { mlDeliveredNotifiedAt: new Date() } : {}),
+      },
+    })
+    res.json({ ok: true })
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : 'Falha ao notificar' })
   }
 })
 

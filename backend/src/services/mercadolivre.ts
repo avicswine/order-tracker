@@ -1,6 +1,6 @@
 import axios from 'axios'
 import { prisma } from '../lib/prisma'
-import { PendenciaOrigem, PendenciaTipo } from '@prisma/client'
+import { PendenciaOrigem, PendenciaTipo, Prisma } from '@prisma/client'
 import { buscarNfPorNumeroLoja } from '../routes/bling'
 
 // Chave da empresa no Bling (para buscar a NF do pedido ML)
@@ -196,81 +196,234 @@ export async function mlClaimMessages(pendenciaId: string): Promise<MlMensagem[]
   }).filter((m) => m.texto)
 }
 
-// Conversas pós-venda com mensagens NÃO LIDAS — o que o ML não notifica direito.
-// mark_as_read=false: consultar pelo painel NÃO marca como lida no ML.
+// Responde a RECLAMAÇÃO direto do painel (pedido José 02/09). Destinatário padrão é o
+// comprador; em MEDIAÇÃO o ML exige mandar ao mediador — tenta o outro papel no erro.
+export async function mlClaimResponder(pendenciaId: string, texto: string): Promise<void> {
+  const p = await prisma.pendencia.findUnique({
+    where: { id: pendenciaId },
+    select: { mlClaimId: true, senderCnpj: true },
+  })
+  if (!p?.mlClaimId) throw new Error('Pendência sem reclamação ML vinculada')
+  const company = p.senderCnpj ? CNPJ_TO_COMPANY[p.senderCnpj.replace(/\D/g, '')] : undefined
+  if (!company) throw new Error('Empresa da pendência não tem conta ML')
+  const accessToken = await mlAccessToken(company)
+  if (!accessToken) throw new Error(`Conta ML de ${company.toUpperCase()} não autorizada`)
+  const url = `https://api.mercadolibre.com/post-purchase/v1/claims/${p.mlClaimId}/actions/send-message`
+  const H = { headers: { Authorization: `Bearer ${accessToken}` }, timeout: 20000 }
+  try {
+    await axios.post(url, { receiver_role: 'complainant', message: texto }, H)
+  } catch {
+    await axios.post(url, { receiver_role: 'mediator', message: texto }, H)
+  }
+}
+
+// Responde uma conversa PÓS-VENDA (mensagens do pack) direto do painel
+export async function mlConversaResponder(company: MlCompany, packId: string, texto: string): Promise<void> {
+  const auth = await mlAuth(company)
+  if (!auth) throw new Error(`Conta ML de ${company.toUpperCase()} não autorizada`)
+  let orderId = packId
+  try {
+    const { data: pack } = await axios.get(`https://api.mercadolibre.com/packs/${packId}`, auth.H)
+    if (pack?.orders?.[0]?.id) orderId = String(pack.orders[0].id)
+  } catch { /* pedido simples: o próprio id é a order */ }
+  const { data: order } = await axios.get(`https://api.mercadolibre.com/orders/${orderId}`, auth.H)
+  const buyerId = order?.buyer?.id
+  if (!buyerId) throw new Error('Comprador não identificado no pedido')
+  await axios.post(
+    `https://api.mercadolibre.com/messages/packs/${packId}/sellers/${auth.userId}?tag=post_sale`,
+    { from: { user_id: String(auth.userId) }, to: { user_id: String(buyerId) }, text: texto },
+    auth.H
+  )
+}
+
+// Conversas pós-venda SEM RESPOSTA do vendedor (lidas ou não) — o que o ML não
+// notifica direito. Rastreadas em banco (ml_conversas_pendentes) via varredura de
+// pedidos recentes + checagem periódica. mark_as_read=false: consultar pelo painel
+// NÃO marca como lida no ML.
 export interface MlConversa {
   company: string          // AVIC | AGRO
   packId: string
   comprador: string
   item: string
-  naoLidas: number
+  naoLidas: number         // msgs do comprador sem resposta no fim da conversa
   mensagens: MlMensagem[]  // até 10, da mais antiga para a mais recente
 }
 
-export async function mlMensagensNaoLidas(): Promise<{ conversas: MlConversa[]; erros: string[] }> {
-  const conversas: MlConversa[] = []
+const dorme = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+export type MlAuth = { userId: string; H: { headers: { Authorization: string }; timeout: number } }
+
+export async function mlAuth(company: MlCompany): Promise<MlAuth | null> {
+  const token = await prisma.mlToken.findUnique({ where: { companyKey: company } })
+  if (!token) return null
+  const accessToken = await mlAccessToken(company)
+  if (!accessToken) return null
+  return { userId: token.userId, H: { headers: { Authorization: `Bearer ${accessToken}` }, timeout: 20000 } }
+}
+
+// Lê a thread de um pack e devolve o estado da conversa (null = sem mensagens)
+async function lerConversa(auth: MlAuth, company: MlCompany, packId: string): Promise<{
+  mensagens: MlMensagem[]; ultimaDe: 'comprador' | 'vendedor'; seguidas: number; ultimaEm: Date | null
+  comprador: string; item: string
+} | null> {
+  const { data: th } = await axios.get(
+    `https://api.mercadolibre.com/messages/packs/${packId}/sellers/${auth.userId}?tag=post_sale&mark_as_read=false&limit=10`, auth.H)
+  const msgs = (th?.messages ?? []) as { from?: { user_id?: unknown }; text?: unknown; message_date?: { received?: string; created?: string } }[]
+
+  const mensagens = msgs
+    .map((m) => ({
+      de: String(m.from?.user_id ?? '') === String(auth.userId) ? 'vendedor' as const : 'comprador' as const,
+      texto: String(m.text ?? ''),
+      data: m.message_date?.received ?? m.message_date?.created ?? null,
+    }))
+    .filter((m) => m.texto)
+    .sort((a, b) => String(a.data ?? '').localeCompare(String(b.data ?? '')))
+  if (mensagens.length === 0) return null
+
+  const ultima = mensagens[mensagens.length - 1]
+  let seguidas = 0
+  for (let i = mensagens.length - 1; i >= 0 && mensagens[i].de === 'comprador'; i--) seguidas++
+
+  // Comprador + item: o pack aponta a order (pedido simples: o próprio id é a order)
+  let comprador = 'Cliente ML'
+  let item = ''
+  let orderId = packId
+  try {
+    const { data: pack } = await axios.get(`https://api.mercadolibre.com/packs/${packId}`, auth.H)
+    if (pack?.orders?.[0]?.id) orderId = String(pack.orders[0].id)
+  } catch { /* sem pack — o próprio id é a order */ }
+  try {
+    const { data: order } = await axios.get(`https://api.mercadolibre.com/orders/${orderId}`, auth.H)
+    const buyer = order?.buyer
+    comprador = [buyer?.first_name, buyer?.last_name].filter(Boolean).join(' ') || buyer?.nickname || comprador
+    item = order?.order_items?.[0]?.item?.title ?? ''
+  } catch { /* segue sem enriquecer */ }
+
+  return {
+    mensagens, ultimaDe: ultima.de === 'vendedor' ? 'vendedor' : 'comprador', seguidas,
+    ultimaEm: ultima.data ? new Date(ultima.data) : null, comprador, item,
+  }
+}
+
+async function upsertConversa(company: MlCompany, packId: string, conv: NonNullable<Awaited<ReturnType<typeof lerConversa>>>) {
+  const pendente = conv.ultimaDe === 'comprador'
+  await prisma.mlConversaPendente.upsert({
+    where: { packId },
+    create: {
+      packId, company: company.toUpperCase(), comprador: conv.comprador, item: conv.item || null,
+      naoLidas: conv.seguidas, mensagens: conv.mensagens as unknown as Prisma.InputJsonValue, ultimaEm: conv.ultimaEm, respondida: !pendente,
+    },
+    update: {
+      comprador: conv.comprador, item: conv.item || null,
+      naoLidas: conv.seguidas, mensagens: conv.mensagens as unknown as Prisma.InputJsonValue, ultimaEm: conv.ultimaEm, respondida: !pendente,
+    },
+  })
+  return pendente
+}
+
+// Varredura completa: percorre os pedidos dos últimos N dias e registra as conversas
+// em que a última mensagem é do comprador (sem resposta) — pega inclusive as já lidas.
+export async function mlVarrerMensagens(dias = 30): Promise<{ verificadas: number; pendentes: number; erros: string[] }> {
+  let verificadas = 0
+  let pendentes = 0
   const erros: string[] = []
 
   for (const company of ML_COMPANIES) {
     try {
-      const token = await prisma.mlToken.findUnique({ where: { companyKey: company } })
-      if (!token) continue
-      const accessToken = await mlAccessToken(company)
-      if (!accessToken) continue
-      const H = { headers: { Authorization: `Bearer ${accessToken}` }, timeout: 20000 }
+      const auth = await mlAuth(company)
+      if (!auth) continue
+      const from = new Date(Date.now() - dias * 86400000).toISOString()
 
-      const { data: unread } = await axios.get(
-        'https://api.mercadolibre.com/messages/unread?role=seller&tag=post_sale', H)
-      const results = (unread?.results ?? []) as { resource?: string; count?: number }[]
+      const packs = new Set<string>()
+      for (let offset = 0; offset < 500; offset += 50) {
+        const { data } = await axios.get('https://api.mercadolibre.com/orders/search', {
+          ...auth.H,
+          params: { seller: auth.userId, sort: 'date_desc', limit: 50, offset, 'order.date_created.from': from },
+        })
+        const results = (data?.results ?? []) as { id?: unknown; pack_id?: unknown }[]
+        for (const o of results) packs.add(String(o.pack_id ?? o.id ?? '').replace(/\D/g, ''))
+        if (results.length < 50) break
+        await dorme(150)
+      }
+      packs.delete('')
 
-      for (const r of results.slice(0, 20)) {
-        const packId = String(r.resource ?? '').replace(/\D/g, '')
-        if (!packId) continue
+      for (const packId of packs) {
         try {
-          const { data: th } = await axios.get(
-            `https://api.mercadolibre.com/messages/packs/${packId}/sellers/${token.userId}?tag=post_sale&mark_as_read=false&limit=10`, H)
-          const msgs = (th?.messages ?? []) as { from?: { user_id?: unknown }; text?: unknown; message_date?: { received?: string; created?: string } }[]
-
-          // Comprador + item: o pack aponta a order (pedido simples: o próprio id é a order)
-          let comprador = 'Cliente ML'
-          let item = ''
-          let orderId = packId
-          try {
-            const { data: pack } = await axios.get(`https://api.mercadolibre.com/packs/${packId}`, H)
-            if (pack?.orders?.[0]?.id) orderId = String(pack.orders[0].id)
-          } catch { /* sem pack — segue com o próprio id */ }
-          try {
-            const { data: order } = await axios.get(`https://api.mercadolibre.com/orders/${orderId}`, H)
-            const buyer = order?.buyer
-            comprador = [buyer?.first_name, buyer?.last_name].filter(Boolean).join(' ') || buyer?.nickname || comprador
-            item = order?.order_items?.[0]?.item?.title ?? ''
-          } catch { /* segue sem enriquecer */ }
-
-          const mensagens = msgs
-            .map((m) => ({
-              de: String(m.from?.user_id ?? '') === String(token.userId) ? 'vendedor' as const : 'comprador' as const,
-              texto: String(m.text ?? ''),
-              data: m.message_date?.received ?? m.message_date?.created ?? null,
-            }))
-            .filter((m) => m.texto)
-            .sort((a, b) => String(a.data ?? '').localeCompare(String(b.data ?? '')))
-
-          conversas.push({
-            company: company.toUpperCase(),
-            packId, comprador, item,
-            naoLidas: r.count ?? 1,
-            mensagens,
-          })
+          const conv = await lerConversa(auth, company, packId)
+          verificadas++
+          if (conv && await upsertConversa(company, packId, conv)) pendentes++
         } catch (e) {
-          erros.push(`${company}/${packId}: ${axios.isAxiosError(e) ? `HTTP ${e.response?.status}` : String(e)}`)
+          if (!(axios.isAxiosError(e) && e.response?.status === 404)) {
+            erros.push(`${company}/${packId}: ${axios.isAxiosError(e) ? `HTTP ${e.response?.status}` : String(e)}`)
+          }
         }
+        await dorme(120)
       }
     } catch (e) {
       erros.push(`${company}: ${axios.isAxiosError(e) ? `HTTP ${e.response?.status}` : String(e)}`)
     }
   }
 
-  return { conversas, erros }
+  console.log(`[ML] Varredura de mensagens: ${verificadas} conversas verificadas, ${pendentes} sem resposta`)
+  return { verificadas, pendentes, erros }
+}
+
+// Checagem leve e frequente: novas não lidas + reconfere as pendentes registradas
+// (marca respondida quando o vendedor respondeu no ML).
+export async function mlAtualizarPendentes(): Promise<void> {
+  for (const company of ML_COMPANIES) {
+    try {
+      const auth = await mlAuth(company)
+      if (!auth) continue
+
+      // 1) não lidas novas → registra
+      const { data: unread } = await axios.get(
+        'https://api.mercadolibre.com/messages/unread?role=seller&tag=post_sale', auth.H)
+      for (const r of ((unread?.results ?? []) as { resource?: string }[]).slice(0, 20)) {
+        const packId = String(r.resource ?? '').replace(/\D/g, '')
+        if (!packId) continue
+        try {
+          const conv = await lerConversa(auth, company, packId)
+          if (conv) await upsertConversa(company, packId, conv)
+        } catch { /* ignora conversa individual */ }
+        await dorme(120)
+      }
+
+      // 2) pendentes registradas → reconfere se foram respondidas
+      const abertas = await prisma.mlConversaPendente.findMany({
+        where: { respondida: false, company: company.toUpperCase() },
+        take: 30,
+      })
+      for (const p of abertas) {
+        try {
+          const conv = await lerConversa(auth, company, p.packId)
+          if (conv) await upsertConversa(company, p.packId, conv)
+        } catch { /* ignora conversa individual */ }
+        await dorme(120)
+      }
+    } catch (err) {
+      console.error(`[ML] Erro na checagem de mensagens (${company}):`, axios.isAxiosError(err) ? err.response?.status : err)
+    }
+  }
+}
+
+// Lista para o painel — direto do banco (rápido, sem bater no ML)
+export async function mlConversasPendentes(): Promise<{ conversas: MlConversa[]; erros: string[] }> {
+  const rows = await prisma.mlConversaPendente.findMany({
+    where: { respondida: false },
+    orderBy: { ultimaEm: 'desc' },
+  })
+  return {
+    conversas: rows.map((r) => ({
+      company: r.company,
+      packId: r.packId,
+      comprador: r.comprador,
+      item: r.item ?? '',
+      naoLidas: r.naoLidas,
+      mensagens: (Array.isArray(r.mensagens) ? r.mensagens : []) as unknown as MlMensagem[],
+    })),
+    erros: [],
+  }
 }
 
 // Busca reclamações abertas no ML e cria pendências (dedup por mlClaimId)
