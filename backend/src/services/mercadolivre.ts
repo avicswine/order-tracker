@@ -236,6 +236,48 @@ export async function mlConversaResponder(company: MlCompany, packId: string, te
   )
 }
 
+/**
+ * Notificações que o ML não conseguiu entregar (nosso serviço fora do ar). Ele guarda 2
+ * dias e só o app destinatário pode consultá-las, com o token dele — por isso isso roda
+ * aqui, e não no cmvsync (que usa outro app do ML). O que for achado entra na mesma fila
+ * que o cmvsync consome.
+ */
+export async function mlRecuperarNotificacoesPerdidas(): Promise<number> {
+  let gravadas = 0
+  for (const company of ML_COMPANIES) {
+    const auth = await mlAuth(company)
+    const appId = process.env[`${company.toUpperCase()}_ML_CLIENT_ID`]?.trim()
+    if (!auth || !appId) continue
+    for (const topic of ['items', 'items_prices', 'promotions']) {
+      try {
+        const { data } = await axios.get('https://api.mercadolibre.com/missed_feeds', {
+          ...auth.H,
+          params: { app_id: appId, topic, site_id: 'MLB', limit: 50 },
+        })
+        const msgs = (data?.messages ?? data?.results ?? []) as Record<string, unknown>[]
+        for (const m of msgs) {
+          const resource = String(m.resource ?? '')
+          if (!resource) continue
+          try {
+            await prisma.mlNotificacao.create({
+              data: {
+                topic: String(m.topic ?? topic),
+                resource,
+                mlUserId: m.user_id != null ? String(m.user_id) : String(auth.userId),
+                payload: m as object,
+              },
+            })
+            gravadas++
+          } catch { /* duplicada ou erro de gravação: segue */ }
+        }
+      } catch { /* tópico sem histórico ou sem permissão: segue */ }
+      await dorme(300)
+    }
+  }
+  if (gravadas) console.log(`[ML notif] ${gravadas} notificação(ões) perdida(s) recuperada(s)`)
+  return gravadas
+}
+
 // Conversas pós-venda SEM RESPOSTA do vendedor (lidas ou não) — o que o ML não
 // notifica direito. Rastreadas em banco (ml_conversas_pendentes) via varredura de
 // pedidos recentes + checagem periódica. mark_as_read=false: consultar pelo painel

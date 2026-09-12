@@ -15,7 +15,7 @@ import whatsappRouter from './routes/whatsapp'
 import notificationsRouter from './routes/notifications'
 import pendenciasRouter from './routes/pendencias'
 import mlRouter, { mlPublicRouter } from './routes/ml'
-import { syncMlClaims, mlAtualizarPendentes, mlVarrerMensagens } from './services/mercadolivre'
+import { syncMlClaims, mlAtualizarPendentes, mlVarrerMensagens, mlRecuperarNotificacoesPerdidas } from './services/mercadolivre'
 import { cicloEnviosMl } from './services/mlEnvios'
 import separacaoRouter from './routes/separacao'
 import { iniciarSyncPeriodico as iniciarSyncSeparacao } from './services/separacao/tarefas'
@@ -146,6 +146,12 @@ app.listen(Number(PORT), '0.0.0.0', () => {
   } else {
     console.log('[Cron] ME1: automático DESLIGADO (defina ML_ENVIOS_AUTO=1 para ativar)')
   }
+
+  // Notificações do ML que não conseguimos receber (serviço fora do ar): o ML guarda 2
+  // dias. De hora em hora buscamos e colocamos na fila que o cmvsync consome.
+  cron.schedule('35 * * * *', () => {
+    mlRecuperarNotificacoesPerdidas().catch(err => console.error('[ML notif] perdidas:', err))
+  })
 
   // Módulo de separação: busca NFs novas do dia no intervalo configurado (padrão 3 min)
   iniciarSyncSeparacao()
