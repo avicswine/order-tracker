@@ -13,7 +13,7 @@ import axios from 'axios'
 import { OrderStatus } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { ML_COMPANIES, mlAuth, type MlCompany, type MlAuth } from './mercadolivre'
-import { buscarNfsPorNumerosLoja } from '../routes/bling'
+import { numeroPedidoLojaDaNf } from '../routes/bling'
 
 const ML_API = 'https://api.mercadolibre.com'
 const SERVICE_ID_BRASIL = 11        // service_id de ME1 no MLB (tabela oficial por país)
@@ -141,95 +141,69 @@ export async function notificarStatusMl(
 }
 
 /**
- * Casa pedidos do order-tracker com vendas ME1 do ML (grava mlOrderId/mlShipmentId).
- * Parte das vendas do ML (poucas em ME1) e desce até a NF pelo Bling.
+ * Casa os pedidos do order-tracker com as vendas ME1 do ML (grava mlCompany/mlOrderId/
+ * mlShipmentId). Parte dos PEDIDOS que precisam de aviso — não das vendas do ML: varrer
+ * o histórico do ML tinha teto de páginas e deixava venda antiga de fora (era o caso da
+ * NF 011978, parada com 17 dias de atraso).
+ *
+ * Caminho por pedido (2 GETs no Bling + 1 no ML):
+ *   NF → numeroPedidoLoja (detalhe da NF-e) → /orders/{id}/shipments → é ME1?
  */
-export async function vincularVendasMe1(dias = 45): Promise<{ vinculados: number; me1: number }> {
+export async function vincularVendasMe1(dias = 60): Promise<{ vinculados: number; me1: number }> {
   let vinculados = 0
-  let me1Total = 0
-  const desde = new Date(Date.now() - dias * 86400_000).toISOString()
+  let me1 = 0
+  const desde = new Date(Date.now() - dias * 86400_000)
+  // re-tenta um pedido sem vínculo só depois de 12h (NF pode demorar a ter o pedido)
+  const reTentarAntesDe = new Date(Date.now() - 12 * 3600_000)
 
-  // vendas já casadas (ou já finalizadas no ML) não precisam ser consultadas de novo
-  const conhecidos = new Set(
-    (await prisma.order.findMany({
-      where: { mlOrderId: { not: null } },
-      select: { mlOrderId: true },
-    })).map((o) => o.mlOrderId as string),
-  )
+  const candidatos = await prisma.order.findMany({
+    where: {
+      nfNumber: { not: null },
+      nfIssuedAt: { gte: desde },
+      mlShipmentId: null,
+      status: { in: [OrderStatus.IN_TRANSIT, OrderStatus.DELIVERED] },
+      OR: [{ mlVinculoTentadoAt: null }, { mlVinculoTentadoAt: { lt: reTentarAntesDe } }],
+    },
+    select: { id: true, nfNumber: true, senderCnpj: true },
+    orderBy: { nfIssuedAt: 'desc' },
+    take: 120,
+  })
 
-  for (const company of ML_COMPANIES) {
+  for (const o of candidatos) {
+    const company = ML_COMPANIES.find((c) => cnpjVariantes(c).includes(o.senderCnpj ?? ''))
+    if (!company) continue
+    await prisma.order.update({ where: { id: o.id }, data: { mlVinculoTentadoAt: new Date() } })
+
+    const pedidoLoja = await numeroPedidoLojaDaNf(COMPANY_BLING_KEY[company], o.nfNumber!)
+    // vendas do ML têm id numérico longo; pedido de balcão/site não casa e é ignorado
+    if (!pedidoLoja || !/^\d{10,}$/.test(pedidoLoja)) continue
+
     const auth = await mlAuth(company)
     if (!auth) continue
-
-    // 1) vendas recentes da conta
-    const orders: { id: string; packId: string | null }[] = []
-    for (let offset = 0; offset < 200; offset += 50) {
+    let shipment = await lerShipment(auth, pedidoLoja)
+    let orderIdMl = pedidoLoja
+    if (!shipment) {
+      // numeroPedidoLoja pode ser o pack (carrinho): pega a 1ª order do pacote
       try {
-        const { data } = await axios.get(`${ML_API}/orders/search`, {
-          ...auth.H,
-          params: {
-            seller: auth.userId,
-            'order.date_created.from': desde,
-            sort: 'date_desc',
-            offset,
-            limit: 50,
-          },
-        })
-        const results = data?.results ?? []
-        for (const o of results) {
-          const id = String(o.id)
-          if (conhecidos.has(id)) continue   // já vinculada em um ciclo anterior
-          orders.push({ id, packId: o.pack_id ? String(o.pack_id) : null })
+        const { data: pack } = await axios.get(`${ML_API}/packs/${pedidoLoja}`, auth.H)
+        const primeira = pack?.orders?.[0]?.id
+        if (primeira) {
+          orderIdMl = String(primeira)
+          shipment = await lerShipment(auth, orderIdMl)
         }
-        if (results.length < 50) break
-      } catch {
-        break
-      }
-      await dorme(300)
+      } catch { /* não é pacote */ }
     }
+    if (!shipment || shipment.mode !== 'me1') continue
 
-    // 2) só as ME1 que ainda não foram finalizadas no ML
-    const me1: { orderId: string; packId: string | null; shipment: ShipmentInfo }[] = []
-    for (const o of orders) {
-      const sh = await lerShipment(auth, o.id)
-      if (sh && sh.mode === 'me1' && sh.status !== 'delivered' && sh.status !== 'not_delivered') {
-        me1.push({ orderId: o.id, packId: o.packId, shipment: sh })
-      }
-      await dorme(120)
-    }
-    me1Total += me1.length
-    if (me1.length === 0) continue
-
-    // 3) numeroLoja (order id, ou pack id quando a venda tem pacote) → nº da NF
-    const alvos: string[] = []
-    for (const m of me1) {
-      alvos.push(m.orderId)
-      if (m.packId) alvos.push(m.packId)
-    }
-    const nfPorLoja = await buscarNfsPorNumerosLoja(COMPANY_BLING_KEY[company], alvos, dias + 15)
-
-    // 4) grava o vínculo no pedido correspondente
-    for (const m of me1) {
-      const nf = nfPorLoja.get(m.orderId) ?? (m.packId ? nfPorLoja.get(m.packId) : undefined)
-      if (!nf) continue
-      const order = await prisma.order.findFirst({
-        where: { nfNumber: nf, senderCnpj: { in: cnpjVariantes(company) } },
-        select: { id: true, mlShipmentId: true },
-      })
-      if (!order) continue
-      await prisma.order.update({
-        where: { id: order.id },
-        data: {
-          mlCompany: company,
-          mlOrderId: m.orderId,
-          mlShipmentId: m.shipment.id,
-          mlVinculoTentadoAt: new Date(),
-        },
-      })
-      if (!order.mlShipmentId) vinculados++
-    }
+    me1++
+    await prisma.order.update({
+      where: { id: o.id },
+      data: { mlCompany: company, mlOrderId: orderIdMl, mlShipmentId: shipment.id },
+    })
+    vinculados++
+    await dorme(200)
   }
-  return { vinculados, me1: me1Total }
+  return { vinculados, me1 }
 }
 
 export interface ResultadoEnvio {

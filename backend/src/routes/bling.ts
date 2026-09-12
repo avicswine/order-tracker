@@ -177,6 +177,27 @@ export async function buscarNfPorNumeroLoja(companyKey: string, numerosLoja: str
   return null
 }
 
+// Caminho DIRETO do nº da NF até o pedido da loja (no ML, o order/pack id): o detalhe da
+// NF-e no Bling traz `numeroPedidoLoja`. Dois GETs, sem varrer listagem de pedidos.
+export async function numeroPedidoLojaDaNf(companyKey: string, nfNumero: string): Promise<string | null> {
+  if (!tokens[companyKey]) return null
+  try {
+    const lista = (await blingGet(companyKey, `/nfe?numero=${encodeURIComponent(nfNumero)}`)) as {
+      data?: { id: number; numero?: string }[]
+    }
+    const achada = (lista?.data ?? []).find((n) => String(n.numero ?? '') === String(nfNumero))
+      ?? lista?.data?.[0]
+    if (!achada?.id) return null
+    const det = (await blingGet(companyKey, `/nfe/${achada.id}`)) as {
+      data?: { numeroPedidoLoja?: string | number }
+    }
+    const npl = det?.data?.numeroPedidoLoja
+    return npl ? String(npl) : null
+  } catch {
+    return null
+  }
+}
+
 // Versão em LOTE do anterior: recebe vários numeroLoja e devolve {numeroLoja → nº da NF}.
 // Usada pelo ME1 (services/mlEnvios): varre a listagem de pedidos UMA vez e só busca o
 // detalhe dos pedidos que casaram — ME1 são poucas vendas, então sai barato.
