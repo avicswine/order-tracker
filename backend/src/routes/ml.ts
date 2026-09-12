@@ -166,6 +166,57 @@ router.post('/envios/:orderId/notificar', async (req: Request, res: Response) =>
 // Router público — callback do OAuth (o navegador chega sem nosso JWT)
 export const mlPublicRouter = Router()
 
+// ── Caixa de entrada das notificações do ML para o cmvsync ───────────────────────────
+// O cmvsync roda no PC do José, sem URL pública. O ML entrega aqui (endereço fixo do
+// Railway) e o cmvsync busca de poucos em poucos segundos — PC desligado não perde nada.
+// Responde 200 sempre e na hora: o ML reenvia por dias quando não recebe 200.
+mlPublicRouter.post('/notificacoes', async (req: Request, res: Response) => {
+  res.status(200).send('')          // responde primeiro; grava depois
+  const b = (req.body ?? {}) as Record<string, unknown>
+  const resource = String(b.resource ?? '')
+  if (!resource) return
+  try {
+    await prisma.mlNotificacao.create({
+      data: {
+        topic: String(b.topic ?? 'items'),
+        resource,
+        mlUserId: b.user_id != null ? String(b.user_id) : null,
+        payload: b as object,
+      },
+    })
+  } catch (err) {
+    console.error('[ML notif] falha ao gravar:', err instanceof Error ? err.message : err)
+  }
+})
+
+// O cmvsync chama esta rota em loop curto. Protegida por um segredo compartilhado
+// (ML_NOTIF_TOKEN) porque devolve e consome a fila.
+mlPublicRouter.get('/notificacoes/pendentes', async (req: Request, res: Response) => {
+  const esperado = process.env.ML_NOTIF_TOKEN?.trim()
+  if (!esperado || String(req.query.token ?? '') !== esperado) {
+    res.status(401).json({ error: 'token inválido' }); return
+  }
+  const limite = Math.min(Number(req.query.limit) || 100, 300)
+  const pend = await prisma.mlNotificacao.findMany({
+    where: { entregueEm: null },
+    orderBy: { recebidoEm: 'asc' },
+    take: limite,
+  })
+  if (pend.length) {
+    await prisma.mlNotificacao.updateMany({
+      where: { id: { in: pend.map((p) => p.id) } },
+      data: { entregueEm: new Date() },
+    })
+  }
+  // limpeza: entregues com mais de 2 dias não servem para nada
+  prisma.mlNotificacao.deleteMany({
+    where: { entregueEm: { lt: new Date(Date.now() - 2 * 86400_000) } },
+  }).catch(() => {})
+  res.json({ notificacoes: pend.map((p) => ({
+    topic: p.topic, resource: p.resource, user_id: p.mlUserId, recebido_em: p.recebidoEm,
+  })) })
+})
+
 mlPublicRouter.get('/callback', async (req: Request, res: Response) => {
   const code = req.query.code as string | undefined
   const state = req.query.state as string | undefined

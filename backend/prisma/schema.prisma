@@ -395,3 +395,19 @@ enum TrackingSystem {
   MODULAR
   NONE
 }
+
+// Caixa de entrada das notificações do Mercado Livre para o cmvsync.
+// O cmvsync roda no PC do José (sem URL pública), então o ML entrega aqui e ele busca de
+// poucos em poucos segundos. Se o PC estiver desligado, a notificação espera nesta tabela.
+model MlNotificacao {
+  id         String   @id @default(cuid())
+  topic      String
+  resource   String
+  mlUserId   String?
+  recebidoEm DateTime @default(now())
+  entregueEm DateTime?
+  payload    Json?
+
+  @@index([entregueEm, recebidoEm])
+  @@map("ml_notificacoes")
+}
