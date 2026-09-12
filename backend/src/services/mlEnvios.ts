@@ -166,7 +166,7 @@ export async function vincularVendasMe1(dias = 60): Promise<{ vinculados: number
     },
     select: { id: true, nfNumber: true, senderCnpj: true },
     orderBy: { nfIssuedAt: 'desc' },
-    take: 120,
+    take: 40,   // lote curto: a chamada pelo painel precisa responder antes do timeout
   })
 
   for (const o of candidatos) {

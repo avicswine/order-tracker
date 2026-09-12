@@ -90,6 +90,50 @@ export const mlApi = {
     api.post<{ ok: boolean }>(`/ml/pendencias/${pendenciaId}/responder`, { texto }).then((r) => r.data),
   responderConversa: (company: string, packId: string, texto: string) =>
     api.post<{ ok: boolean }>(`/ml/conversas/${company.toLowerCase()}/${packId}/responder`, { texto }).then((r) => r.data),
+  // Mercado Envios 1 — avisos de envio ao ML
+  enviosPendentes: () =>
+    api.get<MlEnviosResponse>('/ml/envios/pendentes').then((r) => r.data),
+  enviosSincronizar: (dryRun: boolean) =>
+    api.post<MlEnviosCiclo>('/ml/envios/sincronizar', { dryRun }, { timeout: 600000 }).then((r) => r.data),
+  enviosNotificar: (orderId: string, status: 'shipped' | 'delivered' | 'not_delivered') =>
+    api.post<{ ok: boolean }>(`/ml/envios/${orderId}/notificar`, { status }, { timeout: 120000 }).then((r) => r.data),
+}
+
+export interface MlEnvio {
+  id: string
+  orderNumber: string
+  nfNumber: string | null
+  customerName: string
+  status: 'PENDING' | 'IN_TRANSIT' | 'DELIVERED' | 'CANCELLED'
+  shippedAt: string | null
+  deliveredAt: string | null
+  lastTracking: string | null
+  mlCompany: string | null
+  mlOrderId: string | null
+  mlShipmentId: string | null
+  mlShippedNotifiedAt: string | null
+  mlDeliveredNotifiedAt: string | null
+  mlEnvioErro: string | null
+}
+
+export interface MlEnviosResponse {
+  pendentes: MlEnvio[]
+  config: { portalUrl: string; trackingMsg: string; trackingComentario: string; auto: boolean }
+}
+
+export interface MlEnviosCiclo {
+  vinculados: number
+  me1: number
+  processados: number
+  dryRun: boolean
+  resultados: {
+    orderNumber: string
+    nfNumber: string | null
+    mlShipmentId: string
+    acao: 'shipped' | 'delivered' | 'shipped+delivered'
+    ok: boolean
+    erro?: string
+  }[]
 }
 
 export interface MlConversa {

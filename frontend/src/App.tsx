@@ -9,6 +9,7 @@ import { RankingPage } from './pages/RankingPage'
 import { WhatsAppPage } from './pages/WhatsAppPage'
 import { LogsPage } from './pages/LogsPage'
 import { PendenciasPage } from './pages/PendenciasPage'
+import { EnviosMlPage } from './pages/EnviosMlPage'
 
 export default function App() {
   return (
@@ -24,6 +25,7 @@ export default function App() {
                   <Routes>
                     <Route path="/" element={<OrdersPage />} />
                     <Route path="/pendencias" element={<PendenciasPage />} />
+                    <Route path="/envios-ml" element={<EnviosMlPage />} />
                     <Route path="/carriers" element={<CarriersPage />} />
                     <Route path="/ranking" element={<RankingPage />} />
                     <Route path="/whatsapp" element={<WhatsAppPage />} />
