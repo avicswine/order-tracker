@@ -35,8 +35,16 @@ const COMPANY_BLING_KEY: Record<MlCompany, string> = { avic: 'avic', agro: 'agro
 export const PORTAL_URL =
   process.env.ML_ENVIOS_PORTAL_URL?.trim() ||
   'https://order-tracker-production-4189.up.railway.app/portal/'
+// O campo tracking_number do ML aceita SÓ letras e números (testado 12/09/2026): espaço é
+// removido e separadores — hífen, ponto, underscore — fazem o ML descartar o valor inteiro.
+// Daí o CamelCase, que fica legível sem separador. A frase completa vai no comentário, que
+// preserva espaços. Observado também: o ML só registra o código na TRANSIÇÃO de status,
+// então quem já está "shipped" não recebe mais o link (vale para os despachos novos).
 export const TRACKING_MSG =
   process.env.ML_ENVIOS_TRACKING_MSG?.trim() ||
+  'EntreNoLinkEDigiteSeuCPFOuCNPJParaRastrearSuaMercadoria'
+export const TRACKING_COMENTARIO =
+  process.env.ML_ENVIOS_TRACKING_COMENTARIO?.trim() ||
   'Entre no link e digite seu CPF ou CNPJ para rastrear sua mercadoria'
 
 const dorme = (ms: number) => new Promise((r) => setTimeout(r, ms))
@@ -63,6 +71,23 @@ async function lerShipment(auth: MlAuth, orderId: string): Promise<ShipmentInfo 
       status: String(data.status ?? ''),
       substatus: data.substatus ?? null,
       dateCreated: dc && !isNaN(dc.getTime()) ? dc : null,
+    }
+  } catch {
+    return null
+  }
+}
+
+/** Estado atual do envio pelo shipment_id (para não repetir aviso que o ML já tem). */
+async function lerShipmentPorId(auth: MlAuth, shipmentId: string): Promise<ShipmentInfo | null> {
+  try {
+    const { data } = await axios.get(`${ML_API}/shipments/${shipmentId}`, auth.H)
+    if (!data?.id) return null
+    return {
+      id: String(data.id),
+      mode: String(data.mode ?? ''),
+      status: String(data.status ?? ''),
+      substatus: data.substatus ?? null,
+      dateCreated: null,
     }
   } catch {
     return null
@@ -247,8 +272,30 @@ export async function sincronizarEnviosMl(
   const resultados: ResultadoEnvio[] = []
   for (const o of pendentes) {
     const company = o.mlCompany as MlCompany
-    const precisaShipped = !o.mlShippedNotifiedAt
-    const precisaDelivered = o.status === OrderStatus.DELIVERED
+    let precisaShipped = !o.mlShippedNotifiedAt
+    let precisaDelivered = o.status === OrderStatus.DELIVERED
+
+    // estado REAL no ML: evita repetir um aviso que já está lá (o comprador receberia
+    // notificação duplicada) e respeita o que foi avisado à mão pelo painel
+    if (!dryRun) {
+      const auth = await mlAuth(company)
+      const atual = auth ? await lerShipmentPorId(auth, o.mlShipmentId!) : null
+      if (atual) {
+        if (atual.status === 'delivered' || atual.status === 'not_delivered') {
+          await prisma.order.update({
+            where: { id: o.id },
+            data: { mlShippedNotifiedAt: o.mlShippedNotifiedAt ?? new Date(), mlDeliveredNotifiedAt: new Date() },
+          })
+          continue   // ML já está finalizado — nada a fazer
+        }
+        if (atual.status === 'shipped' && precisaShipped) {
+          precisaShipped = false   // já consta "a caminho" no ML
+          await prisma.order.update({ where: { id: o.id }, data: { mlShippedNotifiedAt: new Date() } })
+        }
+      }
+      if (!precisaShipped && !precisaDelivered) continue
+    }
+
     const acao: ResultadoEnvio['acao'] = precisaShipped && precisaDelivered
       ? 'shipped+delivered'
       : precisaDelivered ? 'delivered' : 'shipped'
@@ -264,7 +311,7 @@ export async function sincronizarEnviosMl(
       if (precisaShipped) {
         await notificarStatusMl(company, o.mlShipmentId!, 'shipped', {
           date: o.shippedAt,
-          comment: o.lastTracking ?? undefined,
+          comment: TRACKING_COMENTARIO,   // instrução ao comprador (aceita espaços)
           comTracking: true,
         })
         await prisma.order.update({

@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express'
 import crypto from 'crypto'
 import { mlAuthUrl, mlExchangeCode, mlStatus, syncMlClaims, mlClaimMessages, mlClaimResponder, mlConversaResponder, mlConversasPendentes, mlVarrerMensagens, ML_COMPANIES, type MlCompany } from '../services/mercadolivre'
-import { cicloEnviosMl, notificarStatusMl, PORTAL_URL, TRACKING_MSG, type MlEnvioStatus } from '../services/mlEnvios'
+import { cicloEnviosMl, notificarStatusMl, PORTAL_URL, TRACKING_MSG, TRACKING_COMENTARIO, type MlEnvioStatus } from '../services/mlEnvios'
 import { prisma } from '../lib/prisma'
 
 // Rotas autenticadas (montadas com requireAuth)
@@ -115,7 +115,7 @@ router.get('/envios/pendentes', async (_req: Request, res: Response) => {
   })
   res.json({
     pendentes,
-    config: { portalUrl: PORTAL_URL, trackingMsg: TRACKING_MSG, auto: process.env.ML_ENVIOS_AUTO === '1' },
+    config: { portalUrl: PORTAL_URL, trackingMsg: TRACKING_MSG, trackingComentario: TRACKING_COMENTARIO, auto: process.env.ML_ENVIOS_AUTO === '1' },
   })
 })
 
@@ -146,7 +146,7 @@ router.post('/envios/:orderId/notificar', async (req: Request, res: Response) =>
     await notificarStatusMl(order.mlCompany as MlCompany, order.mlShipmentId, status, {
       date: status === 'delivered' ? order.deliveredAt : order.shippedAt,
       substatus: req.body?.substatus ?? null,
-      comment: order.lastTracking ?? undefined,
+      comment: status === 'shipped' ? TRACKING_COMENTARIO : (order.lastTracking ?? undefined),
       comTracking: status === 'shipped',
     })
     await prisma.order.update({
