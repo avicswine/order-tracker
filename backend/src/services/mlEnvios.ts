@@ -140,6 +140,39 @@ export async function notificarStatusMl(
   }
 }
 
+/** Feedback do VENDEDOR no pedido (vendas "a combinar": `fulfilled` = entrega informada). */
+async function feedbackVendedor(auth: MlAuth, orderId: string): Promise<{ fulfilled: boolean } | null> {
+  try {
+    const { data } = await axios.get(`${ML_API}/orders/${orderId}/feedback`, auth.H)
+    if (!data?.sale) return null
+    return { fulfilled: data.sale.fulfilled === true }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Venda "COMBINAR ENTREGA" (tag no_shipping): não existe shipment, então o ML não aceita
+ * seller_notifications. O equivalente ao botão "O comprador já está com ele em mãos" do
+ * painel é o feedback do pedido com fulfilled = true (confirmado no pedido 2000018261088844).
+ */
+export async function marcarEntregaCombinada(company: MlCompany, orderId: string): Promise<void> {
+  const auth = await mlAuth(company)
+  if (!auth) throw new Error(`Conta ML ${company} não autorizada`)
+  const atual = await feedbackVendedor(auth, orderId)
+  if (atual?.fulfilled) return   // já informado (pelo painel ou por nós)
+  try {
+    await axios.post(`${ML_API}/orders/${orderId}/feedback`,
+      { fulfilled: true, rating: 'positive' }, auth.H)
+  } catch (err) {
+    const resp = axios.isAxiosError(err) ? err.response : undefined
+    const msg = (resp?.data as { message?: string } | undefined)?.message
+    // feedback já existente = entrega já informada; não é erro
+    if (resp?.status === 400 && /already|exist/i.test(msg ?? '')) return
+    throw new Error(msg ? `${resp?.status}: ${msg}` : (err as Error).message)
+  }
+}
+
 /**
  * Casa os pedidos do order-tracker com as vendas ME1 do ML (grava mlCompany/mlOrderId/
  * mlShipmentId). Parte dos PEDIDOS que precisam de aviso — não das vendas do ML: varrer
@@ -161,6 +194,7 @@ export async function vincularVendasMe1(dias = 60): Promise<{ vinculados: number
       nfNumber: { not: null },
       nfIssuedAt: { gte: desde },
       mlShipmentId: null,
+      mlSemEnvio: false,
       status: { in: [OrderStatus.IN_TRANSIT, OrderStatus.DELIVERED] },
       OR: [{ mlVinculoTentadoAt: null }, { mlVinculoTentadoAt: { lt: reTentarAntesDe } }],
     },
@@ -193,7 +227,17 @@ export async function vincularVendasMe1(dias = 60): Promise<{ vinculados: number
         }
       } catch { /* não é pacote */ }
     }
-    if (!shipment || shipment.mode !== 'me1') continue
+    if (!shipment) {
+      // sem envio no ML = "combinar entrega": a entrega vai pelo feedback do pedido
+      await prisma.order.update({
+        where: { id: o.id },
+        data: { mlCompany: company, mlOrderId: orderIdMl, mlSemEnvio: true },
+      })
+      vinculados++
+      await dorme(200)
+      continue
+    }
+    if (shipment.mode !== 'me1') continue
 
     me1++
     await prisma.order.update({
@@ -227,17 +271,22 @@ export async function sincronizarEnviosMl(
   const dryRun = opts.dryRun ?? false
   const pendentes = await prisma.order.findMany({
     where: {
-      mlShipmentId: { not: null },
       mlCompany: { not: null },
-      OR: [
-        { status: OrderStatus.IN_TRANSIT, mlShippedNotifiedAt: null, lastTracking: { not: null } },
-        { status: OrderStatus.DELIVERED, mlDeliveredNotifiedAt: null },
+      AND: [
+        { OR: [{ mlShipmentId: { not: null } }, { mlSemEnvio: true }] },
+        {
+          OR: [
+            { status: OrderStatus.IN_TRANSIT, mlShippedNotifiedAt: null, lastTracking: { not: null } },
+            { status: OrderStatus.DELIVERED, mlDeliveredNotifiedAt: null },
+          ],
+        },
       ],
     },
     select: {
       id: true, orderNumber: true, nfNumber: true, status: true,
       shippedAt: true, deliveredAt: true, lastTracking: true,
       mlCompany: true, mlShipmentId: true, mlShippedNotifiedAt: true,
+      mlSemEnvio: true, mlOrderId: true,
     },
     orderBy: { shippedAt: 'asc' },
     take: opts.limite ?? 40,
@@ -246,6 +295,32 @@ export async function sincronizarEnviosMl(
   const resultados: ResultadoEnvio[] = []
   for (const o of pendentes) {
     const company = o.mlCompany as MlCompany
+
+    // "COMBINAR ENTREGA": só existe o aviso de ENTREGUE (não há "a caminho" sem envio)
+    if (o.mlSemEnvio) {
+      if (o.status !== OrderStatus.DELIVERED) continue
+      if (dryRun) {
+        resultados.push({ orderNumber: o.orderNumber, nfNumber: o.nfNumber, mlShipmentId: 'a combinar', acao: 'delivered', ok: true })
+        continue
+      }
+      try {
+        await marcarEntregaCombinada(company, o.mlOrderId!)
+        await prisma.order.update({
+          where: { id: o.id },
+          data: { mlDeliveredNotifiedAt: new Date(), mlEnvioErro: null },
+        })
+        resultados.push({ orderNumber: o.orderNumber, nfNumber: o.nfNumber, mlShipmentId: 'a combinar', acao: 'delivered', ok: true })
+        console.log(`[ME1] ${o.orderNumber} → entrega informada (combinar entrega, venda ${o.mlOrderId})`)
+      } catch (err) {
+        const erro = err instanceof Error ? err.message : String(err)
+        await prisma.order.update({ where: { id: o.id }, data: { mlEnvioErro: erro.slice(0, 300) } })
+        resultados.push({ orderNumber: o.orderNumber, nfNumber: o.nfNumber, mlShipmentId: 'a combinar', acao: 'delivered', ok: false, erro })
+        console.error(`[ME1] ${o.orderNumber} (combinar entrega) falhou: ${erro}`)
+      }
+      await dorme(700)
+      continue
+    }
+
     let precisaShipped = !o.mlShippedNotifiedAt
     let precisaDelivered = o.status === OrderStatus.DELIVERED
 

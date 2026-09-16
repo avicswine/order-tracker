@@ -52,6 +52,8 @@ model Order {
   mlCompany             String?    // avic | agro — conta ML dona da venda
   mlOrderId             String?    // order (ou pack) id do ML
   mlShipmentId          String?    // shipment ME1 notificado
+  mlSemEnvio            Boolean    @default(false) // venda "a combinar" (sem envio no ML):
+                                   // a entrega é informada pelo feedback do pedido (fulfilled)
   mlShippedNotifiedAt   DateTime?  // quando avisamos "a caminho" (idempotência)
   mlDeliveredNotifiedAt DateTime?  // quando avisamos "entregue" (irreversível no ML)
   mlEnvioErro           String?    // último erro de notificação, p/ diagnóstico
