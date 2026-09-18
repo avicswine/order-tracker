@@ -20,6 +20,15 @@ function isDeliveryEvent(text: string): boolean {
   return t.includes('ENTREGUE') || t.includes('ENTREGA REALIZADA') || t.includes('ENTREGA EFETUADA') || t.includes('MERCADORIA ENTREGUE')
 }
 
+// Variações vistas nas transportadoras (SSW: "SAIDA PARA ENTREGA", Braspress: "Em rota de Entrega")
+const OUT_FOR_DELIVERY_KEYWORDS = ['SAIDA PARA ENTREGA', 'SAIU PARA ENTREGA', 'EM ROTA DE ENTREGA', 'SAIU PARA ENTREGAR']
+
+// Verifica se a carga saiu para entrega ao destinatário (último trecho)
+function isOutForDeliveryEvent(text: string): boolean {
+  const t = text.toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+  return OUT_FOR_DELIVERY_KEYWORDS.some((kw) => t.includes(kw))
+}
+
 // CNPJ das empresas → instância WhatsApp
 const SENDER_TO_WPP: Record<string, WppCompany> = {
   '47715256000149': 'avic',     // AVIC
@@ -321,6 +330,13 @@ export async function notifyOrderUpdate(order: {
     return
   }
 
+  // Saiu para entrega → avisa o cliente para se preparar (1x por pedido, mesmo que a
+  // transportadora saia de novo após tentativa frustrada)
+  if (!isDeliveryEvent(order.lastTracking) && isOutForDeliveryEvent(order.lastTracking)) {
+    await notifyOutForDelivery(order)
+    return
+  }
+
   // Só notifica ENVIADO (primeiro evento) e ENTREGUE — intermediários são ignorados
   const delivered = isDeliveryEvent(order.lastTracking)
   if (!isFirstEver && !delivered) {
@@ -345,6 +361,51 @@ export async function notifyOrderUpdate(order: {
 
   const tag = delivered ? '✅ ENTREGUE' : isFirstEver ? '🚚 ENVIADO' : '📦 Atualização'
   console.log(`[Notifier] ${tag} → ${order.orderNumber}`)
+}
+
+// ─── SAIU PARA ENTREGA ──────────────────────────────────────────────────────
+
+async function notifyOutForDelivery(order: {
+  id: string
+  orderNumber: string
+  nfNumber: string | null
+  customerName: string
+  customerEmail: string | null
+  customerPhone: string | null
+  senderCnpj: string | null
+  lastTracking: string | null
+}): Promise<void> {
+  const eventHash = hashEvent(order.id, 'SAIU_PARA_ENTREGA')
+  if (await alreadyNotified(order.id, eventHash)) return
+
+  const nf = order.nfNumber ? String(parseInt(order.nfNumber, 10)) : order.orderNumber
+  const primeiroNome = order.customerName.split(' ')[0]
+
+  const wppMessage = `*SAIU PARA ENTREGA* 🚚📍\nOlá, ${primeiroNome}! Seu pedido NF ${nf} saiu para entrega e deve chegar em breve.\n\n`
+    + `🏠 Por favor, garanta que haja alguém disponível para receber no endereço de entrega.\n`
+    + `\nPara acompanhar o rastreio, basta acessar o link:\n${PORTAL_URL}\n\nE digitar o seu CPF ou CNPJ.\nAgradecemos a preferência. 🙏`
+
+  const emailHtml = `<!DOCTYPE html>
+<html>
+<body style="font-family:Arial,sans-serif;max-width:600px;margin:0;padding:20px;color:#333;text-align:left">
+  <h2 style="color:#1d4ed8">Saiu para entrega 🚚</h2>
+  <p>Olá, ${primeiroNome}!</p>
+  <p>Seu pedido <strong>NF ${nf}</strong> saiu para entrega e deve chegar em breve.</p>
+  <p>🏠 Por favor, garanta que haja alguém disponível para receber no endereço de entrega.</p>
+  <p>Para acompanhar o rastreio:<br>
+    <a href="${PORTAL_URL}" style="color:#1d4ed8">${PORTAL_URL}</a><br>
+    Digite seu CPF ou CNPJ.
+  </p>
+  <p style="color:#64748b;font-size:13px">Agradecemos a preferência! 🙏</p>
+  ${buildSignature(order.senderCnpj)}
+</body>
+</html>`
+
+  await dispatch(order.id, eventHash, `Saiu para entrega 🚚 — NF ${nf}`, wppMessage, emailHtml,
+    { phone: order.customerPhone, email: order.customerEmail, senderCnpj: order.senderCnpj },
+    order.lastTracking ?? 'SAIU_PARA_ENTREGA'
+  )
+  console.log(`[Notifier] 📍 SAIU PARA ENTREGA → ${order.orderNumber}`)
 }
 
 // ─── BATCH ENVIADO (uso único) ───────────────────────────────────────────────
