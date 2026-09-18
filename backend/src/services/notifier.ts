@@ -380,9 +380,11 @@ async function notifyOutForDelivery(order: {
 
   const nf = order.nfNumber ? String(parseInt(order.nfNumber, 10)) : order.orderNumber
   const primeiroNome = order.customerName.split(' ')[0]
+  const evento = formatTrackingText(order.lastTracking ?? '')
 
-  const wppMessage = `*SAIU PARA ENTREGA* 🚚📍\nOlá, ${primeiroNome}! Seu pedido NF ${nf} saiu para entrega e deve chegar em breve.\n\n`
-    + `🏠 Por favor, garanta que haja alguém disponível para receber no endereço de entrega.\n`
+  const wppMessage = `*SAIU PARA ENTREGA* 🚚📍\nOlá, ${primeiroNome}! Seu pedido NF ${nf} teve uma atualização:\n${evento}\n\n`
+    + `🏠 Ele deve chegar em breve — por favor, garanta que haja alguém disponível para receber no endereço de entrega.\n\n`
+    + `⚠️ *Atenção na hora de receber sua mercadoria:* sempre confira se o número de volumes da nota fiscal confere com o total de volumes a receber. Certifique-se também de que nenhuma embalagem está danificada.\n`
     + `\nPara acompanhar o rastreio, basta acessar o link:\n${PORTAL_URL}\n\nE digitar o seu CPF ou CNPJ.\nAgradecemos a preferência. 🙏`
 
   const emailHtml = `<!DOCTYPE html>
@@ -390,8 +392,11 @@ async function notifyOutForDelivery(order: {
 <body style="font-family:Arial,sans-serif;max-width:600px;margin:0;padding:20px;color:#333;text-align:left">
   <h2 style="color:#1d4ed8">Saiu para entrega 🚚</h2>
   <p>Olá, ${primeiroNome}!</p>
-  <p>Seu pedido <strong>NF ${nf}</strong> saiu para entrega e deve chegar em breve.</p>
-  <p>🏠 Por favor, garanta que haja alguém disponível para receber no endereço de entrega.</p>
+  <p>Seu pedido <strong>NF ${nf}</strong> teve uma atualização:<br>${evento}</p>
+  <p>🏠 Ele deve chegar em breve — por favor, garanta que haja alguém disponível para receber no endereço de entrega.</p>
+  <p style="background:#fef3c7;border-left:4px solid #f59e0b;padding:10px 12px">
+    ⚠️ <strong>Atenção na hora de receber sua mercadoria:</strong> sempre confira se o número de volumes da nota fiscal confere com o total de volumes a receber. Certifique-se também de que nenhuma embalagem está danificada.
+  </p>
   <p>Para acompanhar o rastreio:<br>
     <a href="${PORTAL_URL}" style="color:#1d4ed8">${PORTAL_URL}</a><br>
     Digite seu CPF ou CNPJ.
