@@ -1,6 +1,6 @@
 import axios from 'axios'
 import { prisma } from '../lib/prisma'
-import { PendenciaOrigem, PendenciaTipo, Prisma } from '@prisma/client'
+import { PendenciaOrigem, PendenciaTipo, PendenciaStatus, Prisma } from '@prisma/client'
 import { buscarNfPorNumeroLoja } from '../routes/bling'
 
 // Chave da empresa no Bling (para buscar a NF do pedido ML)
@@ -135,6 +135,7 @@ interface MlClaim {
   date_created: string
   due_date?: string | null
   players?: { role?: string; available_actions?: { due_date?: string | null }[] }[]
+  resolution?: { reason?: string | null; closed_by?: string | null; benefited?: string[] | null } | null
 }
 
 // Prazo máximo do vendedor para agir na reclamação: menor due_date entre as
@@ -469,6 +470,149 @@ export async function mlConversasPendentes(): Promise<{ conversas: MlConversa[];
 }
 
 // Busca reclamações abertas no ML e cria pendências (dedup por mlClaimId)
+// ── Espelho automático do estado da reclamação no ML ────────────────────────
+// O painel só criava pendências (claims abertas) e nunca as fechava. Aqui o
+// estado do ML é aplicado na pendência: mediação → em tratamento, fechada → resolvida.
+
+// Motivos de fechamento do ML em linguagem do dia a dia (o resto vai como veio)
+const CLAIM_RESOLUTION_LABEL: Record<string, string> = {
+  refund: 'reembolso ao comprador',
+  product_delivered: 'produto entregue',
+  product_returned: 'produto devolvido',
+  seller_solved: 'resolvida pelo vendedor',
+  buyer_cancel: 'cancelada pelo comprador',
+  item_returned: 'produto devolvido',
+  partial_refund: 'reembolso parcial',
+}
+
+function descreverFechamento(claim: MlClaim): string {
+  const motivo = claim.resolution?.reason
+  if (!motivo) return ''
+  return ` — ${CLAIM_RESOLUTION_LABEL[motivo] ?? motivo.replace(/_/g, ' ')}`
+}
+
+async function anotar(pendenciaId: string, texto: string): Promise<void> {
+  await prisma.pendenciaNota.create({ data: { pendenciaId, texto, autor: 'Mercado Livre' } })
+}
+
+// Aplica o estado atual do claim na pendência. Idempotente: só escreve quando algo
+// mudou, então webhook e reconciliação podem rodar juntos sem duplicar nota.
+async function aplicarEstadoClaim(claim: MlClaim): Promise<'resolvida' | 'atualizada' | null> {
+  const claimId = String(claim.id)
+  const pend = await prisma.pendencia.findUnique({ where: { mlClaimId: claimId } })
+  if (!pend) return null
+
+  const prazoMl = extrairPrazoMl(claim)
+  const updates: Record<string, unknown> = {}
+  if ((prazoMl?.getTime() ?? null) !== (pend.mlDueDate?.getTime() ?? null)) updates.mlDueDate = prazoMl
+
+  const fechada = String(claim.status).toLowerCase() === 'closed'
+  const emMediacao = String(claim.stage).toLowerCase() === 'dispute'
+
+  if (fechada && pend.status !== PendenciaStatus.RESOLVIDA) {
+    await prisma.pendencia.update({
+      where: { id: pend.id },
+      data: { ...updates, status: PendenciaStatus.RESOLVIDA, resolvedAt: new Date(), mlDueDate: null },
+    })
+    await anotar(pend.id, `✅ Fechada no Mercado Livre${descreverFechamento(claim)}`)
+    console.log(`[ML] Claim ${claimId} fechada → pendência resolvida automaticamente`)
+    return 'resolvida'
+  }
+
+  if (!fechada && emMediacao && pend.status === PendenciaStatus.ABERTA) {
+    await prisma.pendencia.update({
+      where: { id: pend.id },
+      data: { ...updates, status: PendenciaStatus.EM_TRATAMENTO },
+    })
+    await anotar(pend.id, '⚠️ Escalou para mediação no Mercado Livre')
+    console.log(`[ML] Claim ${claimId} em mediação → pendência em tratamento`)
+    return 'atualizada'
+  }
+
+  if (Object.keys(updates).length > 0) {
+    await prisma.pendencia.update({ where: { id: pend.id }, data: updates })
+    return 'atualizada'
+  }
+  return null
+}
+
+async function buscarClaim(auth: MlAuth, claimId: string): Promise<MlClaim | null> {
+  try {
+    const { data } = await axios.get(`https://api.mercadolibre.com/post-purchase/v1/claims/${claimId}`, auth.H)
+    return (data?.data ?? data) as MlClaim
+  } catch (err) {
+    if (axios.isAxiosError(err) && err.response?.status === 404) return null
+    throw err
+  }
+}
+
+// Chamada pelo webhook: atualiza UMA reclamação assim que o ML avisa.
+// mlUserId identifica a conta; sem ele, tenta as contas autorizadas.
+export async function mlAtualizarClaim(claimId: string, mlUserId?: string | null): Promise<void> {
+  const empresas: MlCompany[] = []
+  if (mlUserId) {
+    const token = await prisma.mlToken.findFirst({ where: { userId: String(mlUserId) } })
+    if (token) empresas.push(token.companyKey as MlCompany)
+  }
+  if (empresas.length === 0) empresas.push(...ML_COMPANIES)
+
+  for (const company of empresas) {
+    const auth = await mlAuth(company)
+    if (!auth) continue
+    const claim = await buscarClaim(auth, claimId)
+    if (claim) {
+      await aplicarEstadoClaim(claim)
+      return
+    }
+  }
+}
+
+// Rede de segurança: reconfere no ML todas as pendências ML ainda não resolvidas.
+// Cobre webhook perdido, período com o serviço fora do ar e o histórico acumulado.
+export async function mlReconciliarClaims(): Promise<{ verificadas: number; resolvidas: number; atualizadas: number; erros: string[] }> {
+  let verificadas = 0, resolvidas = 0, atualizadas = 0
+  const erros: string[] = []
+
+  for (const company of ML_COMPANIES) {
+    try {
+      const auth = await mlAuth(company)
+      if (!auth) continue
+
+      const abertas = await prisma.pendencia.findMany({
+        where: {
+          origem: PendenciaOrigem.MERCADO_LIVRE,
+          status: { not: PendenciaStatus.RESOLVIDA },
+          senderCnpj: COMPANY_CNPJ[company],
+          mlClaimId: { not: null },
+        },
+        select: { mlClaimId: true },
+        take: 100,
+      })
+
+      for (const p of abertas) {
+        try {
+          const claim = await buscarClaim(auth, p.mlClaimId!)
+          verificadas++
+          if (!claim) continue
+          const r = await aplicarEstadoClaim(claim)
+          if (r === 'resolvida') resolvidas++
+          else if (r === 'atualizada') atualizadas++
+        } catch (e) {
+          erros.push(`${company}/${p.mlClaimId}: ${axios.isAxiosError(e) ? `HTTP ${e.response?.status}` : String(e)}`)
+        }
+        await dorme(150)
+      }
+    } catch (e) {
+      erros.push(`${company}: ${axios.isAxiosError(e) ? `HTTP ${e.response?.status}` : String(e)}`)
+    }
+  }
+
+  if (resolvidas > 0 || atualizadas > 0) {
+    console.log(`[ML] Reconciliação: ${verificadas} verificadas, ${resolvidas} resolvidas, ${atualizadas} atualizadas`)
+  }
+  return { verificadas, resolvidas, atualizadas, erros }
+}
+
 export async function syncMlClaims(): Promise<{ criadas: number; erros: string[] }> {
   let criadas = 0
   const erros: string[] = []

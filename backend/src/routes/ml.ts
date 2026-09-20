@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express'
 import crypto from 'crypto'
-import { mlAuthUrl, mlExchangeCode, mlStatus, syncMlClaims, mlClaimMessages, mlClaimResponder, mlConversaResponder, mlConversasPendentes, mlVarrerMensagens, ML_COMPANIES, type MlCompany } from '../services/mercadolivre'
+import { mlAuthUrl, mlExchangeCode, mlStatus, syncMlClaims, mlClaimMessages, mlClaimResponder, mlConversaResponder, mlConversasPendentes, mlVarrerMensagens, mlAtualizarClaim, mlReconciliarClaims, ML_COMPANIES, type MlCompany } from '../services/mercadolivre'
 import { cicloEnviosMl, notificarStatusMl, PORTAL_URL, TRACKING_MSG, TRACKING_COMENTARIO, type MlEnvioStatus } from '../services/mlEnvios'
 import { prisma } from '../lib/prisma'
 
@@ -36,10 +36,17 @@ router.get('/auth/:company', (req: Request, res: Response) => {
   res.json({ url })
 })
 
-// POST /ml/sync — sincroniza reclamações agora
+// POST /ml/sync — sincroniza reclamações agora (novas + estado das já existentes)
 router.post('/sync', async (_req: Request, res: Response) => {
   const result = await syncMlClaims()
-  res.json(result)
+  const reconc = await mlReconciliarClaims()
+  res.json({ ...result, ...reconc })
+})
+
+// POST /ml/claims/reconciliar — reconfere no ML o estado das pendências abertas
+// (fecha no painel o que já foi resolvido lá). Roda sozinho a cada 30 min.
+router.post('/claims/reconciliar', async (_req: Request, res: Response) => {
+  res.json(await mlReconciliarClaims())
 })
 
 // GET /ml/mensagens — conversas pós-venda sem resposta (do banco; rápido)
@@ -181,12 +188,27 @@ const TOPICOS_ACEITOS = new Set(
 )
 let _notifIgnoradas = 0
 
+// Tópicos de pós-venda que o PAINEL consome na hora (não vão para a fila do cmvsync):
+// mantêm a pendência espelhando o estado da reclamação no ML.
+const TOPICOS_POS_VENDA = new Set(['claims', 'post_purchase', 'returns', 'claims_actions'])
+
 mlPublicRouter.post('/notificacoes', async (req: Request, res: Response) => {
   res.status(200).send('')          // responde primeiro; grava depois
   const b = (req.body ?? {}) as Record<string, unknown>
   const resource = String(b.resource ?? '')
   const topic = String(b.topic ?? 'items').toLowerCase()
   if (!resource) return
+
+  // Pós-venda: atualiza a pendência imediatamente (fechou no ML → resolve no painel)
+  if (TOPICOS_POS_VENDA.has(topic)) {
+    const claimId = resource.match(/(\d{6,})/)?.[1]
+    if (claimId) {
+      mlAtualizarClaim(claimId, b.user_id != null ? String(b.user_id) : null)
+        .catch((err) => console.error(`[ML notif] claim ${claimId}:`, err instanceof Error ? err.message : err))
+    }
+    return
+  }
+
   if (!TOPICOS_ACEITOS.has(topic)) {
     // descartado de propósito: conta e registra de vez em quando, p/ sabermos o volume
     if (++_notifIgnoradas % 200 === 1) {

@@ -15,7 +15,7 @@ import whatsappRouter from './routes/whatsapp'
 import notificationsRouter from './routes/notifications'
 import pendenciasRouter from './routes/pendencias'
 import mlRouter, { mlPublicRouter } from './routes/ml'
-import { syncMlClaims, mlAtualizarPendentes, mlVarrerMensagens, mlRecuperarNotificacoesPerdidas } from './services/mercadolivre'
+import { syncMlClaims, mlAtualizarPendentes, mlVarrerMensagens, mlRecuperarNotificacoesPerdidas, mlReconciliarClaims } from './services/mercadolivre'
 import { cicloEnviosMl } from './services/mlEnvios'
 import separacaoRouter from './routes/separacao'
 import { iniciarSyncPeriodico as iniciarSyncSeparacao } from './services/separacao/tarefas'
@@ -114,6 +114,15 @@ app.listen(Number(PORT), '0.0.0.0', () => {
     console.log(`[Cron] ML concluído — pendências criadas: ${ml.criadas}${ml.erros.length ? `, erros: ${ml.erros.length}` : ''}`)
   })
   console.log('[Cron] Sync automático agendado a cada 2 horas (Bling + rastreamento)')
+
+  // Reclamações ML: o webhook (/api/ml/notificacoes) atualiza na hora; esta
+  // reconciliação a cada 30 min é a rede de segurança para avisos perdidos.
+  cron.schedule('*/30 * * * *', () => {
+    mlReconciliarClaims().catch(err => console.error('[Cron] Reconciliação claims ML:', err))
+  })
+  setTimeout(() => {
+    mlReconciliarClaims().catch(err => console.error('[Startup] Reconciliação claims ML:', err))
+  }, 60000)
 
   // Mensagens pós-venda ML sem resposta: checagem leve a cada 10 min + varredura
   // completa (30 dias) uma vez ao dia. Na 1ª subida (tabela vazia), varre já.
