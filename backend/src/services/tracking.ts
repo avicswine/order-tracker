@@ -867,6 +867,48 @@ function smMapStatus(control?: string, title?: string): OrderStatus | null {
   return null
 }
 
+interface SmCte {
+  number?: number
+  embark?: string
+  expectedDate?: string    // previsão de entrega retornada pela API São Miguel
+  dtPrevEntrega?: string
+  previsaoEntrega?: string
+  dateandhourdelivery?: string  // data/hora real de entrega (distinta da data de registro no track)
+  tracks?: { title?: string; date?: string; hour?: string; control?: string }[]
+}
+
+function smCteCancelado(cte: SmCte): boolean {
+  const ultimo = cte.tracks?.[0]
+  const t = `${ultimo?.control ?? ''} ${ultimo?.title ?? ''}`.toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+  return t.includes('CANCELAD')
+}
+
+function smCteEntregue(cte: SmCte): boolean {
+  return !!cte.dateandhourdelivery
+    || (cte.tracks ?? []).some((t) => (t.control ?? '') === 'ENTREGUE' || (t.control ?? '') === 'ENTREGA')
+}
+
+// Data do evento mais recente do CT-e — usada para desempatar entre vários
+function smUltimoEventoEm(cte: SmCte): number {
+  const t = cte.tracks?.[0]
+  if (!t?.date) return 0
+  return parseBrDate(`${t.date}${t.hour ? ' ' + t.hour : ''}`.trim())?.getTime() ?? 0
+}
+
+// Escolhe o CT-e que representa a viagem real: descarta os cancelados (a menos que
+// todos estejam), prioriza o que já foi entregue e, por fim, o de evento mais recente.
+function smEscolherCte(lista: SmCte[]): SmCte {
+  const validos = lista.filter((c) => !smCteCancelado(c))
+  const candidatos = validos.length > 0 ? validos : lista
+  if (candidatos.length === 1) return candidatos[0]
+  return candidatos.reduce((melhor, atual) => {
+    const entregueMelhor = smCteEntregue(melhor)
+    const entregueAtual = smCteEntregue(atual)
+    if (entregueAtual !== entregueMelhor) return entregueAtual ? atual : melhor
+    return smUltimoEventoEm(atual) > smUltimoEventoEm(melhor) ? atual : melhor
+  })
+}
+
 export async function trackSaoMiguel(
   senderCnpj: string,
   nfNumber: string,
@@ -914,16 +956,11 @@ export async function trackSaoMiguel(
     return { status: null, lastEvent: `Não localizado (NF ${nf} / CNPJ ${usarCnpj})` }
   }
 
-  // Pega o evento mais recente do primeiro CT-e
-  const cte = data[0] as Record<string, unknown> & {
-    number?: number
-    embark?: string
-    expectedDate?: string    // previsão de entrega retornada pela API São Miguel
-    dtPrevEntrega?: string
-    previsaoEntrega?: string
-    dateandhourdelivery?: string  // data/hora real de entrega (distinta da data de registro no track)
-    tracks?: { title?: string; date?: string; hour?: string; control?: string }[]
-  }
+  // A São Miguel pode devolver VÁRIOS CT-es para a mesma NF — acontece quando ela
+  // cancela o conhecimento e reemite outro. O cancelado costuma vir primeiro, e ler
+  // só ele mostrava "Conhecimento de frete cancelado" enquanto o novo já tinha
+  // entregue. Escolhe o CT-e que de fato representa a viagem.
+  const cte = smEscolherCte(data as SmCte[])
 
   // embark = data de embarque/envio (formato dd/MM/yyyy ou similar)
   const shippedAt = parseBrDate(cte.embark)
