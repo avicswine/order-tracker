@@ -129,7 +129,7 @@ export function PendenciasPage() {
   const canWrite = user?.role === 'ADMIN'
   const qc = useQueryClient()
 
-  const [tab, setTab] = useState<TabKey>('TODAS')
+  const [tab, setTab] = useState<TabKey>('ATIVAS')
   const [tipoFiltro, setTipoFiltro] = useState('')
   const [origemFiltro, setOrigemFiltro] = useState<string[]>([])
   const [search, setSearch] = useState('')
