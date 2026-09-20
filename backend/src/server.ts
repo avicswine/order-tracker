@@ -16,6 +16,7 @@ import notificationsRouter from './routes/notifications'
 import pendenciasRouter from './routes/pendencias'
 import mlRouter, { mlPublicRouter } from './routes/ml'
 import { syncMlClaims, mlAtualizarPendentes, mlVarrerMensagens, mlRecuperarNotificacoesPerdidas, mlReconciliarClaims } from './services/mercadolivre'
+import { reconciliarPendenciasEntregues } from './services/pendencias'
 import { cicloEnviosMl } from './services/mlEnvios'
 import separacaoRouter from './routes/separacao'
 import { iniciarSyncPeriodico as iniciarSyncSeparacao } from './services/separacao/tarefas'
@@ -119,9 +120,11 @@ app.listen(Number(PORT), '0.0.0.0', () => {
   // reconciliação a cada 30 min é a rede de segurança para avisos perdidos.
   cron.schedule('*/30 * * * *', () => {
     mlReconciliarClaims().catch(err => console.error('[Cron] Reconciliação claims ML:', err))
+    reconciliarPendenciasEntregues().catch(err => console.error('[Cron] Pendências entregues:', err))
   })
   setTimeout(() => {
     mlReconciliarClaims().catch(err => console.error('[Startup] Reconciliação claims ML:', err))
+    reconciliarPendenciasEntregues().catch(err => console.error('[Startup] Pendências entregues:', err))
   }, 60000)
 
   // Mensagens pós-venda ML sem resposta: checagem leve a cada 10 min + varredura

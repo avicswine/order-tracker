@@ -60,6 +60,9 @@ export interface Pendencia {
     status: OrderStatus
     lastTracking: string | null
     estimatedDelivery: string | null
+    shippedAt?: string | null
+    deliveredAt?: string | null
+    trackingEvents?: { date: string | null; description: string }[] | null
     carrier: { name: string } | null
   } | null
   notas: PendenciaNota[]

@@ -53,7 +53,8 @@ router.get(
           order: {
             select: {
               id: true, orderNumber: true, status: true, lastTracking: true,
-              estimatedDelivery: true, carrier: { select: { name: true } },
+              estimatedDelivery: true, shippedAt: true, deliveredAt: true,
+              trackingEvents: true, carrier: { select: { name: true } },
             },
           },
           notas: { orderBy: { createdAt: 'desc' } },

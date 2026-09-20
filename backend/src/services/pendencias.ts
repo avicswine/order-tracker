@@ -46,3 +46,34 @@ export async function resolverPendenciasAutoSeEntregue(orderId: string, status: 
   })
   if (count > 0) console.log(`[Pendencias] ${count} pendência(s) de rastreio resolvida(s) — pedido entregue`)
 }
+
+// Rede de segurança: varre as pendências automáticas cujo pedido JÁ consta entregue.
+// A resolução acima só acontece no instante do sync em que o pedido muda de status
+// (e dentro da janela de recência) — se passar batido, a pendência ficaria aberta.
+export async function reconciliarPendenciasEntregues(): Promise<number> {
+  const pendentes = await prisma.pendencia.findMany({
+    where: {
+      origem: PendenciaOrigem.AUTO,
+      tipo: { in: [PendenciaTipo.ATRASO, PendenciaTipo.OCORRENCIA] },
+      status: { not: 'RESOLVIDA' },
+      order: { status: OrderStatus.DELIVERED },
+    },
+    select: { id: true, order: { select: { deliveredAt: true } } },
+  })
+  if (pendentes.length === 0) return 0
+
+  const ids = pendentes.map((p) => p.id)
+  await prisma.pendencia.updateMany({
+    where: { id: { in: ids } },
+    data: { status: 'RESOLVIDA', resolvedAt: new Date() },
+  })
+  await prisma.pendenciaNota.createMany({
+    data: pendentes.map((p) => ({
+      pendenciaId: p.id,
+      texto: `✅ Pedido entregue${p.order?.deliveredAt ? ` em ${p.order.deliveredAt.toLocaleDateString('pt-BR')}` : ''} — resolvida automaticamente`,
+      autor: 'Sistema',
+    })),
+  })
+  console.log(`[Pendencias] ${ids.length} pendência(s) resolvida(s) — pedido já entregue`)
+  return ids.length
+}

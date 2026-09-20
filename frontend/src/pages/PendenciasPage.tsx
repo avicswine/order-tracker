@@ -1004,6 +1004,7 @@ function DetalheModal({ pendencia, canWrite, onClose, onStatus, onResponsavel }:
 }) {
   const qc = useQueryClient()
   const [novaNota, setNovaNota] = useState('')
+  const [rastreioAberto, setRastreioAberto] = useState(false)
   const [notas, setNotas] = useState(pendencia.notas)
 
   const notaMutation = useMutation({
@@ -1041,9 +1042,44 @@ function DetalheModal({ pendencia, canWrite, onClose, onStatus, onResponsavel }:
           {pendencia.order?.carrier && (
             <div className="col-span-2"><span className="text-gray-500">Transportadora:</span> {pendencia.order.carrier.name}</div>
           )}
-          {pendencia.order?.lastTracking && (
-            <div className="col-span-2 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">
-              <b>Rastreio:</b> {pendencia.order.lastTracking}
+          {pendencia.order && (
+            <div className="col-span-2">
+              <div className="flex items-center gap-2 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">
+                <div className="flex-1 min-w-0">
+                  <b>Rastreio:</b> {pendencia.order.lastTracking ?? 'sem movimentação'}
+                  <div className="mt-0.5 text-[11px] text-gray-400">
+                    {pendencia.order.orderNumber}
+                    {pendencia.order.shippedAt && ` · envio ${fmtData(pendencia.order.shippedAt)}`}
+                    {pendencia.order.estimatedDelivery && ` · previsão ${fmtData(pendencia.order.estimatedDelivery)}`}
+                    {pendencia.order.deliveredAt && ` · entregue ${fmtData(pendencia.order.deliveredAt)}`}
+                  </div>
+                </div>
+                <button
+                  className="btn-secondary !py-1 text-xs whitespace-nowrap"
+                  onClick={() => setRastreioAberto((v) => !v)}
+                >
+                  🚚 {rastreioAberto ? 'Ocultar' : 'Rastreio'}
+                </button>
+              </div>
+              {rastreioAberto && (
+                <div className="mt-2 max-h-52 overflow-y-auto rounded-lg border border-gray-200 p-2">
+                  {(pendencia.order.trackingEvents ?? []).length === 0 ? (
+                    <p className="px-1 py-2 text-xs text-gray-400">Nenhum evento de rastreio registrado.</p>
+                  ) : (
+                    <ol className="space-y-1.5">
+                      {(pendencia.order.trackingEvents ?? []).map((e, i) => (
+                        <li key={i} className="flex gap-2 text-xs">
+                          <span className={`mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full ${i === 0 ? 'bg-blue-600' : 'bg-gray-300'}`} />
+                          <div>
+                            <p className={i === 0 ? 'font-medium text-gray-800' : 'text-gray-600'}>{e.description}</p>
+                            {e.date && <p className="text-[10px] text-gray-400">{new Date(e.date).toLocaleString('pt-BR')}</p>}
+                          </div>
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                </div>
+              )}
             </div>
           )}
           {pendencia.descricao && (
