@@ -54,7 +54,11 @@ router.delete('/', async (req: Request, res: Response) => {
 // Reenvia UMA vez por pedido, com a mensagem do ESTADO ATUAL (não o evento velho):
 // quem estava "em trânsito" e já foi entregue recebe "entregue", não um aviso vencido.
 // A deduplicação normal (success:true) evita mandar duas vezes.
-async function pedidosComFalha(dias: number, empresa?: string) {
+// Pedido já entregue não recebe aviso atrasado — a mensagem perdeu a validade.
+// Número sem WhatsApp válido também não entra: falharia de novo (corrigir no Bling).
+const ERRO_NUMERO_INVALIDO = 'não encontrado'
+
+async function pedidosComFalha(dias: number, empresa?: string, incluirEntregues = false) {
   const desde = new Date(Date.now() - dias * 86400000)
   const falhas = await prisma.orderNotification.findMany({
     where: {
@@ -82,7 +86,10 @@ async function pedidosComFalha(dias: number, empresa?: string) {
   if (pendentesPorPedido.size === 0) return []
 
   const orders = await prisma.order.findMany({
-    where: { id: { in: [...pendentesPorPedido.keys()] } },
+    where: {
+      id: { in: [...pendentesPorPedido.keys()] },
+      ...(incluirEntregues ? {} : { status: { not: 'DELIVERED' } }),
+    },
     select: {
       id: true, orderNumber: true, nfNumber: true, customerName: true,
       customerEmail: true, customerPhone: true, senderCnpj: true,
@@ -90,12 +97,15 @@ async function pedidosComFalha(dias: number, empresa?: string) {
       linkDanfe: true, nfIssuedAt: true,
     },
   })
-  return orders.map((o) => ({ order: o, falha: pendentesPorPedido.get(o.id)! }))
+  return orders
+    .map((o) => ({ order: o, falha: pendentesPorPedido.get(o.id)! }))
+    .filter(({ falha }) => !(falha.error ?? '').includes(ERRO_NUMERO_INVALIDO))
 }
 
 router.get('/falhas', async (req: Request, res: Response) => {
   const dias = Math.min(Math.max(Number(req.query.dias) || 30, 1), 180)
-  const lista = await pedidosComFalha(dias, req.query.empresa as string | undefined)
+  const lista = await pedidosComFalha(dias, req.query.empresa as string | undefined,
+    req.query.incluirEntregues === 'true')
   res.json({
     total: lista.length,
     pedidos: lista.map(({ order, falha }) => ({
@@ -112,9 +122,9 @@ router.get('/falhas', async (req: Request, res: Response) => {
 })
 
 router.post('/falhas/reenviar', async (req: Request, res: Response) => {
-  const body = req.body as { dias?: number; empresa?: string }
+  const body = req.body as { dias?: number; empresa?: string; incluirEntregues?: boolean }
   const dias = Math.min(Math.max(Number(body.dias) || 30, 1), 180)
-  const lista = await pedidosComFalha(dias, body.empresa)
+  const lista = await pedidosComFalha(dias, body.empresa, body.incluirEntregues === true)
 
   res.json({ message: `Reenviando para ${lista.length} pedido(s)...`, total: lista.length })
 
