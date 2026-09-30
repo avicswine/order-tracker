@@ -5,6 +5,11 @@ import { sendEmail } from './emailer'
 
 const PORTAL_URL = process.env.PORTAL_URL ?? 'https://order-tracker-production-4189.up.railway.app/portal/'
 
+// Atraso só vira aviso a partir daqui — atrasos curtos costumam se resolver sozinhos
+export const ATRASO_MIN_DIAS = 3
+// NF antiga não gera aviso retroativo (rastreio pode estar desatualizado)
+export const CARRIER_NOTIFY_MAX_AGE_DAYS = 60
+
 // Insere " - " entre o código do evento (CAIXA ALTA) e a descrição
 // Ex: "SAIDA DE UNIDADESaida da unidade X" → "SAIDA DE UNIDADE - Saida da unidade X"
 export function formatTrackingText(text: string): string {
@@ -90,6 +95,15 @@ function isMobilePhone(digits: string): boolean {
   if (local.length === 11) return true  // DDD + 9 + 8 dígitos (formato novo)
   if (local.length === 10) return true  // DDD + 8 dígitos (formato antigo sem 9)
   return false
+}
+
+// Telefone do cliente em formato legível para quem vai ligar
+function formatPhoneBr(raw: string | null | undefined): string {
+  const d = (raw ?? '').replace(/\D/g, '')
+  const local = d.startsWith('55') && d.length > 11 ? d.slice(2) : d
+  if (local.length === 11) return `(${local.slice(0, 2)}) ${local.slice(2, 7)}-${local.slice(7)}`
+  if (local.length === 10) return `(${local.slice(0, 2)}) ${local.slice(2, 6)}-${local.slice(6)}`
+  return local || 'não informado no cadastro'
 }
 
 // Garante o formato 55DDDNUMERO para o WhatsApp
@@ -493,6 +507,7 @@ export async function notifyCarrier(order: {
   recipientCnpj: string | null
   estimatedDelivery: Date | null
   lastTracking: string | null
+  customerPhone?: string | null   // telefone do cliente vindo do Bling (contato da NF)
   carrier: { name: string; whatsappResponsavel: string | null } | null
 }, tipo: CarrierAviso): Promise<{ sent: boolean; reason: string }> {
   const numero = order.carrier?.whatsappResponsavel?.replace(/\D/g, '')
@@ -525,20 +540,61 @@ export async function notifyCarrier(order: {
       + `Cliente: ${order.customerName}\n`
       + (previsao ? `Previsão era ${previsao}${dias > 0 ? ` (${dias} dia${dias > 1 ? 's' : ''} de atraso)` : ''}\n` : '')
       + (evento ? `Último evento: ${evento}\n` : '')
-      + `\nPor favor, verificar o andamento da entrega.`
+      + `\nPor favor, verificar o andamento da entrega.\n`
+      + `\n📞 *Contato do cliente:* ${formatPhoneBr(order.customerPhone)}`
   }
 
   const wppNumber = toWhatsAppNumber(numero)
   const result = await sendMessage('avic', wppNumber, msg) // sempre pela instância AVIC
-  await prisma.orderNotification.create({
-    data: {
+  // upsert (não create): com create, uma falha anterior deixava o registro preso em
+  // success:false — o dedup nunca fechava e o aviso repetia a cada sync, para sempre.
+  await prisma.orderNotification.upsert({
+    where: { orderId_eventHash: { orderId: order.id, eventHash } },
+    update: {
+      channel: `CARRIER_${tipo}`, recipient: wppNumber, eventText: order.lastTracking ?? null,
+      success: result.ok, error: result.ok ? null : (result.error ?? null), sentAt: new Date(),
+    },
+    create: {
       orderId: order.id, eventHash, channel: `CARRIER_${tipo}`,
       recipient: wppNumber, eventText: order.lastTracking ?? null,
       success: result.ok, error: result.ok ? null : (result.error ?? null),
     },
-  }).catch(() => { /* @@unique em paralelo — ignora */ })
+  }).catch(() => { /* conflito em paralelo — ignora */ })
 
   if (result.ok) console.log(`[Notifier] 📨 Transportadora ${order.carrier?.name} avisada (${tipo}) → ${order.orderNumber}`)
   else console.warn(`[Notifier] ⚠️ Falha ao avisar transportadora (${tipo}) ${order.orderNumber}: ${result.error}`)
   return result.ok ? { sent: true, reason: 'ok' } : { sent: false, reason: result.error ?? 'falha-envio' }
+}
+
+// Rodada diária de avisos de ATRASO às transportadoras (cron 08:30).
+// Antes saía junto do sync de rastreio (a cada 2h), o que enchia o WhatsApp do
+// responsável. Ocorrência continua imediata — ali a pressa importa.
+export async function notificarAtrasosTransportadora(): Promise<{ enviados: number; pulados: number }> {
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0)
+  const limiteAtraso = new Date(hoje.getTime() - ATRASO_MIN_DIAS * 86400000)
+  const nfMinima = new Date(Date.now() - CARRIER_NOTIFY_MAX_AGE_DAYS * 86400000)
+
+  const atrasados = await prisma.order.findMany({
+    where: {
+      status: { in: ['PENDING', 'IN_TRANSIT'] },
+      estimatedDelivery: { not: null, lte: limiteAtraso },
+      nfIssuedAt: { gte: nfMinima },
+      carrier: { whatsappResponsavel: { not: null } },
+    },
+    select: {
+      id: true, orderNumber: true, nfNumber: true, customerName: true,
+      senderCnpj: true, recipientCnpj: true, customerPhone: true,
+      estimatedDelivery: true, lastTracking: true,
+      carrier: { select: { name: true, whatsappResponsavel: true } },
+    },
+  })
+
+  let enviados = 0, pulados = 0
+  for (const order of atrasados) {
+    const r = await notifyCarrier(order, 'ATRASO')
+    if (r.sent) { enviados++; await new Promise((res) => setTimeout(res, 800)) }
+    else pulados++
+  }
+  console.log(`[Notifier] Rodada diária de atrasos: ${enviados} aviso(s) enviado(s), ${pulados} já avisado(s)/sem número de ${atrasados.length} pedido(s) atrasado(s)`)
+  return { enviados, pulados }
 }

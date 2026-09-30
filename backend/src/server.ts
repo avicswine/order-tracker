@@ -17,6 +17,7 @@ import pendenciasRouter from './routes/pendencias'
 import mlRouter, { mlPublicRouter } from './routes/ml'
 import { syncMlClaims, mlAtualizarPendentes, mlVarrerMensagens, mlRecuperarNotificacoesPerdidas, mlReconciliarClaims } from './services/mercadolivre'
 import { reconciliarPendenciasEntregues } from './services/pendencias'
+import { notificarAtrasosTransportadora } from './services/notifier'
 import { cicloEnviosMl } from './services/mlEnvios'
 import separacaoRouter from './routes/separacao'
 import { iniciarSyncPeriodico as iniciarSyncSeparacao } from './services/separacao/tarefas'
@@ -115,6 +116,12 @@ app.listen(Number(PORT), '0.0.0.0', () => {
     console.log(`[Cron] ML concluído — pendências criadas: ${ml.criadas}${ml.erros.length ? `, erros: ${ml.erros.length}` : ''}`)
   })
   console.log('[Cron] Sync automático agendado a cada 2 horas (Bling + rastreamento)')
+
+  // Avisos de ATRASO às transportadoras: uma rodada por dia, 08:30 (antes saíam
+  // junto do sync de rastreio, a cada 2h, enchendo o WhatsApp do responsável).
+  cron.schedule('30 8 * * *', () => {
+    notificarAtrasosTransportadora().catch(err => console.error('[Cron] Avisos de atraso:', err))
+  }, { timezone: 'America/Sao_Paulo' })
 
   // Reclamações ML: o webhook (/api/ml/notificacoes) atualiza na hora; esta
   // reconciliação a cada 30 min é a rede de segurança para avisos perdidos.

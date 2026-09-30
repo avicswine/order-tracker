@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express'
 import { prisma } from '../lib/prisma'
 import { trackSSW, trackSenior, trackWithPuppeteer, trackSaoMiguel, trackAtualCargas, trackRodonaves, trackBraspress, trackModular } from '../services/tracking'
 import { OrderStatus, TrackingSystem, Prisma } from '@prisma/client'
-import { notifyOrderUpdate, notifyCarrier } from '../services/notifier'
+import { notifyOrderUpdate, notifyCarrier, ATRASO_MIN_DIAS, CARRIER_NOTIFY_MAX_AGE_DAYS } from '../services/notifier'
 import { criarPendenciaAuto, resolverPendenciasAutoSeEntregue } from '../services/pendencias'
 
 const router = Router()
@@ -11,14 +11,7 @@ type ProgressCallback = (data: { current: number; total: number; orderNumber: st
 
 const TRACKING_CONCURRENCY = 5
 
-// Aviso automático à transportadora só vale para NFs recentes.
-// NFs muito antigas podem estar com status de rastreio desatualizado (ex: já entregues
-// mas ainda marcadas como atrasadas), então não devem gerar aviso retroativo.
-const CARRIER_NOTIFY_MAX_AGE_DAYS = 60
-
-// Atraso só gera aviso (WhatsApp à transportadora e pendência de pós-venda) com
-// 3+ dias — atrasos curtos costumam se resolver sozinhos
-const ATRASO_MIN_DIAS = 3
+// Constantes de atraso/recência vivem no notifier (usadas também pela rodada diária)
 
 export async function runTrackingSync(onProgress?: ProgressCallback, systems?: TrackingSystem[]): Promise<{ atualizados: number; erros: number; total: number }> {
   const orders = await prisma.order.findMany({
@@ -187,31 +180,22 @@ export async function runTrackingSync(onProgress?: ProgressCallback, systems?: T
         }).catch(err => console.error(`[Notifier] Erro ao notificar ${order.orderNumber}:`, err))
       }
 
-      // Avisa o responsável da transportadora em ocorrência ou atraso (fire-and-forget)
+      // Avisa o responsável da transportadora em OCORRÊNCIA (fire-and-forget).
+      // Atraso NÃO sai daqui: vira uma rodada diária às 08:30
+      // (notificarAtrasosTransportadora) — a cada sync enchia o WhatsApp do responsável.
       // Só para NFs recentes (ver CARRIER_NOTIFY_MAX_AGE_DAYS) — evita disparo retroativo
       // em massa de notas antigas com status possivelmente desatualizado.
       const emissao = order.nfIssuedAt ? new Date(order.nfIssuedAt).getTime() : 0
       const nfRecente = emissao > 0 && (Date.now() - emissao) <= CARRIER_NOTIFY_MAX_AGE_DAYS * 86400000
-      if (!semDados && carrier.whatsappResponsavel && nfRecente) {
+      if (!semDados && carrier.whatsappResponsavel && nfRecente && result.hasOccurrence) {
         const estimatedDelivery = (updates.estimatedDelivery as Date | undefined) ?? order.estimatedDelivery
-        const statusFinal = (updates.status as OrderStatus | undefined) ?? order.status
-        const entregueOuCancelado = statusFinal === OrderStatus.DELIVERED || statusFinal === OrderStatus.CANCELLED
-        const hoje = new Date(); hoje.setHours(0, 0, 0, 0)
-        const diasAtraso = estimatedDelivery
-          ? Math.floor((hoje.getTime() - new Date(estimatedDelivery).setHours(0, 0, 0, 0)) / 86400000)
-          : 0
-        const atrasado = !entregueOuCancelado && diasAtraso >= ATRASO_MIN_DIAS
-        const carrierMin = { name: carrier.name, whatsappResponsavel: carrier.whatsappResponsavel }
-        const base = {
+        notifyCarrier({
           id: order.id, orderNumber: order.orderNumber, nfNumber: order.nfNumber,
           customerName: order.customerName, senderCnpj: order.senderCnpj, recipientCnpj: order.recipientCnpj,
-          estimatedDelivery: estimatedDelivery ?? null, lastTracking: lastEvent, carrier: carrierMin,
-        }
-        if (result.hasOccurrence) {
-          notifyCarrier(base, 'OCORRENCIA').catch(err => console.error(`[Notifier] Erro aviso transportadora (ocorrência) ${order.orderNumber}:`, err))
-        } else if (atrasado) {
-          notifyCarrier(base, 'ATRASO').catch(err => console.error(`[Notifier] Erro aviso transportadora (atraso) ${order.orderNumber}:`, err))
-        }
+          customerPhone: order.customerPhone,
+          estimatedDelivery: estimatedDelivery ?? null, lastTracking: lastEvent,
+          carrier: { name: carrier.name, whatsappResponsavel: carrier.whatsappResponsavel },
+        }, 'OCORRENCIA').catch(err => console.error(`[Notifier] Erro aviso transportadora (ocorrência) ${order.orderNumber}:`, err))
       }
 
       // Pendências de pós-venda automáticas (mesma janela de recência do aviso à transportadora):
@@ -296,6 +280,7 @@ router.post('/notify-carrier', async (req: Request, res: Response) => {
     const r = await notifyCarrier({
       id: order.id, orderNumber: order.orderNumber, nfNumber: order.nfNumber,
       customerName: order.customerName, senderCnpj: order.senderCnpj, recipientCnpj: order.recipientCnpj,
+      customerPhone: order.customerPhone,
       estimatedDelivery: order.estimatedDelivery, lastTracking: order.lastTracking,
       carrier: { name: order.carrier.name, whatsappResponsavel: order.carrier.whatsappResponsavel },
     }, tipo)
