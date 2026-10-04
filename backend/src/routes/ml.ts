@@ -183,7 +183,7 @@ export const mlPublicRouter = Router()
 // Para habilitar um tópico novo, acrescente aqui (ou na env ML_NOTIF_TOPICS).
 const TOPICOS_ACEITOS = new Set(
   (process.env.ML_NOTIF_TOPICS?.trim() ||
-   'items,items_prices,price_suggestion,prices,promotions,seller_promotions')
+   'items,items_prices,price_suggestion,prices,promotions,seller_promotions,messages')
     .split(',').map((t) => t.trim().toLowerCase()).filter(Boolean),
 )
 let _notifIgnoradas = 0
