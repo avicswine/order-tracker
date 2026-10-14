@@ -55,6 +55,8 @@ model Order {
   mlSemEnvio            Boolean    @default(false) // venda "a combinar" (sem envio no ML):
                                    // a entrega é informada pelo feedback do pedido (fulfilled)
   mlShippedNotifiedAt   DateTime?  // quando avisamos "a caminho" (idempotência)
+  mlOutForDeliveryAt    DateTime?  // quando avisamos "saiu para entrega" (substatus out_for_delivery)
+  mlPromessaEntrega     DateTime?  // prazo prometido pelo ML ao comprador (métrica de atraso do ML)
   mlDeliveredNotifiedAt DateTime?  // quando avisamos "entregue" (irreversível no ML)
   mlEnvioErro           String?    // último erro de notificação, p/ diagnóstico
   mlVinculoTentadoAt    DateTime?  // última tentativa de casar com uma venda ML

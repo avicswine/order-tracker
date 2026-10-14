@@ -116,6 +116,7 @@ router.get('/envios/pendentes', async (_req: Request, res: Response) => {
       shippedAt: true, deliveredAt: true, lastTracking: true, mlCompany: true,
       mlOrderId: true, mlShipmentId: true, mlShippedNotifiedAt: true,
       mlDeliveredNotifiedAt: true, mlEnvioErro: true,
+      estimatedDelivery: true, mlPromessaEntrega: true, mlOutForDeliveryAt: true,
     },
     orderBy: { shippedAt: 'desc' },
     take: 100,

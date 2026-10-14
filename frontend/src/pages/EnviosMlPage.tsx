@@ -27,6 +27,35 @@ function Selo({ texto, cor }: { texto: string; cor: string }) {
   return <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium ${cor}`}>{texto}</span>
 }
 
+/** Dia (sem hora) — o ML mede atraso por data, não por horário. */
+function soDia(s: string) {
+  const d = new Date(s)
+  return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())
+}
+
+/**
+ * Prazo prometido pelo ML ao comprador. É por ele que o marketplace conta atraso —
+ * e ele costuma ser mais curto que a previsão da transportadora, por isso uma entrega
+ * "no prazo" para nós aparece como atrasada no ML.
+ */
+function PrazoMl({ e }: { e: MlEnvio }) {
+  if (!e.mlPromessaEntrega) return <span className="text-gray-300">—</span>
+  const prazo = soDia(e.mlPromessaEntrega)
+  const ref = e.status === 'DELIVERED' && e.deliveredAt ? soDia(e.deliveredAt) : soDia(new Date().toISOString())
+  const dias = Math.round((ref - prazo) / 86400000)
+  const entregue = e.status === 'DELIVERED'
+
+  const cor = dias > 0
+    ? (entregue ? 'bg-red-50 text-red-600' : 'bg-red-100 text-red-700')
+    : dias === 0 ? 'bg-amber-50 text-amber-700' : 'bg-gray-50 text-gray-500'
+  const texto = dias > 0
+    ? `${data(e.mlPromessaEntrega)} · ${entregue ? `atrasou ${dias}d` : `venceu há ${dias}d`}`
+    : dias === 0 ? `${data(e.mlPromessaEntrega)} · vence hoje`
+    : `${data(e.mlPromessaEntrega)} · faltam ${-dias}d`
+
+  return <span title="Prazo prometido pelo ML ao comprador"><Selo texto={texto} cor={cor} /></span>
+}
+
 export function EnviosMlPage() {
   const qc = useQueryClient()
   const [resultado, setResultado] = useState<MlEnviosCiclo | null>(null)
@@ -182,6 +211,7 @@ export function EnviosMlPage() {
                   <th className="px-3 py-2 text-left font-medium text-gray-500">NF</th>
                   <th className="px-3 py-2 text-left font-medium text-gray-500">Cliente</th>
                   <th className="px-3 py-2 text-left font-medium text-gray-500">Entrega</th>
+                  <th className="px-3 py-2 text-left font-medium text-gray-500" title="Prazo que o ML promete ao comprador — é por ele que o ML mede atraso">Prazo ML</th>
                   <th className="px-3 py-2 text-left font-medium text-gray-500">Avisado “a caminho”</th>
                   <th className="px-3 py-2 text-left font-medium text-gray-500">Avisado “entregue”</th>
                   <th className="px-3 py-2 text-left font-medium text-gray-500 w-full">Situação</th>
@@ -212,6 +242,7 @@ export function EnviosMlPage() {
                             ? <Selo texto={`em trânsito ${data(e.shippedAt)}`} cor="bg-blue-50 text-blue-700" />
                             : <Selo texto={e.status === 'PENDING' ? 'aguardando CT-e' : 'cancelado'} cor="bg-gray-100 text-gray-500" />}
                       </td>
+                      <td className="px-3 py-2 whitespace-nowrap"><PrazoMl e={e} /></td>
                       <td className="px-3 py-2 whitespace-nowrap text-gray-500">{dataHora(e.mlShippedNotifiedAt)}</td>
                       <td className="px-3 py-2 whitespace-nowrap text-gray-500">{dataHora(e.mlDeliveredNotifiedAt)}</td>
                       <td className="px-3 py-2">

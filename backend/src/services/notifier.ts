@@ -29,7 +29,7 @@ function isDeliveryEvent(text: string): boolean {
 const OUT_FOR_DELIVERY_KEYWORDS = ['SAIDA PARA ENTREGA', 'SAIU PARA ENTREGA', 'EM ROTA DE ENTREGA', 'SAIU PARA ENTREGAR']
 
 // Verifica se a carga saiu para entrega ao destinatário (último trecho)
-function isOutForDeliveryEvent(text: string): boolean {
+export function isOutForDeliveryEvent(text: string): boolean {
   const t = text.toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
   return OUT_FOR_DELIVERY_KEYWORDS.some((kw) => t.includes(kw))
 }

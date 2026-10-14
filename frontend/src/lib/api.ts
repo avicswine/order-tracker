@@ -114,6 +114,9 @@ export interface MlEnvio {
   mlShippedNotifiedAt: string | null
   mlDeliveredNotifiedAt: string | null
   mlEnvioErro: string | null
+  estimatedDelivery: string | null     // previsão da transportadora
+  mlPromessaEntrega: string | null     // prazo prometido pelo ML ao comprador
+  mlOutForDeliveryAt: string | null
 }
 
 export interface MlEnviosResponse {

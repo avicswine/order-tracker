@@ -14,6 +14,7 @@ import { OrderStatus } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { ML_COMPANIES, mlAuth, type MlCompany, type MlAuth } from './mercadolivre'
 import { numeroPedidoLojaDaNf } from '../routes/bling'
+import { isOutForDeliveryEvent } from './notifier'
 
 const ML_API = 'https://api.mercadolibre.com'
 const SERVICE_ID_BRASIL = 11        // service_id de ME1 no MLB (tabela oficial por país)
@@ -57,6 +58,16 @@ interface ShipmentInfo {
   status: string
   substatus: string | null
   dateCreated: Date | null
+  /** Prazo que o ML promete ao comprador — base da métrica de atraso do marketplace. */
+  promessaEntrega: Date | null
+}
+
+function lerPromessa(data: Record<string, unknown>): Date | null {
+  const opt = data.shipping_option as { estimated_delivery_time?: { date?: string } } | undefined
+  const raw = opt?.estimated_delivery_time?.date
+  if (!raw) return null
+  const d = new Date(raw)
+  return isNaN(d.getTime()) ? null : d
 }
 
 /** Shipment do pedido ML (null quando o pedido não tem envio). */
@@ -71,6 +82,7 @@ async function lerShipment(auth: MlAuth, orderId: string): Promise<ShipmentInfo 
       status: String(data.status ?? ''),
       substatus: data.substatus ?? null,
       dateCreated: dc && !isNaN(dc.getTime()) ? dc : null,
+      promessaEntrega: lerPromessa(data),
     }
   } catch {
     return null
@@ -82,12 +94,14 @@ async function lerShipmentPorId(auth: MlAuth, shipmentId: string): Promise<Shipm
   try {
     const { data } = await axios.get(`${ML_API}/shipments/${shipmentId}`, auth.H)
     if (!data?.id) return null
+    const dc = data.date_created ? new Date(data.date_created) : null
     return {
       id: String(data.id),
       mode: String(data.mode ?? ''),
       status: String(data.status ?? ''),
       substatus: data.substatus ?? null,
-      dateCreated: null,
+      dateCreated: dc && !isNaN(dc.getTime()) ? dc : null,
+      promessaEntrega: lerPromessa(data),
     }
   } catch {
     return null
@@ -130,9 +144,14 @@ export async function notificarStatusMl(
   } catch (err) {
     const resp = axios.isAxiosError(err) ? err.response : undefined
     const code = (resp?.data as { error_code?: string } | undefined)?.error_code
-    // data anterior à criação do envio: o ML recusa — repete com a data de agora
+    // Data anterior à criação do envio: o ML recusa. Repetir com a data de HOJE
+    // carimbava um atraso que não existiu (foi o que inflou as vendas do backfill:
+    // entrega de 26/08 registrada como 12/09). Usa a criação do envio — a data mais
+    // antiga que o ML aceita, logo a mais próxima da realidade.
     if (code === 'event_date_before_shipment_creation_date') {
-      await enviar(new Date())
+      const info = await lerShipmentPorId(auth, shipmentId)
+      const minima = info?.dateCreated ? new Date(info.dateCreated.getTime() + 60_000) : new Date()
+      await enviar(minima)
       return
     }
     const msg = (resp?.data as { message?: string } | undefined)?.message
@@ -242,7 +261,10 @@ export async function vincularVendasMe1(dias = 60): Promise<{ vinculados: number
     me1++
     await prisma.order.update({
       where: { id: o.id },
-      data: { mlCompany: company, mlOrderId: orderIdMl, mlShipmentId: shipment.id },
+      data: {
+        mlCompany: company, mlOrderId: orderIdMl, mlShipmentId: shipment.id,
+        mlPromessaEntrega: shipment.promessaEntrega,
+      },
     })
     vinculados++
     await dorme(200)
@@ -254,7 +276,7 @@ export interface ResultadoEnvio {
   orderNumber: string
   nfNumber: string | null
   mlShipmentId: string
-  acao: 'shipped' | 'delivered' | 'shipped+delivered'
+  acao: 'shipped' | 'delivered' | 'shipped+delivered' | 'out_for_delivery'
   ok: boolean
   erro?: string
 }
@@ -278,15 +300,17 @@ export async function sincronizarEnviosMl(
           OR: [
             { status: OrderStatus.IN_TRANSIT, mlShippedNotifiedAt: null, lastTracking: { not: null } },
             { status: OrderStatus.DELIVERED, mlDeliveredNotifiedAt: null },
+            // em trânsito, já avisado "a caminho", mas ainda sem o "saiu para entrega"
+            { status: OrderStatus.IN_TRANSIT, mlOutForDeliveryAt: null, lastTracking: { not: null } },
           ],
         },
       ],
     },
     select: {
       id: true, orderNumber: true, nfNumber: true, status: true,
-      shippedAt: true, deliveredAt: true, lastTracking: true,
+      shippedAt: true, deliveredAt: true, lastTracking: true, lastTrackingAt: true,
       mlCompany: true, mlShipmentId: true, mlShippedNotifiedAt: true,
-      mlSemEnvio: true, mlOrderId: true,
+      mlOutForDeliveryAt: true, mlPromessaEntrega: true, mlSemEnvio: true, mlOrderId: true,
     },
     orderBy: { shippedAt: 'asc' },
     take: opts.limite ?? 40,
@@ -322,7 +346,12 @@ export async function sincronizarEnviosMl(
     }
 
     let precisaShipped = !o.mlShippedNotifiedAt
-    let precisaDelivered = o.status === OrderStatus.DELIVERED
+    const precisaDelivered = o.status === OrderStatus.DELIVERED
+    // "saiu para entrega": substatus de shipped — o comprador passa a ver "chega hoje".
+    // Só vale enquanto não entregou (delivered é finalizador e vem logo atrás).
+    let precisaOutForDelivery = !precisaDelivered
+      && !o.mlOutForDeliveryAt
+      && isOutForDeliveryEvent(o.lastTracking ?? '')
 
     // estado REAL no ML: evita repetir um aviso que já está lá (o comprador receberia
     // notificação duplicada) e respeita o que foi avisado à mão pelo painel
@@ -330,6 +359,10 @@ export async function sincronizarEnviosMl(
       const auth = await mlAuth(company)
       const atual = auth ? await lerShipmentPorId(auth, o.mlShipmentId!) : null
       if (atual) {
+        // mantém a promessa do ML em dia (o prazo pode ser estendido pelo próprio ML)
+        if (atual.promessaEntrega && atual.promessaEntrega.getTime() !== o.mlPromessaEntrega?.getTime()) {
+          await prisma.order.update({ where: { id: o.id }, data: { mlPromessaEntrega: atual.promessaEntrega } })
+        }
         if (atual.status === 'delivered' || atual.status === 'not_delivered') {
           await prisma.order.update({
             where: { id: o.id },
@@ -341,13 +374,20 @@ export async function sincronizarEnviosMl(
           precisaShipped = false   // já consta "a caminho" no ML
           await prisma.order.update({ where: { id: o.id }, data: { mlShippedNotifiedAt: new Date() } })
         }
+        // o ML já está com o substatus — não repete (pode ter vindo do painel)
+        if (atual.substatus === 'out_for_delivery' && precisaOutForDelivery) {
+          precisaOutForDelivery = false
+          await prisma.order.update({ where: { id: o.id }, data: { mlOutForDeliveryAt: new Date() } })
+        }
       }
-      if (!precisaShipped && !precisaDelivered) continue
+      if (!precisaShipped && !precisaDelivered && !precisaOutForDelivery) continue
     }
 
     const acao: ResultadoEnvio['acao'] = precisaShipped && precisaDelivered
       ? 'shipped+delivered'
-      : precisaDelivered ? 'delivered' : 'shipped'
+      : precisaDelivered ? 'delivered'
+      : precisaShipped ? 'shipped'
+      : 'out_for_delivery'
 
     if (dryRun) {
       resultados.push({ orderNumber: o.orderNumber, nfNumber: o.nfNumber, mlShipmentId: o.mlShipmentId!, acao, ok: true })
@@ -367,7 +407,21 @@ export async function sincronizarEnviosMl(
           where: { id: o.id },
           data: { mlShippedNotifiedAt: new Date(), mlEnvioErro: null },
         })
-        if (precisaDelivered) await dorme(1500)
+        if (precisaDelivered || precisaOutForDelivery) await dorme(1500)
+      }
+      // "saiu para entrega" só depois do "a caminho" — a doc exige a transição inicial
+      // registrada, senão o ML descarta o substatus.
+      if (precisaOutForDelivery) {
+        await notificarStatusMl(company, o.mlShipmentId!, 'shipped', {
+          date: o.lastTrackingAt,
+          substatus: 'out_for_delivery',
+          comment: o.lastTracking ?? undefined,
+        })
+        await prisma.order.update({
+          where: { id: o.id },
+          data: { mlOutForDeliveryAt: new Date(), mlEnvioErro: null },
+        })
+        console.log(`[ME1] ${o.orderNumber} → saiu para entrega informado ao ML`)
       }
       if (precisaDelivered) {
         await notificarStatusMl(company, o.mlShipmentId!, 'delivered', {
