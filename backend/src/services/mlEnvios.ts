@@ -13,7 +13,7 @@ import axios from 'axios'
 import { OrderStatus } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { ML_COMPANIES, mlAuth, type MlCompany, type MlAuth } from './mercadolivre'
-import { consultarNumeroPedidoLoja } from '../routes/bling'
+import { consultarNumeroPedidoLoja, buscarNfsPorNumerosLoja } from '../routes/bling'
 import { isOutForDeliveryEvent } from './notifier'
 
 const ML_API = 'https://api.mercadolibre.com'
@@ -190,6 +190,97 @@ export async function marcarEntregaCombinada(company: MlCompany, orderId: string
     if (resp?.status === 400 && /already|exist/i.test(msg ?? '')) return
     throw new Error(msg ? `${resp?.status}: ${msg}` : (err as Error).message)
   }
+}
+
+/**
+ * Vínculo pelo lado do ML: lista as vendas recentes, fica só com as ME1 e casa com a NF
+ * em LOTE (buscarNfsPorNumerosLoja).
+ *
+ * É o caminho barato: ~15 chamadas ao Bling para a janela inteira, contra 2 por pedido do
+ * caminho antigo — que, com o 429 do Bling, descartava venda ME1 boa como "não é do ML" e
+ * deixava o cliente sem ver o despacho.
+ */
+export async function revisarMe1PeloMl(dias = 20): Promise<{ vinculados: number; me1: number }> {
+  let vinculados = 0
+  let me1total = 0
+
+  for (const company of ML_COMPANIES) {
+    const auth = await mlAuth(company)
+    if (!auth) continue
+
+    const from = new Date(Date.now() - dias * 86400_000).toISOString()
+    const vendas: { id: string; pack: string | null; ship: string | null }[] = []
+    for (let off = 0; off < 500; off += 50) {
+      try {
+        const { data } = await axios.get(`${ML_API}/orders/search`, {
+          ...auth.H,
+          params: { seller: auth.userId, sort: 'date_desc', limit: 50, offset: off, 'order.date_created.from': from },
+        })
+        const rs = (data?.results ?? []) as { id: unknown; pack_id?: unknown; shipping?: { id?: unknown } }[]
+        for (const o of rs) {
+          vendas.push({
+            id: String(o.id),
+            pack: o.pack_id ? String(o.pack_id) : null,
+            ship: o.shipping?.id ? String(o.shipping.id) : null,
+          })
+        }
+        if (rs.length < 50) break
+      } catch { break }
+      await dorme(120)
+    }
+    if (vendas.length === 0) continue
+
+    // já vinculados não precisam de nova consulta de shipment
+    const conhecidos = new Set(
+      (await prisma.order.findMany({
+        where: { mlShipmentId: { in: vendas.map((v) => v.ship).filter(Boolean) as string[] } },
+        select: { mlShipmentId: true },
+      })).map((o) => o.mlShipmentId!),
+    )
+
+    const me1: { ship: string; id: string; pack: string | null; promessa: Date | null }[] = []
+    for (const v of vendas) {
+      if (!v.ship || conhecidos.has(v.ship)) continue
+      try {
+        const { data } = await axios.get(`${ML_API}/shipments/${v.ship}`, auth.H)
+        if (data?.mode === 'me1') {
+          me1.push({ ship: v.ship, id: v.id, pack: v.pack, promessa: lerPromessa(data) })
+        }
+      } catch { /* envio inacessível — tenta no próximo ciclo */ }
+      await dorme(110)
+    }
+    me1total += me1.length
+    if (me1.length === 0) continue
+
+    const alvos: string[] = []
+    for (const m of me1) { alvos.push(m.id); if (m.pack) alvos.push(m.pack) }
+    const nfPorLoja = await buscarNfsPorNumerosLoja(COMPANY_BLING_KEY[company], alvos, dias + 10)
+
+    for (const m of me1) {
+      const nf = nfPorLoja.get(m.id) ?? (m.pack ? nfPorLoja.get(m.pack) : undefined)
+      if (!nf) continue   // NF ainda não emitida/importada — próxima rodada pega
+      const order = await prisma.order.findFirst({
+        where: {
+          nfNumber: { in: [nf, String(parseInt(nf, 10)), nf.padStart(6, '0')] },
+          senderCnpj: { in: cnpjVariantes(company) },
+          mlShipmentId: null,
+        },
+        select: { id: true, orderNumber: true },
+      })
+      if (!order) continue
+      await prisma.order.update({
+        where: { id: order.id },
+        data: {
+          mlCompany: company, mlOrderId: m.id, mlShipmentId: m.ship,
+          mlPromessaEntrega: m.promessa, mlSemEnvio: false,
+        },
+      })
+      vinculados++
+      console.log(`[ME1] ${order.orderNumber} vinculado à venda ${m.id} (shipment ${m.ship})`)
+    }
+  }
+
+  return { vinculados, me1: me1total }
 }
 
 /**
@@ -454,7 +545,15 @@ export async function sincronizarEnviosMl(
 
 /** Ciclo completo usado pelo cron: casa vendas novas e notifica o que estiver pendente. */
 export async function cicloEnviosMl(dryRun = false) {
-  const vinculo = await vincularVendasMe1()
+  // 1) caminho barato (lado do ML) — pega o que chegou desde a última rodada
+  const pelaApi = await revisarMe1PeloMl()
+  // 2) rede de segurança pelo lado dos pedidos: cobre venda mais antiga que a janela
+  //    do passo 1 e NF que só ganhou o pedido de loja depois
+  const porPedido = await vincularVendasMe1()
   const envio = await sincronizarEnviosMl({ dryRun })
-  return { ...vinculo, ...envio }
+  return {
+    vinculados: pelaApi.vinculados + porPedido.vinculados,
+    me1: pelaApi.me1 + porPedido.me1,
+    ...envio,
+  }
 }
