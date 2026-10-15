@@ -13,7 +13,7 @@ import axios from 'axios'
 import { OrderStatus } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { ML_COMPANIES, mlAuth, type MlCompany, type MlAuth } from './mercadolivre'
-import { numeroPedidoLojaDaNf } from '../routes/bling'
+import { consultarNumeroPedidoLoja } from '../routes/bling'
 import { isOutForDeliveryEvent } from './notifier'
 
 const ML_API = 'https://api.mercadolibre.com'
@@ -225,9 +225,15 @@ export async function vincularVendasMe1(dias = 60): Promise<{ vinculados: number
   for (const o of candidatos) {
     const company = ML_COMPANIES.find((c) => cnpjVariantes(c).includes(o.senderCnpj ?? ''))
     if (!company) continue
+
+    const consulta = await consultarNumeroPedidoLoja(COMPANY_BLING_KEY[company], o.nfNumber!)
+    // Consulta inconclusiva (429 do Bling, rede): NÃO marca como tentado — senão a venda
+    // ficaria 12h fora da fila por um erro passageiro, que foi o que travou o ME1.
+    if (!consulta.ok) { await dorme(300); continue }
+
     await prisma.order.update({ where: { id: o.id }, data: { mlVinculoTentadoAt: new Date() } })
 
-    const pedidoLoja = await numeroPedidoLojaDaNf(COMPANY_BLING_KEY[company], o.nfNumber!)
+    const pedidoLoja = consulta.numero
     // vendas do ML têm id numérico longo; pedido de balcão/site não casa e é ignorado
     if (!pedidoLoja || !/^\d{10,}$/.test(pedidoLoja)) continue
 

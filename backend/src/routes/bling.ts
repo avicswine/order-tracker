@@ -179,23 +179,37 @@ export async function buscarNfPorNumeroLoja(companyKey: string, numerosLoja: str
 
 // Caminho DIRETO do nº da NF até o pedido da loja (no ML, o order/pack id): o detalhe da
 // NF-e no Bling traz `numeroPedidoLoja`. Dois GETs, sem varrer listagem de pedidos.
-export async function numeroPedidoLojaDaNf(companyKey: string, nfNumero: string): Promise<string | null> {
-  if (!tokens[companyKey]) return null
+/**
+ * numeroPedidoLoja da NF (id do pedido no marketplace).
+ *
+ * `ok:false` = não deu para saber (sem token, rede, 429 do Bling). Quem chama NÃO pode
+ * tratar isso como "não é venda do ML": antes essa confusão fazia vendas ME1 legítimas
+ * serem descartadas e ficarem 12h fora da fila de vínculo.
+ */
+export async function consultarNumeroPedidoLoja(
+  companyKey: string,
+  nfNumero: string,
+): Promise<{ ok: boolean; numero: string | null }> {
+  if (!tokens[companyKey]) return { ok: false, numero: null }
   try {
     const lista = (await blingGet(companyKey, `/nfe?numero=${encodeURIComponent(nfNumero)}`)) as {
       data?: { id: number; numero?: string }[]
     }
     const achada = (lista?.data ?? []).find((n) => String(n.numero ?? '') === String(nfNumero))
       ?? lista?.data?.[0]
-    if (!achada?.id) return null
+    if (!achada?.id) return { ok: true, numero: null }   // NF não existe no Bling: conclusivo
     const det = (await blingGet(companyKey, `/nfe/${achada.id}`)) as {
       data?: { numeroPedidoLoja?: string | number }
     }
     const npl = det?.data?.numeroPedidoLoja
-    return npl ? String(npl) : null
+    return { ok: true, numero: npl ? String(npl) : null }
   } catch {
-    return null
+    return { ok: false, numero: null }
   }
+}
+
+export async function numeroPedidoLojaDaNf(companyKey: string, nfNumero: string): Promise<string | null> {
+  return (await consultarNumeroPedidoLoja(companyKey, nfNumero)).numero
 }
 
 // Versão em LOTE do anterior: recebe vários numeroLoja e devolve {numeroLoja → nº da NF}.
