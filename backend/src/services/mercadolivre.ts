@@ -7,16 +7,19 @@ import { buscarNfPorNumeroLoja } from '../routes/bling'
 const COMPANY_BLING_KEY: Record<MlCompany, string> = {
   avic: 'avic',
   agro: 'agrogranja',
+  equi: 'equipage',
 }
 
 // Empresas com conta no Mercado Livre. Credenciais do app ML via env (Railway):
-//   AVIC_ML_CLIENT_ID / AVIC_ML_CLIENT_SECRET / AGRO_ML_CLIENT_ID / AGRO_ML_CLIENT_SECRET
-export type MlCompany = 'avic' | 'agro'
-export const ML_COMPANIES: MlCompany[] = ['avic', 'agro']
+//   {AVIC,AGRO,EQUI}_ML_CLIENT_ID / {AVIC,AGRO,EQUI}_ML_CLIENT_SECRET
+// Empresa sem credencial configurada é simplesmente ignorada (mlCreds devolve null).
+export type MlCompany = 'avic' | 'agro' | 'equi'
+export const ML_COMPANIES: MlCompany[] = ['avic', 'agro', 'equi']
 
 const COMPANY_CNPJ: Record<MlCompany, string> = {
   avic: '47715256000149',
   agro: '54695386000122',
+  equi: '56633474000125',
 }
 
 function mlCreds(company: MlCompany): { clientId: string; clientSecret: string } | null {
@@ -168,6 +171,7 @@ export interface MlMensagem {
 const CNPJ_TO_COMPANY: Record<string, MlCompany> = {
   '47715256000149': 'avic',
   '54695386000122': 'agro',
+  '56633474000125': 'equi',
 }
 
 export async function mlClaimMessages(pendenciaId: string): Promise<MlMensagem[]> {

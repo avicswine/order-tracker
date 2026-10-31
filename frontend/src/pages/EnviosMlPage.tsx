@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { mlApi, type MlEnvio, type MlEnviosCiclo } from '../lib/api'
 
-const EMPRESA_LABEL: Record<string, string> = { avic: 'AVIC', agro: 'Agrogranja' }
+const EMPRESA_LABEL: Record<string, string> = { avic: 'AVIC', agro: 'Agrogranja', equi: 'Equipage' }
 
 function data(s: string | null) {
   if (!s) return '—'

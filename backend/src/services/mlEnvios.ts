@@ -23,6 +23,7 @@ const SERVICE_ID_BRASIL = 11        // service_id de ME1 no MLB (tabela oficial 
 const COMPANY_CNPJ: Record<MlCompany, string> = {
   avic: '47715256000149',
   agro: '54695386000122',
+  equi: '56633474000125',
 }
 
 /** O senderCnpj é gravado formatado em uns pedidos e só com dígitos em outros. */
@@ -31,7 +32,7 @@ export function cnpjVariantes(company: MlCompany): string[] {
   const formatado = `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`
   return [d, formatado]
 }
-const COMPANY_BLING_KEY: Record<MlCompany, string> = { avic: 'avic', agro: 'agrogranja' }
+const COMPANY_BLING_KEY: Record<MlCompany, string> = { avic: 'avic', agro: 'agrogranja', equi: 'equipage' }
 
 export const PORTAL_URL =
   process.env.ML_ENVIOS_PORTAL_URL?.trim() ||
