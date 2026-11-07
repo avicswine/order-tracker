@@ -44,7 +44,7 @@ export const PORTAL_URL =
 // então quem já está "shipped" não recebe mais o link (vale para os despachos novos).
 export const TRACKING_MSG =
   process.env.ML_ENVIOS_TRACKING_MSG?.trim() ||
-  'EntreNoLinkEDigiteSeuCPFOuCNPJParaRastrearSuaMercadoria'
+  'SeuCPFouCNPJ'
 export const TRACKING_COMENTARIO =
   process.env.ML_ENVIOS_TRACKING_COMENTARIO?.trim() ||
   'Entre no link e digite seu CPF ou CNPJ para rastrear sua mercadoria'
