@@ -735,11 +735,16 @@ interface BrudamResponse {
 }
 
 function rodonavesMapStatus(eventCode: string, description: string): OrderStatus | null {
-  const code = String(eventCode).trim()
-  if (code === '6') return OrderStatus.DELIVERED
+  // A Rodonaves usa c\u00f3digos com subdivis\u00e3o ("6.1" = retirada na unidade, "5.1" = dispon\u00edvel
+  // para retirada). Comparar o c\u00f3digo inteiro deixava esses de fora: a entrega n\u00e3o era
+  // reconhecida e o pedido ficava "em tr\u00e2nsito" eternamente, somando atraso falso.
+  // Por isso a decis\u00e3o \u00e9 pela FAM\u00cdLIA do c\u00f3digo (o n\u00famero antes do ponto).
+  const familia = String(eventCode).trim().split('.')[0]
   const desc = description.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  // devolu\u00e7\u00e3o/recusa vem antes: um evento da fam\u00edlia 6 pode ser retorno ao remetente
   if (desc.includes('DEVOLV') || desc.includes('RETORNO') || desc.includes('RECUSAD') || desc.includes('CANCELAD')) return OrderStatus.CANCELLED
-  if (['0', '1', '1.1', '2', '3', '4', '5'].includes(code)) return OrderStatus.IN_TRANSIT
+  if (familia === '6') return OrderStatus.DELIVERED
+  if (['0', '1', '2', '3', '4', '5'].includes(familia)) return OrderStatus.IN_TRANSIT
   return null
 }
 
