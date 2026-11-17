@@ -27,8 +27,11 @@ const VENDEDOR = '1794452398'
 const COMPRADOR = '1171591907'
 const AGENTE = '3037675074'
 
+type Msg = { from: { user_id: string }; message_date?: { received?: string } }
+const em = (user_id: string, received: string): Msg => ({ from: { user_id }, message_date: { received } })
+
 function conferirDestinatario(): void {
-  const casos: Array<[string, Array<{ from: { user_id: string } }>, string | undefined, string]> = [
+  const casos: Array<[string, Msg[], string | undefined, string]> = [
     ['comprador escreveu por último (hoje)',
       [{ from: { user_id: COMPRADOR } }, { from: { user_id: VENDEDOR } },
        { from: { user_id: COMPRADOR } }], undefined, COMPRADOR],
@@ -38,6 +41,14 @@ function conferirDestinatario(): void {
       [], COMPRADOR, COMPRADOR],
     ['só mensagens nossas: cai no comprador do pedido',
       [{ from: { user_id: VENDEDOR } }], COMPRADOR, COMPRADOR],
+    // a API não garante a ordem: se a lista vier da mais nova para a mais velha, pegar
+    // a última SEM ordenar escolhe a mensagem mais antiga e responde para o lado errado
+    ['lista fora de ordem (mais nova primeiro), já migrada',
+      [em(AGENTE, '2026-11-17T10:00:00.000Z'), em(COMPRADOR, '2026-11-02T09:00:00.000Z')],
+      undefined, AGENTE],
+    ['lista fora de ordem, ainda no formato antigo',
+      [em(COMPRADOR, '2026-11-17T10:00:00.000Z'), em(AGENTE, '2026-11-02T09:00:00.000Z')],
+      undefined, COMPRADOR],
   ]
   for (const [nome, msgs, buyer, esperado] of casos) {
     const obtido = destinatarioDaConversa(msgs, VENDEDOR, buyer)
@@ -52,6 +63,37 @@ function conferirDestinatario(): void {
   } catch {
     console.log('  OK   sem histórico e sem comprador: recusa em vez de chutar')
   }
+}
+
+/**
+ * A descrição do evento é texto livre da transportadora: pode chegar com documento ou
+ * telefone de quem recebeu. Aqui entra um evento SUJO de propósito para garantir que a
+ * limpeza acontece de verdade, e não só no exemplo bonito de cima.
+ */
+function conferirEventoSujo(): void {
+  const sujo = {
+    nfNumero: '000001',
+    transportadora: 'TRANSPORTADORA TESTE',
+    previsao: new Date('2026-11-20T12:00:00'),
+    eventos: [
+      { descricao: 'ENTREGUE - recebido por portaria, CPF 123.456.789-01', data: '20/11/2026 às 10:00' },
+      { descricao: 'Contato do recebedor (54) 99123-4567 confirmado', data: '19/11/2026 às 15:00' },
+      { descricao: 'Em rota de entrega', data: '19/11/2026 às 08:00' },
+    ],
+  }
+  const html = htmlDaImagem(sujo)
+  const casos: Array<[string, RegExp]> = [
+    ['CPF no meio do texto', /\d{3}\.?\d{3}\.?\d{3}-?\d{2}/],
+    ['telefone no meio do texto', /\(?\d{2}\)?[\s.-]?9?\d{4}[\s.-]?\d{4}/],
+  ]
+  for (const [nome, re] of casos) {
+    const achou = re.test(html)
+    console.log(`  ${achou ? 'ERRO' : 'OK  '} ${nome}: ${achou ? 'PASSOU para a imagem' : 'foi limpo'}`)
+    if (achou) process.exitCode = 1
+  }
+  const manteve = /Em rota de entrega/.test(html)
+  console.log(`  ${manteve ? 'OK  ' : 'ERRO'} texto normal do evento continua aparecendo`)
+  if (!manteve) process.exitCode = 1
 }
 
 function conferirPrivacidade(html: string): void {
@@ -107,6 +149,7 @@ async function main(): Promise<void> {
   const html = htmlDaImagem(EXEMPLO)
   console.log('\nPrivacidade da imagem:')
   conferirPrivacidade(html)
+  conferirEventoSujo()
 
   const png = await gerarImagemRastreio(EXEMPLO)
   writeFileSync('previa-rastreio.png', png)

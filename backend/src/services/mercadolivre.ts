@@ -239,12 +239,25 @@ export const ML_MSG_MAX_CHARS = 350
  *
  * Por isso não fixamos nenhum dos dois: olhamos quem mandou a última mensagem para nós.
  * Assim funciona antes e depois da migração, sem depender de data.
+ *
+ * A ordem em que a API devolve as mensagens NÃO é garantida — por isso ordenamos por
+ * data aqui, como `mlConversasPendentes` já fazia. Pegar a última da lista crua podia
+ * escolher a mensagem mais ANTIGA e mandar a resposta para o destinatário errado.
  */
+export type MsgDaConversa = {
+  from?: { user_id?: unknown }
+  message_date?: { received?: string | null; created?: string | null }
+}
+
 export function destinatarioDaConversa(
-  mensagens: Array<{ from?: { user_id?: unknown } }>, sellerId: string, buyerId?: string,
+  mensagens: MsgDaConversa[], sellerId: string, buyerId?: string,
 ): string {
   const AGENTE_MLB = '3037675074'
-  const recebidas = mensagens.filter((m) => String(m?.from?.user_id ?? '') !== sellerId)
+  const quando = (m: MsgDaConversa) =>
+    String(m?.message_date?.received ?? m?.message_date?.created ?? '')
+  const recebidas = mensagens
+    .filter((m) => String(m?.from?.user_id ?? '') !== sellerId)
+    .sort((a, b) => quando(a).localeCompare(quando(b)))
   const ultima = recebidas.length ? String(recebidas[recebidas.length - 1]?.from?.user_id ?? '') : ''
   if (ultima === AGENTE_MLB) return AGENTE_MLB      // migração já ativa nesta conversa
   if (ultima) return ultima                          // o próprio comprador escreveu
@@ -298,13 +311,22 @@ export async function mlConversaResponder(
 
   // quem escreveu por último decide o destinatário (comprador ou Agente do ML)
   const url = `https://api.mercadolibre.com/messages/packs/${packId}/sellers/${auth.userId}`
-  let recebidas: Array<{ from?: { user_id?: unknown } }> = []
+  let recebidas: MsgDaConversa[] = []
   try {
     const { data } = await axios.get(url, {
       ...auth.H, params: { tag: 'post_sale', mark_as_read: false },
     })
     recebidas = data?.messages ?? []
-  } catch { /* sem histórico: usa o comprador do pedido */ }
+  } catch (err) {
+    // NÃO esconder: 429 (limite) e 403 (conversa bloqueada) são informação que importa
+    // numa conta que já foi bloqueada uma vez. Sem o histórico ainda dá para responder
+    // ao comprador do pedido, mas o motivo fica registrado.
+    const st = (err as { response?: { status?: number } })?.response?.status
+    console.warn(`[ML] pack ${packId}: não li o histórico da conversa`
+      + `${st ? ` (HTTP ${st})` : ''} — respondendo ao comprador do pedido`)
+    if (st === 429) throw new Error('O Mercado Livre está limitando as consultas agora. '
+      + 'Espere um instante e tente de novo.')
+  }
   const para = destinatarioDaConversa(recebidas, String(auth.userId),
                                       order?.buyer?.id ? String(order.buyer.id) : undefined)
 

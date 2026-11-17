@@ -10,6 +10,9 @@ const PORTAL_URL = process.env.PORTAL_URL ?? 'https://order-tracker-production-4
 
 // Mensagem pós-venda do ML: o próprio ML corta em 350 caracteres
 // (`seller_max_message_length`) e devolve 400 acima disso.
+// O mesmo número está em `ML_MSG_MAX_CHARS` (mercadolivre.ts). Ficam separados de
+// propósito: importar o VALOR de lá fecharia o ciclo de importação descrito acima — o
+// tipo é importado sem carregar o módulo, uma constante não.
 const ML_LIMITE_TEXTO = 350
 
 // Atraso só vira aviso a partir daqui — atrasos curtos costumam se resolver sozinhos

@@ -25,6 +25,25 @@ const escapar = (s: unknown): string =>
     { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string
   ))
 
+/**
+ * Tira da descrição do evento o que for dado pessoal reconhecível.
+ *
+ * A descrição é TEXTO LIVRE da transportadora: vem do campo `observacao` do rastreamento
+ * e às vezes traz documento ou telefone de quem recebeu. Como não dá para prometer que a
+ * imagem está limpa sem olhar o texto, o que é reconhecível por formato sai aqui.
+ * Nome de pessoa não é detectável com segurança — por isso a tela não promete isso.
+ */
+export function limparDadoPessoal(texto: string): string {
+  return String(texto ?? '')
+    // CPF e CNPJ, com ou sem pontuação
+    .replace(/\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/g, '[documento]')
+    .replace(/\b\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}\b/g, '[documento]')
+    // telefone com DDD
+    .replace(/\(?\b\d{2}\)?[\s.-]?9?\d{4}[\s.-]?\d{4}\b/g, '[telefone]')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+}
+
 const dataBR = (d?: Date | string | null): string => {
   if (!d) return '—'
   const dt = d instanceof Date ? d : new Date(d)
@@ -38,7 +57,8 @@ export function htmlDaImagem(d: DadosImagem): string {
     ? eventos.map((e, i) => `
         <li class="${i === 0 ? 'atual' : ''}">
           <span class="bolinha"></span>
-          <div><b>${escapar(e.descricao) || '—'}</b><small>${escapar(e.data)}</small></div>
+          <div><b>${escapar(limparDadoPessoal(String(e.descricao ?? ''))) || '—'}</b>
+          <small>${escapar(e.data)}</small></div>
         </li>`).join('')
     : '<li><div><b>Ainda sem movimentação registrada</b></div></li>'
 

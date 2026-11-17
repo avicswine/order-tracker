@@ -95,11 +95,14 @@ export const mlApi = {
   // maior.
   rascunhoRastreio: (company: string, packId: string) =>
     api.get<{ ok: boolean; pedido: string; texto: string; limite: number; imagem: string }>(
-      `/ml/conversas/${company.toLowerCase()}/${packId}/rascunho-rastreio`, { timeout: 60000 },
+      `/ml/conversas/${company.toLowerCase()}/${packId}/rascunho-rastreio`, { timeout: 120000 },
     ).then((r) => r.data),
+  // Tempo FOLGADO de propósito: subir o anexo e falar com o ML pode demorar, e desistir
+  // antes da hora faria a tela dizer "falhou" com a mensagem já entregue ao cliente —
+  // o José clicaria de novo e o comprador receberia duas vezes.
   enviarRastreio: (company: string, packId: string, texto: string) =>
     api.post<{ ok: boolean; pedido: string }>(
-      `/ml/conversas/${company.toLowerCase()}/${packId}/enviar-rastreio`, { texto }, { timeout: 60000 },
+      `/ml/conversas/${company.toLowerCase()}/${packId}/enviar-rastreio`, { texto }, { timeout: 180000 },
     ).then((r) => r.data),
   // Mercado Envios 1 — avisos de envio ao ML
   enviosPendentes: () =>

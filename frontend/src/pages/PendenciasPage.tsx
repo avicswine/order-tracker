@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { pendenciasApi, mlApi, type MlConversa } from '../lib/api'
 import { Modal } from '../components/ui/Modal'
@@ -1237,14 +1237,18 @@ function RastreioModal(
   const [erro, setErro] = useState<string | null>(null)
   const rascunho = useQuery({
     queryKey: ['rascunho-rastreio', company, packId],
-    queryFn: async () => {
-      const d = await mlApi.rascunhoRastreio(company, packId)
-      setTexto(d.texto)
-      return d
-    },
+    queryFn: () => mlApi.rascunhoRastreio(company, packId),
     retry: false,
     refetchOnWindowFocus: false,
+    // sempre remontar: o backend guarda a imagem conferida por 15 min e o envio usa
+    // ELA. Pegar do cache deixaria a tela sem o rascunho correspondente no servidor.
+    gcTime: 0,
+    staleTime: 0,
   })
+  // preenche o texto sugerido uma vez, sem apagar o que o José já tiver escrito
+  useEffect(() => {
+    if (rascunho.data?.texto) setTexto((t) => (t.trim() ? t : rascunho.data.texto))
+  }, [rascunho.data?.texto])
   const envio = useMutation({
     mutationFn: () => mlApi.enviarRastreio(company, packId, texto.trim()),
     onSuccess: () => { onEnviado(); onClose() },
@@ -1274,8 +1278,10 @@ function RastreioModal(
         {rascunho.data && (
           <>
             <p className="text-xs text-gray-500">
-              Pedido <b>{rascunho.data.pedido}</b>. Confira antes de enviar — a imagem vai
-              anexada na conversa do Mercado Livre, <b>sem</b> nome, CPF ou endereço do cliente.
+              Pedido <b>{rascunho.data.pedido}</b>. A imagem vai anexada na conversa do
+              Mercado Livre. Os dados do destinatário ficam de fora, e documento e telefone
+              são apagados das descrições — mas o texto dos eventos vem da transportadora,
+              então <b>confira antes de enviar</b>.
             </p>
             <img
               src={rascunho.data.imagem}
