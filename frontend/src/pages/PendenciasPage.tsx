@@ -628,6 +628,8 @@ function MlBanner({ canWrite, pos }: { canWrite: boolean; pos: 'topo' | 'rodape'
 function InboxMlModal({ conversas, erros, onClose }: { conversas: MlConversa[]; erros: string[]; onClose: () => void }) {
   const qc = useQueryClient()
   const [aberta, setAberta] = useState<string | null>(null)
+  // conversa cujo rascunho de rastreio está aberto (null = nenhum)
+  const [rastreio, setRastreio] = useState<{ company: string; packId: string; comprador: string } | null>(null)
   const varredura = useMutation({
     mutationFn: () => mlApi.varrerMensagens(30),
     onSuccess: (r) => {
@@ -699,6 +701,13 @@ function InboxMlModal({ conversas, erros, onClose }: { conversas: MlConversa[]; 
                         await qc.invalidateQueries({ queryKey: ['ml-inbox'] })
                       }}
                     />
+                    <button
+                      className="btn-secondary !py-1 text-xs"
+                      title="Monta a imagem do rastreio e mostra o rascunho — nada é enviado sem a sua conferência"
+                      onClick={() => setRastreio({ company: c.company, packId: c.packId, comprador: c.comprador })}
+                    >
+                      📦 Responder com o rastreio
+                    </button>
                     <a
                       href={`https://www.mercadolivre.com.br/vendas/${c.packId}/detalhe`}
                       target="_blank"
@@ -714,6 +723,15 @@ function InboxMlModal({ conversas, erros, onClose }: { conversas: MlConversa[]; 
           })}
         </div>
       </div>
+      {rastreio && (
+        <RastreioModal
+          company={rastreio.company}
+          packId={rastreio.packId}
+          comprador={rastreio.comprador}
+          onClose={() => setRastreio(null)}
+          onEnviado={() => qc.invalidateQueries({ queryKey: ['ml-inbox'] })}
+        />
+      )}
     </Modal>
   )
 }
@@ -1201,5 +1219,96 @@ function CaixaResposta({ onEnviar }: { onEnviar: (texto: string) => Promise<unkn
       </div>
       {erro && <p className="text-xs text-red-600">{erro}</p>}
     </div>
+  )
+}
+
+/**
+ * Responder o cliente com a imagem do rastreio, em um clique.
+ *
+ * Mostra o RASCUNHO antes de qualquer coisa: a imagem que iria anexada e o texto, que dá
+ * para editar. Nada sai sem o clique em Enviar — mensagem automática é motivo de
+ * moderação no Mercado Livre (AUTOMATIC_MESSAGE) e a conta já foi bloqueada uma vez.
+ */
+function RastreioModal(
+  { company, packId, comprador, onClose, onEnviado }:
+  { company: string; packId: string; comprador: string; onClose: () => void; onEnviado: () => void },
+) {
+  const [texto, setTexto] = useState('')
+  const [erro, setErro] = useState<string | null>(null)
+  const rascunho = useQuery({
+    queryKey: ['rascunho-rastreio', company, packId],
+    queryFn: async () => {
+      const d = await mlApi.rascunhoRastreio(company, packId)
+      setTexto(d.texto)
+      return d
+    },
+    retry: false,
+    refetchOnWindowFocus: false,
+  })
+  const envio = useMutation({
+    mutationFn: () => mlApi.enviarRastreio(company, packId, texto.trim()),
+    onSuccess: () => { onEnviado(); onClose() },
+    onError: (e) => setErro(
+      (e as { response?: { data?: { error?: string } } })?.response?.data?.error ?? 'Falha ao enviar',
+    ),
+  })
+
+  const limite = rascunho.data?.limite ?? 350
+  const sobrando = limite - texto.trim().length
+  const motivoFalha = (rascunho.error as { response?: { data?: { error?: string } } })
+    ?.response?.data?.error
+
+  return (
+    <Modal open onClose={onClose} title={`Responder ${comprador} com o rastreio`}>
+      <div className="space-y-3">
+        {rascunho.isPending && (
+          <p className="flex items-center gap-2 py-6 justify-center text-sm text-gray-500">
+            <Spinner className="h-4 w-4" /> Montando a imagem do rastreio…
+          </p>
+        )}
+        {rascunho.isError && (
+          <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+            {motivoFalha ?? 'Não consegui montar o rascunho.'}
+          </p>
+        )}
+        {rascunho.data && (
+          <>
+            <p className="text-xs text-gray-500">
+              Pedido <b>{rascunho.data.pedido}</b>. Confira antes de enviar — a imagem vai
+              anexada na conversa do Mercado Livre, <b>sem</b> nome, CPF ou endereço do cliente.
+            </p>
+            <img
+              src={rascunho.data.imagem}
+              alt="Rastreio que será enviado ao cliente"
+              className="w-full rounded-lg border border-gray-200"
+            />
+            <div className="space-y-1">
+              <textarea
+                value={texto}
+                onChange={(e) => setTexto(e.target.value)}
+                rows={3}
+                className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm resize-y focus:outline-none focus:ring-1 focus:ring-blue-400"
+              />
+              <p className={`text-right text-[11px] ${sobrando < 0 ? 'font-bold text-red-600' : 'text-gray-400'}`}>
+                {sobrando < 0
+                  ? `${-sobrando} caractere(s) a mais do que o Mercado Livre aceita (${limite})`
+                  : `${sobrando} de ${limite} caracteres restantes`}
+              </p>
+            </div>
+            {erro && <p className="text-xs text-red-600">{erro}</p>}
+            <div className="flex justify-end gap-2">
+              <button className="btn-secondary !py-1.5 text-sm" onClick={onClose}>Cancelar</button>
+              <button
+                className="rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-40"
+                disabled={envio.isPending || !texto.trim() || sobrando < 0}
+                onClick={() => { setErro(null); envio.mutate() }}
+              >
+                {envio.isPending ? <Spinner className="h-4 w-4" /> : 'Enviar ao cliente'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </Modal>
   )
 }

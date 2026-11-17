@@ -90,6 +90,17 @@ export const mlApi = {
     api.post<{ ok: boolean }>(`/ml/pendencias/${pendenciaId}/responder`, { texto }).then((r) => r.data),
   responderConversa: (company: string, packId: string, texto: string) =>
     api.post<{ ok: boolean }>(`/ml/conversas/${company.toLowerCase()}/${packId}/responder`, { texto }).then((r) => r.data),
+  // Responder com o rastreio: primeiro o RASCUNHO (só mostra, não envia), depois o envio
+  // do que o José aprovou. Gerar a imagem passa pelo navegador headless, por isso o tempo
+  // maior.
+  rascunhoRastreio: (company: string, packId: string) =>
+    api.get<{ ok: boolean; pedido: string; texto: string; limite: number; imagem: string }>(
+      `/ml/conversas/${company.toLowerCase()}/${packId}/rascunho-rastreio`, { timeout: 60000 },
+    ).then((r) => r.data),
+  enviarRastreio: (company: string, packId: string, texto: string) =>
+    api.post<{ ok: boolean; pedido: string }>(
+      `/ml/conversas/${company.toLowerCase()}/${packId}/enviar-rastreio`, { texto }, { timeout: 60000 },
+    ).then((r) => r.data),
   // Mercado Envios 1 — avisos de envio ao ML
   enviosPendentes: () =>
     api.get<MlEnviosResponse>('/ml/envios/pendentes').then((r) => r.data),
