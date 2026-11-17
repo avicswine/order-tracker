@@ -9,6 +9,7 @@
 import { writeFileSync } from 'fs'
 import { gerarImagemRastreio, htmlDaImagem } from '../services/imagemRastreio'
 import { destinatarioDaConversa } from '../services/mercadolivre'
+import { marketplaceDaNf } from '../routes/bling'
 
 const EXEMPLO = {
   nfNumero: '006324',
@@ -68,7 +69,38 @@ function conferirPrivacidade(html: string): void {
   }
 }
 
+/**
+ * A empresa gravada na venda do ML tem de ser a chave do MERCADO LIVRE (avic/agro/equi),
+ * não a do Bling (avic/agrogranja/equipage). Com a chave errada, o notifier tenta
+ * responder como "agrogranja", o ML não reconhece a conta e o comprador não recebe aviso
+ * nenhum — e o botão de rastreio nunca acha o pedido.
+ */
+function conferirChaveDaEmpresa(): void {
+  const ML = '03007331000141'
+  const casos: Array<[string, string, string | null]> = [
+    ['avic', 'venda ML da Avic', 'avic'],
+    ['agrogranja', 'venda ML da Agrogranja', 'agro'],
+    ['equipage', 'venda ML da Equipage', 'equi'],
+  ]
+  for (const [chaveBling, nome, esperado] of casos) {
+    const det = { data: { intermediador: { cnpj: ML }, numeroPedidoLoja: '2000019309122748' } }
+    const r = marketplaceDaNf(chaveBling, det as never, '006324')
+    const ok = r.mlCompany === esperado
+    console.log(`  ${ok ? 'OK  ' : 'ERRO'} ${nome} -> ${r.mlCompany}${ok ? '' : ` (esperado ${esperado})`}`)
+    if (!ok) process.exitCode = 1
+  }
+  // outro marketplace continua sem empresa do ML (trava o aviso por fora da plataforma)
+  const outro = marketplaceDaNf('agrogranja',
+    { data: { intermediador: { cnpj: '11222333000181' }, numeroPedidoLoja: '' } } as never, '006325')
+  const okOutro = outro.mlCompany === null && outro.mlOrderId === 'MKT-006325'
+  console.log(`  ${okOutro ? 'OK  ' : 'ERRO'} outro marketplace -> sem empresa do ML, com trava MKT-`)
+  if (!okOutro) process.exitCode = 1
+}
+
 async function main(): Promise<void> {
+  console.log('\nEmpresa gravada na venda do ML:')
+  conferirChaveDaEmpresa()
+
   console.log('\nPara quem a resposta vai:')
   conferirDestinatario()
 

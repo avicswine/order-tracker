@@ -435,7 +435,18 @@ export function marketplaceDaNf(companyKey: string, detail: BlingNFeDetailRespon
     console.log(`[Bling] NF ${nfNumero}: venda de marketplace (intermediário ${inter}) — sem aviso externo`)
     return { mlOrderId: pedidoLoja || `MKT-${nfNumero}`, mlCompany: null }
   }
-  return { mlOrderId: pedidoLoja || null, mlCompany: companyKey.toLowerCase() }
+  // A chave do Bling NÃO é a do Mercado Livre: aqui as empresas são `avic`, `agrogranja`
+  // e `equipage`; lá são `avic`, `agro` e `equi`. Gravar a do Bling fazia o notifier
+  // tentar responder como "agrogranja", conta que não existe no ML — o erro era tratado
+  // como conversa fechada e o comprador de Agrogranja e Equipage NÃO recebia aviso
+  // nenhum. Passava despercebido porque em AVIC as duas chaves coincidem.
+  // O `code` de COMPANIES já é exatamente a chave do ML (AVIC/AGRO/EQUI).
+  const chaveMl = COMPANIES[companyKey]?.code?.toLowerCase() ?? null
+  if (!chaveMl) {
+    console.log(`[Bling] NF ${nfNumero}: empresa "${companyKey}" sem equivalente no ML`)
+    return { mlOrderId: pedidoLoja || null, mlCompany: null }
+  }
+  return { mlOrderId: pedidoLoja || null, mlCompany: chaveMl }
 }
 
 // Busca e vincula transportadora de uma NF pelo ID interno do Bling
