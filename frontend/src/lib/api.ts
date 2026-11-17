@@ -147,3 +147,79 @@ export interface MlConversa {
   naoLidas: number
   mensagens: { de: string; texto: string; data: string | null }[]
 }
+
+// --- Monitor de DIFAL ---------------------------------------------------
+// Quem recolhe o diferencial de alíquota de cada nota: o Mercado Livre (que
+// depois cobra de nós), nós mesmos por guia, ou o próprio cliente quando ele é
+// contribuinte com inscrição estadual.
+export type DifalResponsavel = 'ML_PAGA' | 'NOSSO' | 'CLIENTE' | 'SEM_DIFAL'
+export type DifalSituacao = 'PENDENTE' | 'CONFERIDO' | 'DIVERGENTE' | 'PAGO' | 'ATRASADO'
+
+export interface DifalNota {
+  id: string
+  empresa: string
+  nfNumero: string
+  nfChave: string | null
+  emitidaEm: string
+  clienteNome: string
+  clienteUf: string
+  clienteTemIe: boolean
+  valorProdutos: number
+  valorFrete: number
+  valorNota: number
+  valorComReducao: number
+  valorSemReducao: number
+  canalNome: string | null
+  canalTipo: string | null
+  difalCalculado: number
+  difalMetodo: string | null
+  difalCobradoMl: number | null
+  difalPagoGuia: number | null
+  responsavel: DifalResponsavel
+  situacao: DifalSituacao
+  divergencia: number | null
+  calculoDetalhe: Record<string, unknown> | null
+}
+
+export interface DifalResumo {
+  porResponsavel: {
+    responsavel: DifalResponsavel
+    notas: number
+    calculado: number
+    cobradoMl: number
+    pagoGuia: number
+  }[]
+  aPagar: { notas: number; valor: number }
+  divergentes: { notas: number; valor: number }
+}
+
+export interface DifalAliquota {
+  uf: string
+  nome: string
+  aliquotaInterna: number
+  fcp: number
+  interestadual: number
+  metodo: string
+  posicaoFisco: boolean
+  nota: string | null
+}
+
+export const difalApi = {
+  listar: (params?: {
+    responsavel?: string
+    situacao?: string
+    empresa?: string
+    uf?: string
+    desde?: string
+    busca?: string
+    pagina?: number
+  }) =>
+    api
+      .get<{ notas: DifalNota[]; total: number; pagina: number; porPagina: number }>('/difal', { params })
+      .then((r) => r.data),
+  resumo: (params?: { desde?: string }) =>
+    api.get<DifalResumo>('/difal/resumo', { params }).then((r) => r.data),
+  aliquotas: () => api.get<DifalAliquota[]>('/difal/aliquotas').then((r) => r.data),
+  importar: (dias?: number) =>
+    api.post<{ ok: boolean; resultado: unknown }>('/difal/importar', { dias }).then((r) => r.data),
+}
