@@ -403,6 +403,50 @@ interface ResolveCarrierResult {
   carrierId: string
   linkDanfe: string | null
   nfKey: string | null
+  // Preenchidos quando a NF é de venda por marketplace. Servem para o pedido já NASCER
+  // sabendo que é do ML: a trava do notifier lê `mlOrderId`, e antes ela só era
+  // preenchida horas depois, pela rotina de vínculo ME1 — nesse intervalo o aviso de
+  // faturamento já tinha ido por WhatsApp ao comprador do ML, o que a cl. 3.b dos
+  // Termos do ML proíbe (José, 12/11/2026: NF 13350).
+  mlOrderId: string | null
+  mlCompany: string | null
+}
+
+// CNPJ do intermediador que aparece nas NFs de venda do Mercado Livre (conferido nas
+// notas da AVIC em 12/11/2026). Balcão e Loja Integrada vêm sem intermediador.
+const CNPJ_INTERMEDIARIO_ML = '03007331000141'
+
+/**
+ * A NF é de venda por marketplace? Devolve o id do pedido no ML quando for dele.
+ *
+ * O `intermediador` é campo fiscal obrigatório da venda por marketplace, então separa os
+ * canais sem depender de heurística: ML traz CNPJ preenchido e `numeroPedidoLoja` com
+ * 14+ dígitos; balcão e site trazem os dois vazios ou curtos.
+ */
+export function marketplaceDaNf(companyKey: string, detail: BlingNFeDetailResponse, nfNumero: string):
+    { mlOrderId: string | null; mlCompany: string | null } {
+  const inter = (detail?.data?.intermediador?.cnpj ?? '').replace(/\D/g, '')
+  const pedidoLoja = String(detail?.data?.numeroPedidoLoja ?? '').trim()
+  if (!inter) return { mlOrderId: null, mlCompany: null }
+  const ehML = inter === CNPJ_INTERMEDIARIO_ML || /^\d{14,}$/.test(pedidoLoja)
+  if (!ehML) {
+    // outro marketplace: não sabemos o id, mas também não se avisa por fora da
+    // plataforma — devolve o pedido da loja para o notifier ter o que travar
+    console.log(`[Bling] NF ${nfNumero}: venda de marketplace (intermediário ${inter}) — sem aviso externo`)
+    return { mlOrderId: pedidoLoja || `MKT-${nfNumero}`, mlCompany: null }
+  }
+  // A chave do Bling NÃO é a do Mercado Livre: aqui as empresas são `avic`, `agrogranja`
+  // e `equipage`; lá são `avic`, `agro` e `equi`. Gravar a do Bling fazia o notifier
+  // tentar responder como "agrogranja", conta que não existe no ML — o erro era tratado
+  // como conversa fechada e o comprador de Agrogranja e Equipage NÃO recebia aviso
+  // nenhum. Passava despercebido porque em AVIC as duas chaves coincidem.
+  // O `code` de COMPANIES já é exatamente a chave do ML (AVIC/AGRO/EQUI).
+  const chaveMl = COMPANIES[companyKey]?.code?.toLowerCase() ?? null
+  if (!chaveMl) {
+    console.log(`[Bling] NF ${nfNumero}: empresa "${companyKey}" sem equivalente no ML`)
+    return { mlOrderId: pedidoLoja || null, mlCompany: null }
+  }
+  return { mlOrderId: pedidoLoja || null, mlCompany: chaveMl }
 }
 
 // Busca e vincula transportadora de uma NF pelo ID interno do Bling
@@ -412,6 +456,7 @@ async function resolveCarrier(companyKey: string, nfId: number, nfNumero: string
     const transportador = detail?.data?.transporte?.transportador
     const linkDanfe = detail?.data?.linkDanfe ?? null
     const nfKey = detail?.data?.chaveAcesso ?? null
+    const { mlOrderId, mlCompany } = marketplaceDaNf(companyKey, detail, nfNumero)
     if (!transportador?.numeroDocumento) return undefined
 
     const cnpjRaw = transportador.numeroDocumento
@@ -434,7 +479,7 @@ async function resolveCarrier(companyKey: string, nfId: number, nfNumero: string
         return undefined
       }
       console.log(`[Bling] NF ${nfNumero}: transportadora "${transportador.nome}" vinculada a "${existing.name}"`)
-      return { carrierId: existing.id, linkDanfe, nfKey }
+      return { carrierId: existing.id, linkDanfe, nfKey, mlOrderId, mlCompany }
     }
     if (transportador.nome) {
       // Ignora envios do Mercado Livre — não há rastreio disponível
@@ -460,7 +505,7 @@ async function resolveCarrier(companyKey: string, nfId: number, nfNumero: string
           return undefined
         }
         console.log(`[Bling] NF ${nfNumero}: transportadora "${transportador.nome}" vinculada pelo nome (CNPJ diferente: ${cnpjNormalizado})`)
-        return { carrierId: existingByName.id, linkDanfe, nfKey }
+        return { carrierId: existingByName.id, linkDanfe, nfKey, mlOrderId, mlCompany }
       }
 
       try {
@@ -477,7 +522,7 @@ async function resolveCarrier(companyKey: string, nfId: number, nfNumero: string
           const found = await prisma.carrier.findFirst({
             where: { OR: [{ cnpj: cnpjNormalizado }, { cnpj: cnpjRaw }] },
           })
-          if (found && found.trackingSystem !== TrackingSystem.NONE) return { carrierId: found.id, linkDanfe, nfKey }
+          if (found && found.trackingSystem !== TrackingSystem.NONE) return { carrierId: found.id, linkDanfe, nfKey, mlOrderId, mlCompany }
           return undefined
         }
         throw createErr
@@ -583,6 +628,12 @@ export async function runBlingSync(limite?: number, onlyCompany?: string, onProg
               carrierId: resolved.carrierId,
               linkDanfe: resolved.linkDanfe,
               nfKey: resolved.nfKey,
+              // o pedido já nasce sabendo que é de marketplace: é o que a trava do
+              // notifier lê para NÃO avisar o comprador fora da plataforma. Antes isso
+              // só chegava horas depois, pelo vínculo ME1, e o aviso de faturamento já
+              // tinha ido por WhatsApp (cl. 3.b dos Termos do ML)
+              mlOrderId: resolved.mlOrderId,
+              mlCompany: resolved.mlCompany,
               statusHistory: { create: { status: 'PENDING', note: `Importado do Bling (${company.name})` } },
             },
           })
@@ -1168,6 +1219,11 @@ interface BlingNFeDetailResponse {
     linkDanfe?: string
     linkPDF?: string
     chaveAcesso?: string
+    // venda por marketplace: campo fiscal obrigatório, traz o CNPJ do intermediador.
+    // Balcão e Loja Integrada vêm com ele vazio — é o que separa os canais.
+    intermediador?: { cnpj?: string; nomeUsuario?: string }
+    // id do pedido no marketplace. No ML tem 14+ dígitos (ex: 2000019353106254)
+    numeroPedidoLoja?: string | number
   }
 }
 

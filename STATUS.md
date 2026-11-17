@@ -1,6 +1,116 @@
 # STATUS — Order Tracker
 
-Última atualização: 2026-08-19 (módulo de Separação por bipe EM PRODUÇÃO)
+Última atualização: 2026-11-07 (conformidade com os Termos do Mercado Livre + correção da Rodonaves)
+
+## Regra de trabalho (definida por José em 2026-11-07)
+
+**Toda recomendação ou apontamento de mudança vem com a FONTE** — link, cláusula,
+`arquivo:linha` ou a consulta de onde o dado saiu. Sem a fonte lida, dizer explicitamente
+que é inferência, nunca apresentar como fato. O motivo: na sessão de 07/11 três
+afirmações minhas sobre políticas do ML caíram quando a fonte foi cobrada, gerando
+retrabalho e custo.
+
+## Sessão 2026-11-07 — Conformidade ML e Rodonaves
+
+### Implementado e no ar
+
+- **Rodonaves: rastreio decidido pela família do código** (`3c61303`). A transportadora
+  usa códigos com subdivisão (`5.1` disponível para retirada, `6.1` retirada na unidade);
+  a comparação era pelo código inteiro, o mapeamento devolvia `null`, nada era persistido
+  e o pedido ficava IN_TRANSIT para sempre somando atraso falso. Agora decide pela família
+  (número antes do ponto), com a checagem de devolução/recusa antes. Verificado: NFs
+  013024, 013025 e 013026 passaram a DELIVERED.
+  Arquivo: `backend/src/services/tracking.ts`.
+- **Venda do ML não é mais notificada fora da plataforma** (`11452e8`). O anexo Marketplace
+  dos Termos do ML, cl. 3.b (<https://www.mercadolivre.com.br/ajuda/23050>), proíbe
+  comunicação com o comprador por meio que não seja o serviço de mensagens do ML até
+  vencer a Compra Protegida. Havíamos enviado 254 mensagens por WhatsApp/e-mail a
+  compradores do ML entre 17/07 e 06/11. A checagem ficou dentro de `dispatch()`, que é o
+  ponto único por onde passa todo envio ao comprador — nenhum chamador pode esquecer o
+  filtro. O rastreio (que o ML não tem) passou a ir pela mensagem pós-venda, curta e sem
+  link; faturamento e entrega não são mais avisados por nós porque o ML já informa.
+  Arquivos: `backend/src/services/notifier.ts`, `backend/src/services/mlEnvios.ts`.
+- **17 descrições de anúncios corrigidas pela API** (7 que ofereciam suporte via WhatsApp
+  na AGRO + 10 frases de "entre em contato"/"consulte-nos" em 9 anúncios). Backup dos
+  textos originais e gravação só após conferir que o texto ao vivo não mudou.
+
+### Verificado — não havia problema
+
+- **Não existe regra proibindo várias contas** nem vender o mesmo produto em contas
+  diferentes, nem duas contas do mesmo dono disputarem o mesmo anúncio de catálogo. O
+  Catálogo (<https://www.mercadolivre.com.br/ajuda/4676>, 21/08/2025) é definido como a
+  ferramenta "que permite que os anúncios de um mesmo produto compitam entre si", e suas
+  únicas regras adicionais tratam de estoque diferido e reputação laranja/vermelha. A cl. 4
+  dos Termos só dá poder discricionário ao ML "se considerarmos que essa ação pode
+  prejudicar" os demais, e o anexo Marketplace fala em "sanções sobre todas as suas
+  contas", presumindo que um vendedor pode ter mais de uma.
+- **CNAE da AVIC está correto.** O 4661-3/00 compreende "o comércio atacadista de
+  máquinas, aparelhos e equipamentos para uso na avicultura e apicultura"
+  (<https://concla.ibge.gov.br/busca-online-cnae.html?view=subclasse&tipo=cnae&versao=10&subclasse=4661300>).
+  Só faltaria 4663-0/00 se houver venda relevante para indústria fora do agro.
+- **Endereço da AVIC no ML bate com a Receita** (cartão CNPJ de 04/11/2026). As APIs
+  públicas de CNPJ estavam defasadas.
+- Títulos das duas contas: nenhum termo proibido pela política de fotos/títulos (1024).
+- Telefone do comprador enviado à transportadora no ME1: uso legítimo, o ML fornece o
+  contato justamente para despachar.
+
+### Próximos passos
+
+Comigo, esperando liberação:
+1. Expurgo de dados pessoais no Postgres — `customerName`/`customerEmail`/`customerPhone`
+   ficam indefinidamente; o anexo Marketplace, cl. 1.h, manda excluir após cumprida a
+   finalidade.
+2. Avisar o resultado do primeiro envio real com canal `ML_MENSAGEM` (dirá se o texto
+   passa pela moderação do ML).
+3. Olhar os 18 erros do sync de rastreio (outras transportadoras, anteriores a esta sessão).
+4. Monitor diário de `site_status` / `sell.allow` / `list.allow` / `required_action` das
+   contas AVIC e AGRO, com alerta por WhatsApp.
+5. Cortar escopos excessivos dos apps do DevCenter (`urn:ml:all:*`,
+   `urn:global:admin:oauth:/read-write`) — adiado: exige reautorizar as contas em
+   produção, risco maior que o ganho hoje.
+
+Com José:
+6. `rm -f "C:/Users/josef/cmvsync/.env.equi.ml.novo"` — contém o Client Secret do ML em
+   texto puro (o `rm` é bloqueado para o agente).
+7. Marcar `duplicados-ml.xlsx` — 146 anúncios excedentes de título idêntico. **Único item
+   da auditoria com proibição escrita atrás**: <https://www.mercadolivre.com.br/ajuda/2517>.
+8. Conferir se as fotos têm logo do vendedor ou marca d'água (proibido pela política 1024;
+   não dá para verificar por API).
+9. Contas Colaboradoras: um e-mail só pode ser colaborador de **uma** conta
+   (<https://www.mercadolivre.com.br/ajuda/25781>). Conferir se algum e-mail está na AVIC
+   e na AGRO.
+10. Descobrir sob qual conta está o app GESTAOENVIOS no DevCenter — a API não devolve
+    `owner_id`. Se não for da Equipage, há vínculo técnico com a conta suspensa.
+11. Atualizar o endereço da AGROGRANJA no ML quando a alteração sair na Receita.
+12. Razão social da AVIC no ML consta "DIRLENE JOANA BAZZANELLA" (razão social original do
+    CNPJ); a atual é "AVIC VENTILACAO E EXAUSTAO INDUSTRIAL LTDA". Campo não editável no
+    perfil — enviado cartão CNPJ, **em análise**. `required_action: simple_registration` é
+    a única pendência cadastral das três contas.
+
+### Decisões pendentes
+
+- **Catálogo sobreposto AVIC × AGRO**: 236 SKUs nas duas contas (481 anúncios AVIC, 427
+  AGRO), 141 com venda zero em uma delas, 59 com diferença de preço de 15%+ no mesmo SKU.
+  Passou a ser **decisão comercial, não compliance** — nenhuma regra proíbe. O caso mais
+  extremo é `PAS001` a R$ 144,88 na AVIC e R$ 349,90 na AGRO. Planilha: `sobrepostos-ml.xlsx`.
+- **GTIN inventado**: 804 anúncios ativos com GTIN preenchido (484 AVIC, 320 AGRO), e 50
+  dos 375 códigos aparecem em SKUs diferentes — um cobre `RL040.1` até `RL040.1000`, outro
+  junta um sensor de palheta com bebedouros de 6, 9 e 15 m. José informou que **os únicos
+  GTIN legítimos são os dos códigos PAI no Bling, de BASSO E PANCOTTE e ROBUSTEC**. O ML
+  oferece o atributo `EMPTY_GTIN_REASON` ("O produto é um kit ou pack", "O produto não tem
+  código cadastrado", entre outros), disponível por categoria. Trabalho adiado.
+- EQUIPAGE suspensa: protocolo 49408564 aberto em 05/11, sem resposta. A API ainda devolve
+  a conta como `site_status: active`.
+
+### Arquivos gerados nesta sessão
+
+- `REFERENCIA-POLITICAS-ML.md` — os 34 tópicos da Política de Cadastramento de Produtos
+  (<https://www.mercadolivre.com.br/ajuda/1011>), texto integral.
+- `RELATORIO-DUPLICADOS-ML.md` e `duplicados-ml.xlsx` — anúncios duplicados por conta.
+- `descricoes-ml.xlsx` — frases de descrição corrigidas.
+- `sobrepostos-ml.xlsx` — produtos nas duas contas, cruzados **só por SKU exato** (GTIN e
+  título foram descartados: o GTIN está errado no catálogo e o título não distingue
+  variantes de quantidade).
 
 ## Módulo de Separação por bipe (novo — em produção desde 2026-08-19)
 Plano, decisões e estado: `PLANO-SEPARACAO.md`. URL: `https://order-tracker-production-4189.up.railway.app/separacao`.
