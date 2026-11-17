@@ -222,23 +222,97 @@ export async function mlClaimResponder(pendenciaId: string, texto: string): Prom
   }
 }
 
-// Responde uma conversa PÓS-VENDA (mensagens do pack) direto do painel
-export async function mlConversaResponder(company: MlCompany, packId: string, texto: string): Promise<void> {
+/**
+ * Limite do texto de uma mensagem pós-venda, pela documentação oficial:
+ * "The message content is too long, max characters allowed are 350".
+ * Mandar mais que isso volta erro 400 e a mensagem NÃO chega ao cliente.
+ */
+export const ML_MSG_MAX_CHARS = 350
+
+/**
+ * Para quem responder nesta conversa.
+ *
+ * Desde 02/02/2026 o ML está migrando, de forma progressiva, para uma camada de Agentes:
+ * quando a conversa já passou por ela, o `to.user_id` deve levar o id do Agente do país
+ * (MLB 3037675074) e não o do comprador. Em 17/11/2026 as contas AVIC/AGRO ainda estavam
+ * no formato antigo (o comprador chega com id real e o `path` é /packs/{id}/sellers/{id}).
+ *
+ * Por isso não fixamos nenhum dos dois: olhamos quem mandou a última mensagem para nós.
+ * Assim funciona antes e depois da migração, sem depender de data.
+ */
+export function destinatarioDaConversa(
+  mensagens: Array<{ from?: { user_id?: unknown } }>, sellerId: string, buyerId?: string,
+): string {
+  const AGENTE_MLB = '3037675074'
+  const recebidas = mensagens.filter((m) => String(m?.from?.user_id ?? '') !== sellerId)
+  const ultima = recebidas.length ? String(recebidas[recebidas.length - 1]?.from?.user_id ?? '') : ''
+  if (ultima === AGENTE_MLB) return AGENTE_MLB      // migração já ativa nesta conversa
+  if (ultima) return ultima                          // o próprio comprador escreveu
+  if (buyerId) return buyerId                        // sem histórico: cai no comprador do pedido
+  throw new Error('Não dá para saber para quem responder nesta conversa')
+}
+
+/**
+ * Sobe um arquivo para a mensageria e devolve o id para anexar na mensagem.
+ *
+ * Documentação: POST /messages/attachments?tag=post_sale&site_id=MLB, multipart com o
+ * campo `file`. Aceita JPG, JPEG, PNG, PDF, HEIF, HEIC e GIF, até 25 MB. O anexo que não
+ * for usado numa mensagem em 48 h é apagado — por isso sobe-se na hora de enviar.
+ */
+export async function mlSubirAnexo(
+  company: MlCompany, arquivo: Buffer, nome: string, tipo = 'image/png',
+): Promise<string> {
   const auth = await mlAuth(company)
   if (!auth) throw new Error(`Conta ML de ${company.toUpperCase()} não autorizada`)
+  const MAX = 25 * 1024 * 1024
+  if (arquivo.length > MAX) throw new Error('O arquivo passa de 25 MB, o limite do Mercado Livre')
+  const form = new FormData()
+  form.append('file', new Blob([new Uint8Array(arquivo)], { type: tipo }), nome)
+  const { data } = await axios.post(
+    'https://api.mercadolibre.com/messages/attachments',
+    form, { ...auth.H, params: { tag: 'post_sale', site_id: 'MLB' } },
+  )
+  if (!data?.id) throw new Error('O Mercado Livre não devolveu o id do anexo')
+  return String(data.id)
+}
+
+// Responde uma conversa PÓS-VENDA (mensagens do pack) direto do painel.
+// `anexos` são ids devolvidos pelo upload (ver mlSubirAnexo).
+export async function mlConversaResponder(
+  company: MlCompany, packId: string, texto: string, anexos: string[] = [],
+): Promise<void> {
+  const auth = await mlAuth(company)
+  if (!auth) throw new Error(`Conta ML de ${company.toUpperCase()} não autorizada`)
+  const corpo = texto.trim()
+  if (!corpo) throw new Error('Escreva a mensagem')
+  if (corpo.length > ML_MSG_MAX_CHARS) {
+    throw new Error(`A mensagem tem ${corpo.length} caracteres; o Mercado Livre aceita `
+      + `no máximo ${ML_MSG_MAX_CHARS}. Encurte antes de enviar.`)
+  }
   let orderId = packId
   try {
     const { data: pack } = await axios.get(`https://api.mercadolibre.com/packs/${packId}`, auth.H)
     if (pack?.orders?.[0]?.id) orderId = String(pack.orders[0].id)
   } catch { /* pedido simples: o próprio id é a order */ }
   const { data: order } = await axios.get(`https://api.mercadolibre.com/orders/${orderId}`, auth.H)
-  const buyerId = order?.buyer?.id
-  if (!buyerId) throw new Error('Comprador não identificado no pedido')
-  await axios.post(
-    `https://api.mercadolibre.com/messages/packs/${packId}/sellers/${auth.userId}?tag=post_sale`,
-    { from: { user_id: String(auth.userId) }, to: { user_id: String(buyerId) }, text: texto },
-    auth.H
-  )
+
+  // quem escreveu por último decide o destinatário (comprador ou Agente do ML)
+  const url = `https://api.mercadolibre.com/messages/packs/${packId}/sellers/${auth.userId}`
+  let recebidas: Array<{ from?: { user_id?: unknown } }> = []
+  try {
+    const { data } = await axios.get(url, {
+      ...auth.H, params: { tag: 'post_sale', mark_as_read: false },
+    })
+    recebidas = data?.messages ?? []
+  } catch { /* sem histórico: usa o comprador do pedido */ }
+  const para = destinatarioDaConversa(recebidas, String(auth.userId),
+                                      order?.buyer?.id ? String(order.buyer.id) : undefined)
+
+  const body: Record<string, unknown> = {
+    from: { user_id: String(auth.userId) }, to: { user_id: para }, text: corpo,
+  }
+  if (anexos.length) body.attachments = anexos
+  await axios.post(`${url}?tag=post_sale`, body, auth.H)
 }
 
 /**

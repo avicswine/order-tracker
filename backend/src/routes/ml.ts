@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express'
 import crypto from 'crypto'
-import { mlAuthUrl, mlExchangeCode, mlStatus, syncMlClaims, mlClaimMessages, mlClaimResponder, mlConversaResponder, mlConversasPendentes, mlVarrerMensagens, mlAtualizarClaim, mlReconciliarClaims, ML_COMPANIES, type MlCompany } from '../services/mercadolivre'
+import { mlAuthUrl, mlExchangeCode, mlStatus, syncMlClaims, mlClaimMessages, mlClaimResponder, mlConversaResponder, mlConversasPendentes, mlVarrerMensagens, mlAtualizarClaim, mlReconciliarClaims, mlSubirAnexo, ML_MSG_MAX_CHARS, ML_COMPANIES, type MlCompany } from '../services/mercadolivre'
+import { gerarImagemRastreio, type EventoRastreio } from '../services/imagemRastreio'
 import { cicloEnviosMl, notificarStatusMl, PORTAL_URL, TRACKING_MSG, TRACKING_COMENTARIO, type MlEnvioStatus } from '../services/mlEnvios'
 import { prisma } from '../lib/prisma'
 
@@ -98,10 +99,118 @@ router.post('/conversas/:company/:packId/responder', async (req: Request, res: R
   if (!texto) { res.status(400).json({ error: 'Escreva a mensagem' }); return }
   if (!ML_COMPANIES.includes(company)) { res.status(400).json({ error: 'Empresa inválida' }); return }
   try {
-    await mlConversaResponder(company, req.params.packId, texto.slice(0, 2000))
+    // NÃO cortar em 2000: o ML aceita 350 e devolve 400 acima disso. Quem valida é o
+    // serviço, que explica o tamanho em vez de mandar um texto pela metade.
+    await mlConversaResponder(company, req.params.packId, texto, req.body?.anexos ?? [])
     res.json({ ok: true })
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : 'Falha ao responder' })
+  }
+})
+
+// ── Responder o cliente com o rastreio (rascunho + envio) ────────────────────
+// NUNCA envia sozinho: o José vê a imagem e o texto antes. Mensagem automática é motivo
+// de moderação no ML (AUTOMATIC_MESSAGE) e a conta já foi bloqueada uma vez.
+
+/** Acha o pedido desta conversa pelo id da venda/pack do ML. */
+async function pedidoDaConversa(company: string, packId: string) {
+  return prisma.order.findFirst({
+    where: { mlCompany: company.toLowerCase(), mlOrderId: packId },
+    select: {
+      id: true, orderNumber: true, nfNumber: true, estimatedDelivery: true,
+      trackingEvents: true, lastTracking: true, lastTrackingAt: true,
+      carrier: { select: { name: true } },
+    },
+  })
+}
+
+function eventosDoPedido(p: { trackingEvents: unknown; lastTracking: string | null;
+                              lastTrackingAt: Date | null }): EventoRastreio[] {
+  const brutos = Array.isArray(p.trackingEvents) ? p.trackingEvents : []
+  const eventos = brutos.map((e) => {
+    const o = (e ?? {}) as Record<string, unknown>
+    return {
+      descricao: String(o.descricao ?? o.description ?? o.status ?? ''),
+      data: String(o.data ?? o.date ?? o.dataHora ?? ''),
+    }
+  }).filter((e) => e.descricao)
+  if (eventos.length) return eventos
+  // sem lista de eventos, ainda dá para mostrar o último andamento conhecido
+  return p.lastTracking
+    ? [{ descricao: p.lastTracking, data: p.lastTrackingAt?.toLocaleString('pt-BR') ?? '' }]
+    : []
+}
+
+function textoSugerido(p: { carrier: { name: string } | null; estimatedDelivery: Date | null }): string {
+  const t = p.carrier?.name ? ` pela ${p.carrier.name}` : ''
+  const prev = p.estimatedDelivery
+    ? ` A previsão de entrega é ${p.estimatedDelivery.toLocaleDateString('pt-BR')}.`
+    : ''
+  return `Olá! Seu pedido já está a caminho${t}.${prev} Segue o rastreamento em anexo. `
+       + 'Qualquer dúvida, é só chamar.'
+}
+
+// GET /ml/conversas/:company/:packId/rascunho-rastreio — o que SERIA enviado
+router.get('/conversas/:company/:packId/rascunho-rastreio', async (req: Request, res: Response) => {
+  const company = String(req.params.company ?? '').toLowerCase() as MlCompany
+  if (!ML_COMPANIES.includes(company)) { res.status(400).json({ error: 'Empresa inválida' }); return }
+  try {
+    const p = await pedidoDaConversa(company, req.params.packId)
+    if (!p) {
+      res.status(404).json({ error: 'Não achei o pedido desta conversa. '
+        + 'A venda do ML pode não ter sido ligada à nota fiscal.' })
+      return
+    }
+    const eventos = eventosDoPedido(p)
+    if (!eventos.length) {
+      res.status(409).json({ error: 'Este pedido ainda não tem rastreamento para mandar.' })
+      return
+    }
+    const texto = textoSugerido(p)
+    const png = await gerarImagemRastreio({
+      nfNumero: p.nfNumber ?? p.orderNumber,
+      transportadora: p.carrier?.name,
+      previsao: p.estimatedDelivery,
+      eventos,
+    })
+    res.json({
+      ok: true,
+      pedido: p.orderNumber,
+      texto,
+      limite: ML_MSG_MAX_CHARS,
+      imagem: `data:image/png;base64,${png.toString('base64')}`,
+    })
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Falha ao montar o rascunho' })
+  }
+})
+
+// POST /ml/conversas/:company/:packId/enviar-rastreio — envia o que foi aprovado
+router.post('/conversas/:company/:packId/enviar-rastreio', async (req: Request, res: Response) => {
+  const company = String(req.params.company ?? '').toLowerCase() as MlCompany
+  const texto = String(req.body?.texto ?? '').trim()
+  if (!ML_COMPANIES.includes(company)) { res.status(400).json({ error: 'Empresa inválida' }); return }
+  if (!texto) { res.status(400).json({ error: 'Escreva a mensagem' }); return }
+  try {
+    const p = await pedidoDaConversa(company, req.params.packId)
+    if (!p) { res.status(404).json({ error: 'Não achei o pedido desta conversa' }); return }
+    const eventos = eventosDoPedido(p)
+    if (!eventos.length) {
+      res.status(409).json({ error: 'Este pedido ainda não tem rastreamento para mandar' })
+      return
+    }
+    // o anexo é apagado se não for usado em 48 h: sobe agora, envia em seguida
+    const png = await gerarImagemRastreio({
+      nfNumero: p.nfNumber ?? p.orderNumber,
+      transportadora: p.carrier?.name,
+      previsao: p.estimatedDelivery,
+      eventos,
+    })
+    const anexo = await mlSubirAnexo(company, png, `rastreio-${p.nfNumber ?? p.orderNumber}.png`)
+    await mlConversaResponder(company, req.params.packId, texto, [anexo])
+    res.json({ ok: true, pedido: p.orderNumber })
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : 'Falha ao enviar' })
   }
 })
 
