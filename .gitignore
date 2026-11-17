@@ -4,3 +4,6 @@ dist/
 *.env.local
 .DS_Store
 .bling-tokens.json
+
+# previa gerada pelo script de conferencia do rastreio (nao versionar)
+backend/previa-rastreio.png
