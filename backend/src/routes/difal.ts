@@ -11,6 +11,9 @@ import { prisma } from '../lib/prisma'
 import { DifalResponsavel, DifalSituacao, Prisma } from '@prisma/client'
 import { importarNotas } from '../services/difal/importar'
 import { semearAliquotas } from '../services/difal/aliquotas'
+// A apuração das guias já pagas é dado fixo, vindo da auditoria dos comprovantes
+// do Mercado Livre. Importado como módulo para entrar no build.
+import historicoGuias from '../services/difal/dados/historico-guias.json'
 
 const router = Router()
 
@@ -159,5 +162,11 @@ router.post(
     }
   }
 )
+
+// GET /difal/historico — a apuração das guias já pagas (dez/2025 a out/2026)
+// Dado fixo: veio da auditoria dos ZIPs de comprovantes do Mercado Livre.
+router.get('/historico', (_req: Request, res: Response) => {
+  res.json(historicoGuias)
+})
 
 export default router

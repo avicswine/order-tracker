@@ -204,6 +204,54 @@ export interface DifalAliquota {
   nota: string | null
 }
 
+
+export interface DifalHistorico {
+  apuradoEm: string
+  periodo: { de: string; ate: string }
+  resumo: {
+    notas: number
+    guiasTotal: number
+    pago: number
+    devido: number
+    aMais: number
+    encargos: number
+    autuacoes: { notas: number; valor: number }
+    guiasComReducao: number
+    guiasComparadas: number
+  }
+  estados: {
+    uf: string
+    estado: string
+    notas: number
+    base: number
+    pago: number
+    devido: number
+    aMais: number
+    pctCobrado: number
+    pctDevido: number
+    encargos: number
+    metodo: string
+  }[]
+  meses: { mes: string; label: string; notas: number; pago: number; devido: number; aMais: number }[]
+  notas: {
+    nf: string
+    uf: string
+    estado: string
+    data: string
+    mes_label: string
+    base: number
+    icms_origem: number
+    difal_pago: number
+    difal_devido: number
+    diferenca: number
+    pct_pago: number
+    pct_devido: number
+    encargos: number
+    guia: string
+    autuacao: boolean
+  }[]
+}
+
 export const difalApi = {
   listar: (params?: {
     responsavel?: string
@@ -220,6 +268,7 @@ export const difalApi = {
   resumo: (params?: { desde?: string }) =>
     api.get<DifalResumo>('/difal/resumo', { params }).then((r) => r.data),
   aliquotas: () => api.get<DifalAliquota[]>('/difal/aliquotas').then((r) => r.data),
+  historico: () => api.get<DifalHistorico>('/difal/historico').then((r) => r.data),
   importar: (dias?: number) =>
     api.post<{ ok: boolean; resultado: unknown }>('/difal/importar', { dias }).then((r) => r.data),
 }

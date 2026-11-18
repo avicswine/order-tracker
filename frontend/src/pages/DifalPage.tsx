@@ -1,17 +1,20 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { difalApi } from '../lib/api'
-import type { DifalNota, DifalResponsavel } from '../lib/api'
+import type { DifalNota, DifalResponsavel, DifalHistorico } from '../lib/api'
 
 function brl(v: number | null | undefined) {
   return (v ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
-function dataBr(iso: string) {
-  return new Date(iso).toLocaleDateString('pt-BR')
+function pct(v: number | null | undefined) {
+  return `${(v ?? 0).toFixed(2).replace('.', ',')}%`
 }
 
-// Como cada responsável aparece na tela.
+function dataBr(iso: string) {
+  return new Date(iso + (iso.length === 10 ? 'T12:00:00' : '')).toLocaleDateString('pt-BR')
+}
+
 const RESPONSAVEL: Record<DifalResponsavel, { texto: string; cor: string; ajuda: string }> = {
   NOSSO: {
     texto: 'Nós pagamos',
@@ -35,65 +38,64 @@ const RESPONSAVEL: Record<DifalResponsavel, { texto: string; cor: string; ajuda:
   },
 }
 
-const SITUACAO: Record<string, { texto: string; cor: string }> = {
-  PENDENTE: { texto: 'Pendente', cor: 'bg-gray-100 text-gray-700' },
-  CONFERIDO: { texto: 'Conferido', cor: 'bg-green-100 text-green-800' },
-  DIVERGENTE: { texto: 'Divergente', cor: 'bg-red-100 text-red-800' },
-  PAGO: { texto: 'Pago', cor: 'bg-green-100 text-green-800' },
-  ATRASADO: { texto: 'Atrasado', cor: 'bg-red-100 text-red-800' },
-}
-
-function Cartao({
+function Numero({
   titulo,
   valor,
   detalhe,
-  alerta,
+  tom = 'normal',
 }: {
   titulo: string
   valor: string
   detalhe?: string
-  alerta?: boolean
+  tom?: 'normal' | 'alerta' | 'ok'
 }) {
+  const borda =
+    tom === 'alerta' ? 'border-amber-300 bg-amber-50' : tom === 'ok' ? 'border-green-300 bg-green-50' : 'border-gray-200 bg-white'
+  const cor = tom === 'alerta' ? 'text-amber-800' : tom === 'ok' ? 'text-green-800' : 'text-gray-900'
   return (
-    <div
-      className={`rounded-lg border p-4 ${
-        alerta ? 'border-amber-300 bg-amber-50' : 'border-gray-200 bg-white'
-      }`}
-    >
+    <div className={`rounded-lg border p-4 ${borda}`}>
       <div className="text-xs text-gray-500">{titulo}</div>
-      <div
-        className={`mt-1 text-2xl font-semibold tabular-nums ${
-          alerta ? 'text-amber-800' : 'text-gray-900'
-        }`}
-      >
-        {valor}
-      </div>
+      <div className={`mt-1 text-2xl font-semibold tabular-nums ${cor}`}>{valor}</div>
       {detalhe && <div className="mt-1 text-xs text-gray-500">{detalhe}</div>}
     </div>
   )
 }
 
-export function DifalPage() {
+function Aba({
+  ativa,
+  onClick,
+  children,
+}: {
+  ativa: boolean
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`border-b-2 px-1 pb-2 text-sm font-medium transition ${
+        ativa
+          ? 'border-gray-900 text-gray-900'
+          : 'border-transparent text-gray-500 hover:text-gray-700'
+      }`}
+    >
+      {children}
+    </button>
+  )
+}
+
+// ---------------------------------------------------------------- Vendas de agora
+function Vendas() {
   const [responsavel, setResponsavel] = useState('')
-  const [uf, setUf] = useState('')
   const [busca, setBusca] = useState('')
   const qc = useQueryClient()
 
-  const { data: resumo } = useQuery({
-    queryKey: ['difal-resumo'],
-    queryFn: () => difalApi.resumo(),
-  })
-
+  const { data: resumo } = useQuery({ queryKey: ['difal-resumo'], queryFn: () => difalApi.resumo() })
   const { data: lista, isLoading } = useQuery({
-    queryKey: ['difal-notas', responsavel, uf, busca],
+    queryKey: ['difal-notas', responsavel, busca],
     queryFn: () =>
-      difalApi.listar({
-        responsavel: responsavel || undefined,
-        uf: uf || undefined,
-        busca: busca || undefined,
-      }),
+      difalApi.listar({ responsavel: responsavel || undefined, busca: busca || undefined }),
   })
-
   const importar = useMutation({
     mutationFn: () => difalApi.importar(90),
     onSuccess: () => {
@@ -103,21 +105,14 @@ export function DifalPage() {
   })
 
   const notas = lista?.notas ?? []
-  const nosso = resumo?.porResponsavel.find((r) => r.responsavel === 'NOSSO')
   const ml = resumo?.porResponsavel.find((r) => r.responsavel === 'ML_PAGA')
-  const totalNotas = lista?.total ?? 0
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900">DIFAL</h1>
-          <p className="mt-1 max-w-2xl text-sm text-gray-600">
-            Diferencial de alíquota de cada nota, calculado pelo NCM e pelo estado de destino.
-            Os produtos de NCM 8436 têm a redução do Convênio 52/91: carga total de 5,6%, com
-            4,1% já recolhidos na origem, restando 1,5% para o destino.
-          </p>
-        </div>
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-gray-600">
+          Notas emitidas nos últimos 90 dias, com o DIFAL calculado por NCM e estado.
+        </p>
         <button
           onClick={() => importar.mutate()}
           disabled={importar.isPending}
@@ -133,28 +128,23 @@ export function DifalPage() {
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Cartao
-          titulo="Guias que precisamos pagar"
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Numero
+          titulo="Guias que precisamos emitir"
           valor={brl(resumo?.aPagar.valor)}
           detalhe={`${resumo?.aPagar.notas ?? 0} nota(s) de balcão ou Loja Integrada`}
-          alerta={(resumo?.aPagar.valor ?? 0) > 0}
+          tom={(resumo?.aPagar.valor ?? 0) > 0 ? 'alerta' : 'ok'}
         />
-        <Cartao
+        <Numero
           titulo="O Mercado Livre recolhe"
           valor={brl(ml?.calculado)}
-          detalhe={`${ml?.notas ?? 0} nota(s) · cobrado de nós: ${brl(ml?.cobradoMl)}`}
+          detalhe={`${ml?.notas ?? 0} nota(s) · ele cobra de nós depois`}
         />
-        <Cartao
-          titulo="Divergências com o ML"
+        <Numero
+          titulo="Cobrança do ML diferente do calculado"
           valor={brl(resumo?.divergentes.valor)}
-          detalhe={`${resumo?.divergentes.notas ?? 0} nota(s) com valor diferente do calculado`}
-          alerta={(resumo?.divergentes.notas ?? 0) > 0}
-        />
-        <Cartao
-          titulo="Notas de balcão no período"
-          valor={String(nosso?.notas ?? 0)}
-          detalhe={`DIFAL calculado: ${brl(nosso?.calculado)}`}
+          detalhe={`${resumo?.divergentes.notas ?? 0} nota(s) para conferir`}
+          tom={(resumo?.divergentes.notas ?? 0) > 0 ? 'alerta' : 'ok'}
         />
       </div>
 
@@ -164,27 +154,19 @@ export function DifalPage() {
           onChange={(e) => setResponsavel(e.target.value)}
           className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
         >
-          <option value="">Todos os responsáveis</option>
-          <option value="NOSSO">Nós pagamos</option>
-          <option value="ML_PAGA">Mercado Livre paga</option>
-          <option value="CLIENTE">Cliente contribuinte</option>
+          <option value="">Todas as notas</option>
+          <option value="NOSSO">Só as que precisamos pagar</option>
+          <option value="ML_PAGA">Só as do Mercado Livre</option>
+          <option value="CLIENTE">Cliente é contribuinte</option>
           <option value="SEM_DIFAL">Sem DIFAL</option>
         </select>
-        <input
-          value={uf}
-          onChange={(e) => setUf(e.target.value.toUpperCase().slice(0, 2))}
-          placeholder="UF"
-          className="w-20 rounded-lg border border-gray-300 px-3 py-2 text-sm uppercase"
-        />
         <input
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
           placeholder="Número da NF ou cliente"
           className="min-w-[200px] flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm"
         />
-        <span className="text-sm text-gray-500">
-          {totalNotas} {totalNotas === 1 ? 'nota' : 'notas'}
-        </span>
+        <span className="text-sm text-gray-500">{lista?.total ?? 0} notas</span>
       </div>
 
       <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
@@ -198,29 +180,29 @@ export function DifalPage() {
               <th className="px-3 py-2 text-left">Canal</th>
               <th className="px-3 py-2 text-right">Valor da nota</th>
               <th className="px-3 py-2 text-right">DIFAL</th>
-              <th className="px-3 py-2 text-right">Cobrado ML</th>
               <th className="px-3 py-2 text-left">Quem paga</th>
-              <th className="px-3 py-2 text-left">Situação</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {isLoading && (
               <tr>
-                <td colSpan={10} className="px-3 py-8 text-center text-gray-500">
+                <td colSpan={8} className="px-3 py-8 text-center text-gray-500">
                   Carregando…
                 </td>
               </tr>
             )}
             {!isLoading && notas.length === 0 && (
               <tr>
-                <td colSpan={10} className="px-3 py-8 text-center text-gray-500">
-                  Nenhuma nota ainda. Clique em &ldquo;Atualizar do Bling&rdquo; para buscar.
+                <td colSpan={8} className="px-3 py-10 text-center">
+                  <p className="text-gray-600">Nenhuma nota importada ainda.</p>
+                  <p className="mt-1 text-sm text-gray-500">
+                    Clique em &ldquo;Atualizar do Bling&rdquo; para trazer as notas dos últimos 90 dias.
+                  </p>
                 </td>
               </tr>
             )}
             {notas.map((n: DifalNota) => {
               const r = RESPONSAVEL[n.responsavel]
-              const s = SITUACAO[n.situacao] ?? SITUACAO.PENDENTE
               return (
                 <tr key={n.id} className="hover:bg-gray-50">
                   <td className="px-3 py-2 font-medium text-gray-900">
@@ -228,16 +210,9 @@ export function DifalPage() {
                     <span className="ml-1 text-xs text-gray-400">{n.empresa}</span>
                   </td>
                   <td className="px-3 py-2 text-gray-600">{dataBr(n.emitidaEm)}</td>
-                  <td
-                    className="max-w-[220px] truncate px-3 py-2 text-gray-700"
-                    title={n.clienteNome}
-                  >
+                  <td className="max-w-[220px] truncate px-3 py-2 text-gray-700" title={n.clienteNome}>
                     {n.clienteNome}
-                    {n.clienteTemIe && (
-                      <span className="ml-1 text-xs text-gray-400" title="Tem inscrição estadual">
-                        IE
-                      </span>
-                    )}
+                    {n.clienteTemIe && <span className="ml-1 text-xs text-gray-400">IE</span>}
                   </td>
                   <td className="px-3 py-2 text-gray-600">{n.clienteUf}</td>
                   <td
@@ -252,16 +227,10 @@ export function DifalPage() {
                   <td className="px-3 py-2 text-right font-medium tabular-nums text-gray-900">
                     {brl(n.difalCalculado)}
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums text-gray-600">
-                    {n.difalCobradoMl == null ? '—' : brl(n.difalCobradoMl)}
-                  </td>
                   <td className="px-3 py-2">
                     <span className={`rounded-full px-2 py-0.5 text-xs ${r.cor}`} title={r.ajuda}>
                       {r.texto}
                     </span>
-                  </td>
-                  <td className="px-3 py-2">
-                    <span className={`rounded-full px-2 py-0.5 text-xs ${s.cor}`}>{s.texto}</span>
                   </td>
                 </tr>
               )
@@ -269,6 +238,199 @@ export function DifalPage() {
           </tbody>
         </table>
       </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------- Histórico apurado
+function Historico() {
+  const [verNotas, setVerNotas] = useState(false)
+  const { data, isLoading } = useQuery({
+    queryKey: ['difal-historico'],
+    queryFn: () => difalApi.historico(),
+  })
+
+  if (isLoading) return <p className="py-8 text-center text-gray-500">Carregando apuração…</p>
+  if (!data) return <p className="py-8 text-center text-gray-500">Não foi possível carregar.</p>
+
+  const h: DifalHistorico = data
+  const maior = Math.max(...h.estados.map((e) => e.pctCobrado), 5)
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+        <p className="text-sm text-amber-900">
+          Entre {dataBr(h.periodo.de)} e {dataBr(h.periodo.ate)} pagamos{' '}
+          <b>{brl(h.resumo.aMais)}</b> a mais de DIFAL do que o devido. A causa: os anúncios
+          estavam sem a regra de redução do Convênio 52/91, então o Mercado Livre calculou pela
+          alíquota cheia. Apenas {h.resumo.guiasComReducao} das {h.resumo.guiasComparadas} guias
+          aplicaram a redução.
+        </p>
+        <p className="mt-2 text-sm font-medium text-amber-900">
+          Corrigido em 16/11/2026: 1.491 produtos ligados à regra certa nas duas empresas.
+        </p>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Numero titulo="Pago a mais" valor={brl(h.resumo.aMais)} detalhe="o que não precisávamos ter pago" tom="alerta" />
+        <Numero titulo="DIFAL devido" valor={brl(h.resumo.devido)} detalhe={`pagamos ${brl(h.resumo.pago)}`} />
+        <Numero titulo="Multa e juros" valor={brl(h.resumo.encargos)} detalhe="encargos por atraso" />
+        <Numero
+          titulo="Autuações do Piauí"
+          valor={brl(h.resumo.autuacoes.valor)}
+          detalhe={`${h.resumo.autuacoes.notas} guias (TVI) — fora da comparação`}
+        />
+      </div>
+
+      <div>
+        <h2 className="mb-1 text-base font-medium text-gray-900">Quanto cada estado cobrou</h2>
+        <p className="mb-3 text-sm text-gray-600">
+          A barra cinza é o que era devido. A diferença em âmbar é o que pagamos a mais.
+        </p>
+        <div className="space-y-3 rounded-lg border border-gray-200 bg-white p-4">
+          {h.estados.map((e) => (
+            <div key={e.uf}>
+              <div className="flex items-baseline justify-between gap-2 text-sm">
+                <span className="font-medium text-gray-900">
+                  {e.estado}
+                  <span className="ml-2 text-xs font-normal text-gray-500">
+                    {e.notas} nota{e.notas === 1 ? '' : 's'}
+                  </span>
+                </span>
+                <span className="tabular-nums text-gray-600">
+                  cobrou <b className="text-gray-900">{pct(e.pctCobrado)}</b> · devia{' '}
+                  {pct(e.pctDevido)}
+                </span>
+              </div>
+              <div className="mt-1 flex items-center gap-2">
+                <div className="relative h-5 flex-1 overflow-hidden rounded bg-gray-100">
+                  <div
+                    className="absolute inset-y-0 left-0 bg-amber-400"
+                    style={{ width: `${Math.min((e.pctCobrado / maior) * 100, 100)}%` }}
+                  />
+                  <div
+                    className="absolute inset-y-0 left-0 bg-gray-400"
+                    style={{ width: `${Math.min((e.pctDevido / maior) * 100, 100)}%` }}
+                  />
+                </div>
+                <span className="w-28 text-right text-sm font-medium tabular-nums text-amber-700">
+                  +{brl(e.aMais)}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <button
+          onClick={() => setVerNotas(!verNotas)}
+          className="text-sm text-gray-600 underline hover:text-gray-900"
+        >
+          {verNotas ? 'Esconder' : 'Ver'} as {h.notas.length} notas auditadas
+        </button>
+        {verNotas && (
+          <div className="mt-3 max-h-[420px] overflow-auto rounded-lg border border-gray-200 bg-white">
+            <table className="min-w-full text-sm">
+              <thead className="sticky top-0 border-b border-gray-200 bg-gray-50 text-xs uppercase text-gray-500">
+                <tr>
+                  <th className="px-3 py-2 text-left">NF</th>
+                  <th className="px-3 py-2 text-left">UF</th>
+                  <th className="px-3 py-2 text-left">Emissão</th>
+                  <th className="px-3 py-2 text-right">Produtos</th>
+                  <th className="px-3 py-2 text-right">Pago</th>
+                  <th className="px-3 py-2 text-right">Devido</th>
+                  <th className="px-3 py-2 text-right">Diferença</th>
+                  <th className="px-3 py-2 text-left">Guia</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {h.notas.map((n) => (
+                  <tr key={`${n.uf}-${n.nf}`} className="hover:bg-gray-50">
+                    <td className="px-3 py-2 font-medium text-gray-900">
+                      {n.nf}
+                      {n.autuacao && (
+                        <span className="ml-1 rounded bg-gray-100 px-1 text-xs text-gray-600">
+                          autuação
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-gray-600">{n.uf}</td>
+                    <td className="px-3 py-2 text-gray-600">{dataBr(n.data)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-gray-600">{brl(n.base)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-gray-900">
+                      {brl(n.difal_pago)}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-gray-600">
+                      {brl(n.difal_devido)}
+                    </td>
+                    <td
+                      className={`px-3 py-2 text-right tabular-nums ${
+                        n.diferenca > 1 ? 'text-amber-700' : 'text-gray-500'
+                      }`}
+                    >
+                      {n.diferenca > 0 ? '+' : ''}
+                      {brl(n.diferenca)}
+                    </td>
+                    <td className="px-3 py-2 text-gray-500">{n.guia}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <details className="border-t border-gray-200 pt-4">
+        <summary className="cursor-pointer text-sm text-gray-600">Como estes números foram apurados</summary>
+        <div className="mt-3 max-w-3xl space-y-2 text-sm text-gray-600">
+          <p>
+            <b>A conta.</b> Para o NCM 8436 a carga total é de 5,6% (Convênio ICMS 52/91, Anexo II).
+            A nota já sai do RS com base reduzida e ICMS de 7%, o que dá 4,1% recolhidos na origem.
+            O DIFAL do destino é a diferença: 1,5%. Ceará, Mato Grosso e Pernambuco usam método
+            próprio do fisco — no Ceará dá 3,64%.
+          </p>
+          <p>
+            <b>Origem dos dados.</b> {h.resumo.guiasTotal} guias de DIFAL pagas e os XML das notas,
+            exportados do Mercado Livre. Entram na comparação as {h.resumo.notas} notas em que todos
+            os itens têm NCM 8436.
+          </p>
+          <p>
+            <b>Fora da conta.</b> Multa e juros, que decorrem de atraso e não da base de cálculo; e
+            as {h.resumo.autuacoes.notas} guias de autuação do Piauí (TVI), que são lançamento do
+            fisco. Cinco guias do Tocantins não puderam ser lidas: o PDF não traz os valores em
+            texto.
+          </p>
+          <p className="text-xs text-gray-500">Apurado em {dataBr(h.apuradoEm)}.</p>
+        </div>
+      </details>
+    </div>
+  )
+}
+
+export function DifalPage() {
+  const [aba, setAba] = useState<'vendas' | 'historico'>('vendas')
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h1 className="text-2xl font-semibold text-gray-900">DIFAL</h1>
+        <p className="mt-1 max-w-3xl text-sm text-gray-600">
+          Diferencial de alíquota das vendas interestaduais. Produtos de NCM 8436 têm a redução do
+          Convênio 52/91: a carga total é 5,6%, a origem recolhe 4,1% e sobra 1,5% para o destino.
+        </p>
+      </div>
+
+      <div className="flex gap-5 border-b border-gray-200">
+        <Aba ativa={aba === 'vendas'} onClick={() => setAba('vendas')}>
+          Vendas
+        </Aba>
+        <Aba ativa={aba === 'historico'} onClick={() => setAba('historico')}>
+          O que já pagamos
+        </Aba>
+      </div>
+
+      {aba === 'vendas' ? <Vendas /> : <Historico />}
     </div>
   )
 }
