@@ -1,0 +1,195 @@
+{
+ "AL": {
+  "guiasComReducao": 0,
+  "guiasTotal": 6,
+  "classes": {
+   "outro (3.36%)": {
+    "guias": 1,
+    "valor": 46.89,
+    "exemplos": [
+     "8119"
+    ]
+   },
+   "outro (26.30%)": {
+    "guias": 1,
+    "valor": 57.16,
+    "exemplos": [
+     "10146"
+    ]
+   },
+   "outro (3.51%)": {
+    "guias": 2,
+    "valor": 11.32,
+    "exemplos": [
+     "9862",
+     "11447"
+    ]
+   },
+   "outro (7.03%)": {
+    "guias": 1,
+    "valor": 95.18,
+    "exemplos": [
+     "10040"
+    ]
+   },
+   "outro (3.52%)": {
+    "guias": 1,
+    "valor": 57.53,
+    "exemplos": [
+     "12363"
+    ]
+   }
+  }
+ },
+ "AM": {
+  "guiasComReducao": 0,
+  "guiasTotal": 2,
+  "classes": {
+   "cheio SEM redução": {
+    "guias": 2,
+    "valor": 81.21,
+    "exemplos": [
+     "9609",
+     "11696"
+    ]
+   }
+  }
+ },
+ "CE": {
+  "guiasComReducao": 21,
+  "guiasTotal": 49,
+  "classes": {
+   "cheio SEM redução": {
+    "guias": 23,
+    "valor": 2864.46,
+    "exemplos": [
+     "8270",
+     "8606",
+     "9718",
+     "9747",
+     "9712"
+    ]
+   },
+   "prop (com redução)": {
+    "guias": 20,
+    "valor": 543.76,
+    "exemplos": [
+     "8615",
+     "9311",
+     "10257",
+     "10738",
+     "10127"
+    ]
+   },
+   "outro (5.72%)": {
+    "guias": 1,
+    "valor": 89.07,
+    "exemplos": [
+     "8789"
+    ]
+   },
+   "outro (0.39%)": {
+    "guias": 1,
+    "valor": 5.69,
+    "exemplos": [
+     "8604"
+    ]
+   },
+   "outro (0.69%)": {
+    "guias": 1,
+    "valor": 12.35,
+    "exemplos": [
+     "8389"
+    ]
+   },
+   "outro (15.90%)": {
+    "guias": 1,
+    "valor": 611.7,
+    "exemplos": [
+     "10108"
+    ]
+   },
+   "outro (9.36%)": {
+    "guias": 1,
+    "valor": 143.48,
+    "exemplos": [
+     "10867"
+    ]
+   },
+   "carga (com redução)": {
+    "guias": 1,
+    "valor": 2.5,
+    "exemplos": [
+     "10932"
+    ]
+   }
+  }
+ },
+ "PB": {
+  "guiasComReducao": 0,
+  "guiasTotal": 3,
+  "classes": {
+   "cheio SEM redução": {
+    "guias": 3,
+    "valor": 307.98,
+    "exemplos": [
+     "9150",
+     "10906",
+     "12835"
+    ]
+   }
+  }
+ },
+ "PI": {
+  "guiasComReducao": 0,
+  "guiasTotal": 6,
+  "classes": {
+   "outro (14.00%)": {
+    "guias": 6,
+    "valor": 1169.46,
+    "exemplos": [
+     "11049",
+     "11048",
+     "11050",
+     "11051",
+     "11052"
+    ]
+   }
+  }
+ },
+ "RN": {
+  "guiasComReducao": 6,
+  "guiasTotal": 22,
+  "classes": {
+   "cheio SEM redução": {
+    "guias": 15,
+    "valor": 1282.66,
+    "exemplos": [
+     "9397",
+     "9408",
+     "9407",
+     "9600",
+     "9955"
+    ]
+   },
+   "prop (com redução)": {
+    "guias": 6,
+    "valor": 323.08,
+    "exemplos": [
+     "8609",
+     "8729",
+     "8875",
+     "8740",
+     "11516"
+    ]
+   },
+   "outro (12.62%)": {
+    "guias": 1,
+    "valor": 174.8,
+    "exemplos": [
+     "11947"
+    ]
+   }
+  }
+ }
+}

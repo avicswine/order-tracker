@@ -499,6 +499,14 @@ model DifalAliquota {
   metodo          String   @default("carga") // carga | prop
   posicaoFisco    Boolean  @default(false)   // true = há posição do fisco; false = regra geral
   nota            String?
+
+  // O que as guias já pagas provam sobre este estado. Vale mais que a teoria:
+  // é o que o fisco de fato aceitou. Alimentado pelas guias de DIFAL auditadas.
+  guiasComReducao Int?     // guias em que a redução do Convênio 52/91 foi aplicada
+  guiasTotal      Int?     // guias auditadas deste estado
+  metodoObservado String?  // método que as guias mostram (pode diferir do configurado)
+  evidenciaEm     DateTime?
+
   atualizadoEm    DateTime @updatedAt
 
   @@map("difal_aliquotas")

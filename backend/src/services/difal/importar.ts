@@ -11,6 +11,7 @@
 import { PrismaClient } from '@prisma/client'
 import { blingGet, listarEmpresasBling } from '../../routes/bling'
 import { calcularDifal, type DadosNota, type RegraUf } from './calculo'
+import { lerDifalDoXml, conferirComCadastro } from './xmlNota'
 
 /** NF como o Bling devolve no detalhe. Só os campos que usamos. */
 interface NfeBlingDetalhe {
@@ -25,6 +26,8 @@ interface NfeBlingDetalhe {
   situacao?: number
   tipo?: number
   numeroPedidoLoja?: string
+  /** link assinado para baixar o XML da nota */
+  xml?: string
   loja?: { id?: number }
   contato?: {
     nome?: string
@@ -167,6 +170,25 @@ export async function importarNotas(
         }
         const calc = calcularDifal(dados, porUf.get(uf))
         const valorProdutos = itens.reduce((a, i) => a + i.valorTotal, 0)
+
+        // O XML diz qual alíquota e qual redução o emissor usou de fato. Serve para
+        // conferir a nossa tabela: divergência aqui costuma ser tabela desatualizada.
+        let avisoXml: string | null = null
+        if (nf.xml) {
+          try {
+            const resp = await fetch(nf.xml)
+            if (resp.ok) {
+              const doXml = lerDifalDoXml(await resp.text())
+              const regra = porUf.get(uf)
+              if (regra) {
+                const { avisos } = conferirComCadastro(doXml, regra)
+                if (avisos.length) avisoXml = avisos.join('; ')
+              }
+            }
+          } catch {
+            // o XML é conferência extra: se não vier, o cálculo segue valendo
+          }
+        }
         const numero = String(parseInt(String(nf.numero ?? resumo.numero ?? '0'), 10))
 
         const registro = {
@@ -194,6 +216,7 @@ export async function importarNotas(
           difalMetodo: calc.metodo,
           calculoDetalhe: calc.detalhe as object,
           responsavel: calc.responsavel,
+          observacao: avisoXml,
         }
 
         try {
