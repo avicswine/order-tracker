@@ -1,6 +1,6 @@
 # STATUS — Order Tracker
 
-Última atualização: 2026-11-16 (especificação do módulo de DIFAL — aprovada, nada implementado)
+Última atualização: 2026-11-18 (monitor de DIFAL implementado na branch `feat-monitor-difal`; gerador de lote GNRE pronto, envio ao portal pendente)
 
 ## Regra de trabalho (definida por José em 2026-11-07)
 
@@ -10,7 +10,45 @@ que é inferência, nunca apresentar como fato. O motivo: na sessão de 07/11 tr
 afirmações minhas sobre políticas do ML caíram quando a fonte foi cobrada, gerando
 retrabalho e custo.
 
-## Módulo de DIFAL — ESPECIFICAÇÃO (2026-11-16, nada implementado ainda)
+## Monitor de DIFAL — ESTADO ATUAL (2026-11-18, branch `feat-monitor-difal`, PR ainda não aberto)
+
+Link para abrir o PR: <https://github.com/avicswine/order-tracker/pull/new/feat-monitor-difal>
+
+### O que já existe
+
+| parte | onde | estado |
+|---|---|---|
+| Tabelas `difal_notas`, `difal_aliquotas`, `difal_emitentes` | `backend/prisma/schema.prisma` + migrações `20261117120000` e `20261118120000` | aplicadas no banco local; Railway aplica no deploy (`npm start` roda `migrate deploy`) |
+| Cálculo (carga/prop, redução NCM 8436, quem paga) | `backend/src/services/difal/calculo.ts` | 8 casos em `verificar.ts` passam |
+| Importação do Bling (AVIC e AGRO; EQUI fora) + leitura do XML | `importar.ts`, `xmlNota.ts` | aceita situações 5, 6 e 7 (quase tudo vem como 6) |
+| Gerador do lote GNRE, layout 2.00 | `gnre.ts` | 20 casos em `verificarGnre.ts` passam; validação formal contra o XSD pendente (sem lxml/xmllint na máquina) |
+| Guias pendentes + download do lote | `guias.ts`, rotas `GET /api/difal/guias-pendentes` e `POST /api/difal/guias/lote` | testado local (200/422/400) |
+| Tela | `frontend/src/pages/DifalPage.tsx` — abas "Vendas" (com bloco "Guias que nós precisamos emitir") e "O que já pagamos" | no ar local em `/difal` |
+
+### O que falta (em ordem)
+
+1. **Código de receita GNRE por UF** — vem do webservice `GnreConfigUF`; sem ele nenhuma guia fica "pronta". Precisa do certificado e-CNPJ e da habilitação em homologação (<https://www.testegnre.pe.gov.br>) — José solicita.
+2. Cliente SOAP (`GnreLoteRecepcao` / `GnreResultadoLote`) com certificado — só depois da habilitação.
+3. Cruzar os 260 lançamentos `CDIFAL` (`cmvsync/vendas.db`, tabela `ml_cobrancas`) com as notas (`difalCobradoMl`).
+4. Abrir o PR, segunda revisão (codex não instalado), merge com "pode" do José.
+
+### Como conferir
+
+- `/difal` → "Atualizar do Bling" → tabela com notas dos últimos 90 dias e "Quem paga".
+- Bloco âmbar lista as guias nossas pendentes e **o que falta** em cada (hoje: código de receita da UF).
+- Selecionar notas prontas de uma empresa → "Baixar lote GNRE" → baixa `gnre-lote-<EMPRESA>-<data>.xml`; a nota sai da lista (`guiaGeradaEm`).
+- `npx tsx src/services/difal/verificar.ts` e `npx tsx src/services/difal/verificarGnre.ts` no backend.
+
+### Regras aprendidas na planilha fiscal do ML (16–17/11/2026)
+
+- Subir **Regras Tributárias antes** dos Dados Fiscais (senão "Regra Fiscal inválida").
+- NCM nunca vai sem regra; "Código do produto" = SKU do Bling; um SKU pode estar em vários anúncios.
+- Aba Kits: "Preço do item no kit" é percentual (100); a aba **não aceita** Regra tributária.
+- Regras de Transferência/Remessa nas 4 regras (AVIC 821700/821701, AGRO 828518/828519): CST 41 + PIS/COFINS CST 49, padrão da granja.
+
+---
+
+## Módulo de DIFAL — ESPECIFICAÇÃO ORIGINAL (2026-11-16)
 
 Controle do ICMS-DIFAL das vendas interestaduais para consumidor final **não contribuinte**:
 conferir se o valor recolhido bate com o que a regra manda, e acompanhar multa e juros.
