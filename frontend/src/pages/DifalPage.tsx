@@ -488,11 +488,16 @@ function LotesGnre() {
 
   const enviar = useMutation({ mutationFn: difalApi.enviarLote, onSuccess: recarregar, onError: (e) => setErro(mensagemErro(e)) })
   const consultar = useMutation({ mutationFn: difalApi.consultarLote, onSuccess: recarregar, onError: (e) => setErro(mensagemErro(e)) })
+  const desfazer = useMutation({
+    mutationFn: difalApi.desfazerLote,
+    onSuccess: () => { recarregar(); qc.invalidateQueries({ queryKey: ['difal-guias-pendentes'] }) },
+    onError: (e) => setErro(mensagemErro(e)),
+  })
   const xml = useMutation({ mutationFn: difalApi.baixarXmlLote, onSuccess: (r) => baixarArquivo(r.arquivo, r.nome) })
   const pdf = useMutation({ mutationFn: difalApi.baixarPdfLote, onSuccess: (r) => baixarArquivo(r.arquivo, r.nome), onError: (e) => setErro(mensagemErro(e)) })
 
   if (lotes.length === 0) return null
-  const ocupado = enviar.isPending || consultar.isPending
+  const ocupado = enviar.isPending || consultar.isPending || desfazer.isPending
 
   return (
     <div className="rounded-lg border border-gray-200 bg-white">
@@ -547,6 +552,15 @@ function LotesGnre() {
                       className="rounded border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-50"
                     >
                       {consultar.isPending ? 'Consultando…' : 'Consultar resultado'}
+                    </button>
+                  )}
+                  {!l.numeroRecibo && (
+                    <button
+                      onClick={() => { setErro(null); if (window.confirm(`Desfazer o lote ${l.id}? As notas voltam para a fila de guias pendentes.`)) desfazer.mutate(l.id) }}
+                      disabled={ocupado}
+                      className="rounded border border-red-300 px-2 py-1 text-xs text-red-700 hover:bg-red-50 disabled:opacity-50"
+                    >
+                      Desfazer
                     </button>
                   )}
                   {l.temPdf && (

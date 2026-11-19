@@ -16,7 +16,7 @@ import { ErroMontagemGnre } from '../services/difal/gnre'
 import { sincronizarCobrancasMl, fechamentoMensal } from '../services/difal/cobrancasMl'
 import {
   statusPortal, portalConfigurado, consultarConfigUf, enviarLote, consultarResultadoLote,
-  lerResultadoLote, ErroPortalGnre, type EmpresaGnre,
+  lerResultadoLote, ErroPortalGnre, ambienteGnre, type EmpresaGnre,
 } from '../services/difal/portalGnre'
 // A apuração das guias já pagas é dado fixo, vindo da auditoria dos comprovantes
 // do Mercado Livre. Importado como módulo para entrar no build.
@@ -354,6 +354,11 @@ router.post('/lotes/:id/enviar', async (req: Request, res: Response) => {
     const lote = await prisma.difalLoteGnre.findUnique({ where: { id: String(req.params.id) } })
     if (!lote) return res.status(404).json({ erro: 'lote não encontrado' })
     if (lote.numeroRecibo) return res.status(409).json({ erro: `lote já enviado (recibo ${lote.numeroRecibo})` })
+    if (lote.ambiente !== ambienteGnre()) {
+      return res.status(409).json({
+        erro: `este lote foi gerado para ${lote.ambiente} e o portal está em ${ambienteGnre()}: desfaça o lote e gere de novo`,
+      })
+    }
     const empresa = empresaGnre(lote.empresa)
     if (!empresa || !portalConfigurado(empresa)) return res.status(409).json({ erro: `certificado da ${lote.empresa} não configurado` })
 
@@ -371,6 +376,22 @@ router.post('/lotes/:id/enviar', async (req: Request, res: Response) => {
     res.json({ ...atualizado, tempoEstimadoMs: recibo.recibo?.tempoEstimadoMs ?? null })
   } catch (e) {
     responderErroPortal(res, e)
+  }
+})
+
+// POST /difal/lotes/:id/desfazer — apaga um lote que ainda não foi ao portal e devolve as notas à fila
+router.post('/lotes/:id/desfazer', async (req: Request, res: Response) => {
+  try {
+    const lote = await prisma.difalLoteGnre.findUnique({ where: { id: String(req.params.id) }, select: { id: true, numeroRecibo: true } })
+    if (!lote) return res.status(404).json({ erro: 'lote não encontrado' })
+    if (lote.numeroRecibo) return res.status(409).json({ erro: `lote já enviado ao portal (recibo ${lote.numeroRecibo}); não dá para desfazer` })
+    const [notas] = await prisma.$transaction([
+      prisma.difalNota.updateMany({ where: { guiaLoteId: lote.id }, data: { guiaGeradaEm: null, guiaLoteId: null } }),
+      prisma.difalLoteGnre.delete({ where: { id: lote.id } }),
+    ])
+    res.json({ ok: true, notasDevolvidas: notas.count })
+  } catch (e) {
+    res.status(500).json({ erro: (e as Error).message })
   }
 })
 

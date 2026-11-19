@@ -369,6 +369,8 @@ export const difalApi = {
   consultarLote: (id: string) =>
     api.post<{ situacao: { codigo: string; descricao: string }; guias: DifalGuiaResultado[]; temPdf: boolean }>(`/difal/lotes/${id}/consultar`).then((r) => r.data),
   // downloads passam pelo axios para levar o token de login
+  desfazerLote: (id: string) =>
+    api.post<{ ok: boolean; notasDevolvidas: number }>(`/difal/lotes/${id}/desfazer`).then((r) => r.data),
   baixarXmlLote: (id: string) =>
     api.get<Blob>(`/difal/lotes/${id}/xml`, { responseType: 'blob' }).then((r) => ({ arquivo: r.data, nome: `gnre-lote-${id}.xml` })),
   baixarPdfLote: (id: string) =>
