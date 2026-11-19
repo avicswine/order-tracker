@@ -82,6 +82,8 @@ export interface ResultadoImportacao {
   gravadas: number
   atualizadas: number
   ignoradas: number
+  /** já estavam completas no banco: não gastamos chamada de detalhe nem XML */
+  puladas: number
   erros: string[]
 }
 
@@ -122,7 +124,7 @@ function temIe(ie?: string | null): boolean {
 
 export async function importarNotas(
   prisma: PrismaClient,
-  opcoes: { empresa?: string; desde?: Date; limite?: number } = {}
+  opcoes: { empresa?: string; desde?: Date; limite?: number; forcar?: boolean } = {}
 ): Promise<ResultadoImportacao[]> {
   const desde = opcoes.desde ?? new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
   const desdeStr = desde.toISOString().slice(0, 10)
@@ -157,6 +159,7 @@ export async function importarNotas(
       gravadas: 0,
       atualizadas: 0,
       ignoradas: 0,
+      puladas: 0,
       erros: [],
     }
 
@@ -223,6 +226,24 @@ export async function importarNotas(
           res.atualizadas += semGuia.count + comGuia.count
           res.ignoradas++
           continue
+        }
+
+        // Nota já gravada com os dados da guia não precisa de nova chamada de detalhe
+        // nem de novo download do XML (cada importação refazia tudo: 2 chamadas por nota).
+        if (!opcoes.forcar) {
+          const completa = await prisma.difalNota.findFirst({
+            where: {
+              empresa: empresa.code,
+              blingId: String(resumo.id),
+              municipioIbgeDestino: { not: null },
+              documentoDestinatario: { not: null },
+            },
+            select: { id: true },
+          })
+          if (completa) {
+            res.puladas++
+            continue
+          }
         }
 
         let nf: NfeBlingDetalhe

@@ -180,7 +180,7 @@ router.put(
 // POST /difal/importar — busca as notas do Bling e calcula (só leitura no Bling)
 router.post(
   '/importar',
-  [body('dias').optional().isInt({ min: 1, max: 365 }), body('empresa').optional().trim()],
+  [body('dias').optional().isInt({ min: 1, max: 365 }), body('empresa').optional().trim(), body('forcar').optional().isBoolean()],
   async (req: Request, res: Response) => {
     const erros = validationResult(req)
     if (!erros.isEmpty()) return res.status(400).json({ errors: erros.array() })
@@ -191,6 +191,8 @@ router.post(
       const resultado = await importarNotas(prisma, {
         desde,
         empresa: req.body?.empresa ? String(req.body.empresa) : undefined,
+        // forcar=true recalcula tudo (ex.: depois de mudar uma alíquota)
+        forcar: req.body?.forcar === true || req.body?.forcar === 'true',
       })
       res.json({ ok: true, desde, resultado })
     } catch (e) {
