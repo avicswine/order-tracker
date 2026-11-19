@@ -164,7 +164,16 @@ async function chamar(empresa: EmpresaGnre, servico: NomeServico, dadosXml: stri
   const cert = certificado(empresa)
   if (!cert) throw new ErroPortalGnre(`certificado digital da ${empresa} não configurado (GNRE_PFX_ARQUIVO_${empresa} ou GNRE_PFX_BASE64_${empresa}, mais GNRE_PFX_SENHA_${empresa})`)
 
-  const agent = new https.Agent({ pfx: cert.pfx, passphrase: cert.passphrase, keepAlive: false })
+  // Manual 3.2.4: TLS 1.2 com ECDHE-RSA-AES-GCM. Fixar isso evita que o servidor (Java antigo)
+  // rejeite o aperto de mão com EPROTO quando o Node oferece TLS 1.3/grupos novos.
+  const agent = new https.Agent({
+    pfx: cert.pfx,
+    passphrase: cert.passphrase,
+    keepAlive: false,
+    minVersion: 'TLSv1.2',
+    maxVersion: 'TLSv1.2',
+    ciphers: 'ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-GCM-SHA256',
+  })
   const url = `${HOST[ambienteGnre()]}/gnreWS/services/${SERVICO[servico].caminho}`
   const envelope = montarEnvelope(servico, dadosXml)
 
@@ -195,8 +204,11 @@ async function chamar(empresa: EmpresaGnre, servico: NomeServico, dadosXml: stri
         const motivo = texto(corpo, 'Text') ?? texto(corpo, 'faultstring')
         throw new ErroPortalGnre(`portal GNRE respondeu HTTP ${status}${motivo ? ': ' + motivo : ''}`)
       }
-      // erro de TLS/certificado aparece aqui (ex.: senha do .pfx errada, certificado não habilitado)
-      throw new ErroPortalGnre(`não foi possível falar com o portal GNRE: ${erro.code ?? erro.message}`)
+      // erro de TLS/certificado aparece aqui (ex.: senha do .pfx errada, certificado não habilitado).
+      // O motivo completo do OpenSSL vai para o log e para a tela — sem senha nem certificado.
+      const motivo = `${erro.code ?? 'ERRO'}: ${String(erro.message).split('\n')[0]}`
+      console.error(`[GNRE] ${empresa} ${servico}: ${motivo}`)
+      throw new ErroPortalGnre(`não foi possível falar com o portal GNRE (${motivo})`)
     }
   }
 }
