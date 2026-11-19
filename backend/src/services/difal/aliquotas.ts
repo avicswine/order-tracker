@@ -62,8 +62,8 @@ export async function semearAliquotas(prisma: PrismaClient): Promise<number> {
     await prisma.difalAliquota.upsert({
       where: { uf: a.uf },
       create: a,
-      // só completa o que falta; não sobrescreve alíquota ajustada à mão
-      update: { nome: a.nome, nota: a.nota },
+      // só completa o que falta; não sobrescreve alíquota nem nota ajustadas à mão
+      update: { nome: a.nome },
     })
     gravadas++
   }
