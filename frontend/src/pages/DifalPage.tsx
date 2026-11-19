@@ -637,8 +637,8 @@ function Configuracao() {
         {portal ? (
           <ul className="mt-1 space-y-0.5 text-gray-600">
             <li>Ambiente: <b>{portal.ambiente === 'producao' ? 'PRODUÇÃO' : 'homologação (testes)'}</b> — {portal.host}</li>
-            <li>Certificado AVIC: {portal.empresas.AVIC ? 'configurado' : 'não configurado (GNRE_PFX_BASE64_AVIC / GNRE_PFX_SENHA_AVIC)'}</li>
-            <li>Certificado AGRO: {portal.empresas.AGRO ? 'configurado' : 'não configurado (GNRE_PFX_BASE64_AGRO / GNRE_PFX_SENHA_AGRO)'}</li>
+            <li>Certificado AVIC: {portal.empresas.AVIC ? 'configurado' : 'não configurado (GNRE_PFX_ARQUIVO_AVIC ou GNRE_PFX_BASE64_AVIC + GNRE_PFX_SENHA_AVIC)'}</li>
+            <li>Certificado AGRO: {portal.empresas.AGRO ? 'configurado' : 'não configurado (GNRE_PFX_ARQUIVO_AGRO ou GNRE_PFX_BASE64_AGRO + GNRE_PFX_SENHA_AGRO)'}</li>
           </ul>
         ) : (
           <p className="text-gray-500">carregando…</p>

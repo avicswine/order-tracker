@@ -16,13 +16,15 @@
  *
  * Certificado e ambiente vêm de variáveis de ambiente, nunca do código:
  *   GNRE_AMBIENTE            homologacao (padrão) | producao
- *   GNRE_PFX_BASE64_<EMP>    arquivo .pfx em base64 (EMP = AVIC | AGRO)
+ *   GNRE_PFX_ARQUIVO_<EMP>   caminho do arquivo .pfx no PC (EMP = AVIC | AGRO), ou
+ *   GNRE_PFX_BASE64_<EMP>    o mesmo arquivo em base64 (para o Railway)
  *   GNRE_PFX_SENHA_<EMP>     senha do .pfx
  *
  * Limite do portal: 500 requisições/minuto por IP; 429 vem com Retry-After (manual 3.2.2).
  * Nenhuma chamada aqui movimenta dinheiro: gerar a guia não é pagar a guia.
  */
 import https from 'https'
+import { existsSync, readFileSync } from 'fs'
 import axios, { AxiosError } from 'axios'
 import { escapar } from './gnre'
 
@@ -57,10 +59,20 @@ export function ambienteGnre(): AmbienteGnre {
   return process.env.GNRE_AMBIENTE === 'producao' ? 'producao' : 'homologacao'
 }
 
+/**
+ * O .pfx pode vir de duas formas: caminho do arquivo (GNRE_PFX_ARQUIVO_<EMP>, prático no PC)
+ * ou conteúdo em base64 (GNRE_PFX_BASE64_<EMP>, para o Railway, que não tem o arquivo).
+ */
 function certificado(empresa: EmpresaGnre): { pfx: Buffer; passphrase: string } | null {
-  const b64 = process.env[`GNRE_PFX_BASE64_${empresa}`]
   const senha = process.env[`GNRE_PFX_SENHA_${empresa}`]
-  if (!b64 || !senha) return null
+  if (!senha) return null
+  const arquivo = process.env[`GNRE_PFX_ARQUIVO_${empresa}`]
+  if (arquivo) {
+    if (!existsSync(arquivo)) return null
+    return { pfx: readFileSync(arquivo), passphrase: senha }
+  }
+  const b64 = process.env[`GNRE_PFX_BASE64_${empresa}`]
+  if (!b64) return null
   return { pfx: Buffer.from(b64, 'base64'), passphrase: senha }
 }
 
@@ -141,7 +153,7 @@ export function extrairRetorno(envelopeResposta: string): string {
 
 async function chamar(empresa: EmpresaGnre, servico: NomeServico, dadosXml: string): Promise<string> {
   const cert = certificado(empresa)
-  if (!cert) throw new ErroPortalGnre(`certificado digital da ${empresa} não configurado (GNRE_PFX_BASE64_${empresa})`)
+  if (!cert) throw new ErroPortalGnre(`certificado digital da ${empresa} não configurado (GNRE_PFX_ARQUIVO_${empresa} ou GNRE_PFX_BASE64_${empresa}, mais GNRE_PFX_SENHA_${empresa})`)
 
   const agent = new https.Agent({ pfx: cert.pfx, passphrase: cert.passphrase, keepAlive: false })
   const url = `${HOST[ambienteGnre()]}/gnreWS/services/${SERVICO[servico].caminho}`
