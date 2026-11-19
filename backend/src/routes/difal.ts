@@ -56,6 +56,7 @@ router.get(
       ]
     }
 
+    try {
     const [notas, total] = await Promise.all([
       prisma.difalNota.findMany({
         where,
@@ -67,11 +68,17 @@ router.get(
     ])
 
     res.json({ notas, total, pagina, porPagina })
+    } catch (e) {
+      res.status(500).json({ erro: (e as Error).message })
+    }
   }
 )
 
 // GET /difal/resumo — os números do topo da tela
-router.get('/resumo', async (req: Request, res: Response) => {
+router.get('/resumo', [query('desde').optional().isISO8601()], async (req: Request, res: Response) => {
+  const erros = validationResult(req)
+  if (!erros.isEmpty()) return res.status(400).json({ errors: erros.array() })
+  try {
   const where: Prisma.DifalNotaWhereInput = {}
   if (req.query.desde) where.emitidaEm = { gte: new Date(String(req.query.desde)) }
 
@@ -105,12 +112,19 @@ router.get('/resumo', async (req: Request, res: Response) => {
     aPagar: { notas: aPagar._count._all, valor: aPagar._sum.difalCalculado ?? 0 },
     divergentes: { notas: divergentes._count._all, valor: divergentes._sum.divergencia ?? 0 },
   })
+  } catch (e) {
+    res.status(500).json({ erro: (e as Error).message })
+  }
 })
 
 // GET /difal/aliquotas — a tabela que a contabilidade pode ajustar
 router.get('/aliquotas', async (_req: Request, res: Response) => {
-  const lista = await prisma.difalAliquota.findMany({ orderBy: { uf: 'asc' } })
-  res.json(lista)
+  try {
+    const lista = await prisma.difalAliquota.findMany({ orderBy: { uf: 'asc' } })
+    res.json(lista)
+  } catch (e) {
+    res.status(500).json({ erro: (e as Error).message })
+  }
 })
 
 // PUT /difal/aliquotas/:uf — corrigir a alíquota de um estado
@@ -129,6 +143,7 @@ router.put(
 
     const uf = String(req.params.uf).toUpperCase()
     const { aliquotaInterna, fcp, interestadual, metodo, nota } = req.body
+    try {
     const atualizada = await prisma.difalAliquota.update({
       where: { uf },
       data: {
@@ -140,6 +155,12 @@ router.put(
       },
     })
     res.json(atualizada)
+    } catch (e) {
+      // P2025 = estado não cadastrado
+      const codigo = (e as { code?: string }).code
+      if (codigo === 'P2025') return res.status(404).json({ erro: `estado ${uf} não cadastrado` })
+      res.status(500).json({ erro: (e as Error).message })
+    }
   }
 )
 
@@ -148,6 +169,8 @@ router.post(
   '/importar',
   [body('dias').optional().isInt({ min: 1, max: 365 }), body('empresa').optional().trim()],
   async (req: Request, res: Response) => {
+    const erros = validationResult(req)
+    if (!erros.isEmpty()) return res.status(400).json({ errors: erros.array() })
     const dias = Number(req.body?.dias ?? 90)
     const desde = new Date(Date.now() - dias * 24 * 60 * 60 * 1000)
     try {

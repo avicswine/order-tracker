@@ -37,15 +37,26 @@ function numero(xml: string, tag: string): number | null {
 export function lerDifalDoXml(xml: string): DifalDoXml {
   const grupo = xml.match(/<ICMSUFDest>([\s\S]*?)<\/ICMSUFDest>/)
   const dentro = grupo?.[1] ?? ''
+  // pRedBC e pICMS vivem dentro de cada item. Numa nota com itens de tributação
+  // diferente, ler o primeiro daria um aviso de divergência falso, então só
+  // aproveitamos quando todos os itens trazem o mesmo valor.
+  const umSo = (tag: string): number | null => {
+    const todos = [...xml.matchAll(new RegExp(`<${tag}>([^<]*)</${tag}>`, 'g'))].map((m) => m[1])
+    const unicos = new Set(todos)
+    if (unicos.size !== 1) return null
+    const v = Number([...unicos][0])
+    return Number.isFinite(v) ? v : null
+  }
+
   return {
     temGrupoDifal: Boolean(grupo),
     aliquotaDestino: dentro ? numero(dentro, 'pICMSUFDest') : null,
     aliquotaInterestadual: dentro ? numero(dentro, 'pICMSInter') : null,
     fcpDestino: dentro ? numero(dentro, 'pFCPUFDest') : null,
     valorDeclarado: dentro ? numero(dentro, 'vICMSUFDest') : null,
-    // estes ficam fora do grupo, no ICMS do item
-    reducaoBaseOrigem: numero(xml, 'pRedBC'),
-    aliquotaOrigem: numero(xml, 'pICMS'),
+    // estes ficam no ICMS de cada item
+    reducaoBaseOrigem: umSo('pRedBC'),
+    aliquotaOrigem: umSo('pICMS'),
   }
 }
 

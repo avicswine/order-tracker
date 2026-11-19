@@ -142,7 +142,24 @@ export function calcularDifal(nota: DadosNota, regra: RegraUf | undefined): Resu
     }
   }
 
-  const cargaOrigem = CARGA_ORIGEM[regra.interestadual] ?? 4.1
+  // A carga da origem depende da alíquota interestadual. Fora de 7% e 12% (uma
+  // operação a 4%, por exemplo) não temos a carga equivalente do Anexo II, e
+  // chutar daria um DIFAL errado em silêncio.
+  const cargaOrigem = CARGA_ORIGEM[regra.interestadual]
+  if (cargaOrigem === undefined) {
+    return {
+      responsavel,
+      metodo: 'isento',
+      ...base,
+      baseCalculo: 0,
+      difal: 0,
+      detalhe: {
+        erro:
+          `alíquota interestadual de ${regra.interestadual}% não prevista para ${regra.uf}: ` +
+          'o Convênio 52/91 define a carga da origem para 7% e 12%. Confira o cadastro do estado.',
+      },
+    }
+  }
 
   // parcela com redução do Convênio 52/91
   let difalComReducao = 0

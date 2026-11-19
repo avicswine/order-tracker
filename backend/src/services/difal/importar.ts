@@ -46,6 +46,13 @@ export interface ResultadoImportacao {
   erros: string[]
 }
 
+/**
+ * Empresas que o monitor acompanha. A Equipage fica de fora: é outra empresa, de
+ * outro sócio e outro regime tributário, e a regra do Convênio 52/91 com origem no
+ * Rio Grande do Sul não vale para ela.
+ */
+const EMPRESAS_DO_MONITOR = ['AVIC', 'AGRO']
+
 /** Situação 5 no Bling é nota autorizada; as demais não geram DIFAL. */
 const SITUACAO_AUTORIZADA = 5
 /** Tipo 1 é nota de saída. */
@@ -88,9 +95,9 @@ export async function importarNotas(
     ])
   )
 
-  const canais = new Map<number, { nome: string; tipo: string }>()
   const empresas = listarEmpresasBling()
     .filter((e) => e.connected)
+    .filter((e) => EMPRESAS_DO_MONITOR.includes(e.code))
     .filter((e) => !opcoes.empresa || e.key === opcoes.empresa)
 
   const saida: ResultadoImportacao[] = []
@@ -105,7 +112,10 @@ export async function importarNotas(
       erros: [],
     }
 
-    // canais de venda da empresa, para saber quem recolhe o DIFAL
+    // Canais de venda desta empresa, para saber quem recolhe o DIFAL. O mapa é por
+    // empresa: canal de uma não vale para a outra.
+    const canais = new Map<number, { nome: string; tipo: string }>()
+    let canaisOk = false
     try {
       const lista = (await blingGet(empresa.key, '/canais-venda?limite=100')) as {
         data?: Array<{ id?: number; descricao?: string; tipo?: string }>
@@ -113,8 +123,20 @@ export async function importarNotas(
       for (const c of lista?.data ?? []) {
         if (c.id != null) canais.set(c.id, { nome: c.descricao ?? '', tipo: c.tipo ?? '' })
       }
+      canaisOk = canais.size > 0
     } catch (e) {
       res.erros.push(`canais de venda: ${(e as Error).message}`)
+    }
+    // Sem os canais não dá para saber o que é venda do Mercado Livre, e toda nota
+    // viraria "guia nossa" — fazendo o sistema mandar pagar um DIFAL que o ML já
+    // recolheu. Melhor não importar nada desta empresa do que gerar obrigação falsa.
+    if (!canaisOk) {
+      res.erros.push(
+        'não consegui ler os canais de venda: importação desta empresa foi interrompida ' +
+          'para não marcar venda do Mercado Livre como guia nossa'
+      )
+      saida.push(res)
+      continue
     }
 
     let pagina = 1
@@ -176,7 +198,8 @@ export async function importarNotas(
         let avisoXml: string | null = null
         if (nf.xml) {
           try {
-            const resp = await fetch(nf.xml)
+            // sem timeout, um download travado para a importação inteira
+            const resp = await fetch(nf.xml, { signal: AbortSignal.timeout(15000) })
             if (resp.ok) {
               const doXml = lerDifalDoXml(await resp.text())
               const regra = porUf.get(uf)
@@ -185,11 +208,17 @@ export async function importarNotas(
                 if (avisos.length) avisoXml = avisos.join('; ')
               }
             }
-          } catch {
+          } catch (e) {
             // o XML é conferência extra: se não vier, o cálculo segue valendo
+            res.erros.push(`XML da NF ${resumo.numero}: ${(e as Error).message}`)
           }
         }
-        const numero = String(parseInt(String(nf.numero ?? resumo.numero ?? '0'), 10))
+        const bruto = parseInt(String(nf.numero ?? resumo.numero ?? ''), 10)
+        if (!Number.isFinite(bruto) || bruto <= 0) {
+          res.erros.push(`NF sem número utilizável (id ${resumo.id})`)
+          continue
+        }
+        const numero = String(bruto)
 
         const registro = {
           empresa: empresa.code,
@@ -216,7 +245,8 @@ export async function importarNotas(
           difalMetodo: calc.metodo,
           calculoDetalhe: calc.detalhe as object,
           responsavel: calc.responsavel,
-          observacao: avisoXml,
+          // só sobrescreve quando o XML respondeu; senão preserva o aviso anterior
+          ...(avisoXml !== null ? { observacao: avisoXml } : {}),
         }
 
         try {

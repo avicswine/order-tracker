@@ -12,7 +12,10 @@ function pct(v: number | null | undefined) {
 }
 
 function dataBr(iso: string) {
-  return new Date(iso + (iso.length === 10 ? 'T12:00:00' : '')).toLocaleDateString('pt-BR')
+  // A data da nota é um dia de calendário, não um instante. Lendo como UTC e
+  // formatando em UTC, nota emitida de madrugada não aparece no dia anterior.
+  const d = new Date(iso.length === 10 ? `${iso}T00:00:00Z` : iso)
+  return d.toLocaleDateString('pt-BR', { timeZone: 'UTC' })
 }
 
 const RESPONSAVEL: Record<DifalResponsavel, { texto: string; cor: string; ajuda: string }> = {

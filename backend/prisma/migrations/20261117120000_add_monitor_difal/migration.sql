@@ -56,6 +56,10 @@ CREATE TABLE "difal_aliquotas" (
     "metodo" TEXT NOT NULL DEFAULT 'carga',
     "posicaoFisco" BOOLEAN NOT NULL DEFAULT false,
     "nota" TEXT,
+    "guiasComReducao" INTEGER,
+    "guiasTotal" INTEGER,
+    "metodoObservado" TEXT,
+    "evidenciaEm" TIMESTAMP(3),
     "atualizadoEm" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "difal_aliquotas_pkey" PRIMARY KEY ("uf")
@@ -78,5 +82,3 @@ CREATE INDEX "difal_notas_mlOrderId_idx" ON "difal_notas"("mlOrderId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "difal_notas_empresa_nfNumero_key" ON "difal_notas"("empresa", "nfNumero");
-
--- CreateIndex
