@@ -94,13 +94,14 @@ function Aba({
 function Vendas() {
   const [responsavel, setResponsavel] = useState('')
   const [busca, setBusca] = useState('')
+  const [pagina, setPagina] = useState(1)
   const qc = useQueryClient()
 
   const { data: resumo } = useQuery({ queryKey: ['difal-resumo'], queryFn: () => difalApi.resumo() })
   const { data: lista, isLoading } = useQuery({
-    queryKey: ['difal-notas', responsavel, busca],
+    queryKey: ['difal-notas', responsavel, busca, pagina],
     queryFn: () =>
-      difalApi.listar({ responsavel: responsavel || undefined, busca: busca || undefined }),
+      difalApi.listar({ responsavel: responsavel || undefined, busca: busca || undefined, pagina }),
   })
   const importar = useMutation({
     mutationFn: () => difalApi.importar(90),
@@ -111,6 +112,7 @@ function Vendas() {
   })
 
   const notas = lista?.notas ?? []
+  const totalPaginas = lista ? Math.max(1, Math.ceil(lista.total / lista.porPagina)) : 1
   const ml = resumo?.porResponsavel.find((r) => r.responsavel === 'ML_PAGA')
 
   return (
@@ -163,7 +165,7 @@ function Vendas() {
       <div className="flex flex-wrap items-center gap-2">
         <select
           value={responsavel}
-          onChange={(e) => setResponsavel(e.target.value)}
+          onChange={(e) => { setResponsavel(e.target.value); setPagina(1) }}
           className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
         >
           <option value="">Todas as notas</option>
@@ -174,12 +176,24 @@ function Vendas() {
         </select>
         <input
           value={busca}
-          onChange={(e) => setBusca(e.target.value)}
+          onChange={(e) => { setBusca(e.target.value); setPagina(1) }}
           placeholder="Número da NF ou cliente"
           className="min-w-[200px] flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm"
         />
         <span className="text-sm text-gray-500">{lista?.total ?? 0} notas</span>
       </div>
+
+      {totalPaginas > 1 && (
+        <div className="flex items-center justify-end gap-2 text-sm text-gray-600">
+          <button onClick={() => setPagina((p) => Math.max(1, p - 1))} disabled={pagina <= 1} className="rounded border border-gray-300 px-2 py-1 disabled:opacity-40">
+            Anterior
+          </button>
+          <span>página {pagina} de {totalPaginas}</span>
+          <button onClick={() => setPagina((p) => Math.min(totalPaginas, p + 1))} disabled={pagina >= totalPaginas} className="rounded border border-gray-300 px-2 py-1 disabled:opacity-40">
+            Próxima
+          </button>
+        </div>
+      )}
 
       <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
         <table className="min-w-full text-sm">
