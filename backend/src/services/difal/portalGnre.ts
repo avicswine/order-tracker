@@ -23,9 +23,11 @@
  * Nenhuma chamada aqui movimenta dinheiro: gerar a guia não é pagar a guia.
  */
 import https from 'https'
+import tls from 'tls'
 import { existsSync, readFileSync } from 'fs'
 import axios, { AxiosError } from 'axios'
 import { escapar } from './gnre'
+import { CADEIA_ICP_BRASIL_RFB } from './dados/cadeiaIcpBrasilRfb'
 
 export type AmbienteGnre = 'homologacao' | 'producao'
 export type EmpresaGnre = 'AVIC' | 'AGRO'
@@ -166,9 +168,13 @@ async function chamar(empresa: EmpresaGnre, servico: NomeServico, dadosXml: stri
 
   // Manual 3.2.4: TLS 1.2 com ECDHE-RSA-AES-GCM. Fixar isso evita que o servidor (Java antigo)
   // rejeite o aperto de mão com EPROTO quando o Node oferece TLS 1.3/grupos novos.
+  // `ca`: raízes padrão do Node (para validar o portal) + cadeia ICP-Brasil do nosso certificado.
+  // O .pfx vem sem a cadeia; com as ACs aqui o OpenSSL monta e envia a cadeia completa, senão o
+  // portal recusa com "SSL alert 42: bad certificate" (aconteceu no Railway; ver cadeiaIcpBrasilRfb.ts).
   const agent = new https.Agent({
     pfx: cert.pfx,
     passphrase: cert.passphrase,
+    ca: [...tls.rootCertificates, CADEIA_ICP_BRASIL_RFB],
     keepAlive: false,
     minVersion: 'TLSv1.2',
     maxVersion: 'TLSv1.2',
