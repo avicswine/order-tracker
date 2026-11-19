@@ -92,8 +92,16 @@ export interface ResultadoImportacao {
  */
 const EMPRESAS_DO_MONITOR = ['AVIC', 'AGRO']
 
-/** Situação 5 no Bling é nota autorizada; as demais não geram DIFAL. */
-const SITUACAO_AUTORIZADA = 5
+/**
+ * Situações da NF-e no Bling que valem como nota emitida (especificação oficial,
+ * schema NotasFiscaisDadosBaseDTO.situacao):
+ *   1 Pendente · 2 Cancelada · 3 Aguardando recibo · 4 Rejeitada · 5 Autorizada
+ *   6 Emitida DANFE · 7 Registrada · 8 Aguardando protocolo · 9 Denegada
+ *   10 Consulta situação · 11 Bloqueada
+ * Só 5, 6 e 7 são notas válidas perante a SEFAZ. Na prática quase todas as nossas
+ * chegam como 6 — aceitar só a 5 descartava a operação inteira.
+ */
+const SITUACOES_EMITIDAS = new Set([5, 6, 7])
 /** Tipo 1 é nota de saída. */
 const TIPO_SAIDA = 1
 
@@ -207,7 +215,7 @@ export async function importarNotas(
           continue
         }
 
-        if (nf.situacao !== undefined && nf.situacao !== SITUACAO_AUTORIZADA) {
+        if (nf.situacao !== undefined && !SITUACOES_EMITIDAS.has(nf.situacao)) {
           res.ignoradas++
           continue
         }
