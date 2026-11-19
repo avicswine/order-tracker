@@ -206,6 +206,25 @@ export async function importarNotas(
         if (opcoes.limite && res.lidas >= opcoes.limite) break
         res.lidas++
 
+        // Nota cancelada/rejeitada/denegada DEPOIS de importada não pode continuar
+        // como obrigação: zera o DIFAL; se já saiu em lote, marca para conferir.
+        if (resumo.situacao !== undefined && !SITUACOES_EMITIDAS.has(resumo.situacao)) {
+          const numeroResumo = String(parseInt(String(resumo.numero ?? ''), 10))
+          const chave = { empresa: empresa.code, nfNumero: numeroResumo }
+          const aviso = `nota com situação ${resumo.situacao} no Bling (não emitida/cancelada)`
+          const semGuia = await prisma.difalNota.updateMany({
+            where: { ...chave, guiaGeradaEm: null, responsavel: { not: 'SEM_DIFAL' } },
+            data: { responsavel: 'SEM_DIFAL', difalCalculado: 0, difalMetodo: 'isento', situacao: 'CONFERIDO', observacao: aviso },
+          })
+          const comGuia = await prisma.difalNota.updateMany({
+            where: { ...chave, guiaGeradaEm: { not: null }, situacao: { not: 'DIVERGENTE' } },
+            data: { situacao: 'DIVERGENTE', observacao: `${aviso} — mas já saiu em lote GNRE: conferir` },
+          })
+          res.atualizadas += semGuia.count + comGuia.count
+          res.ignoradas++
+          continue
+        }
+
         let nf: NfeBlingDetalhe
         try {
           const det = (await blingGet(empresa.key, `/nfe/${resumo.id}`)) as { data?: NfeBlingDetalhe }
