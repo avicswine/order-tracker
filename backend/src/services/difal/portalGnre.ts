@@ -8,11 +8,10 @@
  *   - GnreResultadoLote   (síncrono)  → busca o resultado do recibo (guias, código de barras, PDF)
  *
  * Padrão da mensagem (manual 3.4.1):
- *   SOAP Header: <gnreCabecMsg xmlns="…/wsdl/<Serviço>"><versaoDados>…</versaoDados></gnreCabecMsg>
- *   SOAP Body:   a área de dados no elemento gnreDadosMsg; a resposta vem em
- *                <gnre…Response><gnreRetornoMsg>…</gnreRetornoMsg></gnre…Response>
- *   (o nome exato do elemento de entrada do Body vem do WSDL de cada serviço — conferir
- *    na homologação; o manual só mostra o da resposta.)
+ *   SOAP Header: <gnreCabecMsg xmlns="…/webservice/<Serviço>"><versaoDados>…</versaoDados></gnreCabecMsg>
+ *   SOAP Body:   <gnreDadosMsg> com a área de dados; a resposta vem em <gnreRespostaMsg>.
+ *   Cabeçalho HTTP SOAPAction = namespace/operação (consultar | processar).
+ *   Tudo conferido nos WSDL de homologação (scratchpad/gnre/wsdl) em 19/11/2026.
  *
  * Certificado e ambiente vêm de variáveis de ambiente, nunca do código:
  *   GNRE_AMBIENTE            homologacao (padrão) | producao
@@ -38,14 +37,20 @@ const HOST: Record<AmbienteGnre, string> = {
 /** código do ambiente dentro dos XML (manual: 1 produção, 2 homologação) */
 const CODIGO_AMBIENTE: Record<AmbienteGnre, '1' | '2'> = { producao: '1', homologacao: '2' }
 
-const NS_WSDL = 'http://www.gnre.pe.gov.br/wsdl/'
+// namespace e operações conferidos nos WSDL de homologação em 19/11/2026
+const NS_WEBSERVICE = 'http://www.gnre.pe.gov.br/webservice/'
 const NS_DADOS = 'http://www.gnre.pe.gov.br'
 
 const SERVICO = {
-  configUf: { caminho: 'GnreConfigUF', versaoDados: '1.00' },
-  loteRecepcao: { caminho: 'GnreLoteRecepcao', versaoDados: '2.00' },
-  resultadoLote: { caminho: 'GnreResultadoLote', versaoDados: '1.00' },
+  configUf: { caminho: 'GnreConfigUF', operacao: 'consultar', versaoDados: '1.00' },
+  loteRecepcao: { caminho: 'GnreLoteRecepcao', operacao: 'processar', versaoDados: '2.00' },
+  resultadoLote: { caminho: 'GnreResultadoLote', operacao: 'consultar', versaoDados: '1.00' },
 } as const
+
+export function soapAction(servico: NomeServico): string {
+  const { caminho, operacao } = SERVICO[servico]
+  return `${NS_WEBSERVICE}${caminho}/${operacao}`
+}
 type NomeServico = keyof typeof SERVICO
 
 const TENTATIVAS_429 = 3
@@ -92,6 +97,9 @@ export function statusPortal() {
 
 function desescapar(v: string): string {
   return v
+    // entidades numéricas (&#xE7; = ç) — o portal devolve os acentos assim
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(Number(d)))
     .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&')
 }
 
@@ -121,7 +129,7 @@ function simNao(v: string | undefined): boolean {
 
 export function montarEnvelope(servico: NomeServico, dadosXml: string): string {
   const { caminho, versaoDados } = SERVICO[servico]
-  const ns = NS_WSDL + caminho
+  const ns = NS_WEBSERVICE + caminho
   const dados = dadosXml.replace(/^<\?xml[^>]*\?>\s*/, '')
   return (
     `<?xml version="1.0" encoding="UTF-8"?>\n` +
@@ -145,8 +153,9 @@ export function extrairRetorno(envelopeResposta: string): string {
     const motivo = texto(falha, 'Text') ?? texto(falha, 'faultstring') ?? falha.slice(0, 200)
     throw new ErroPortalGnre(`o portal devolveu uma falha SOAP: ${motivo}`)
   }
-  const retorno = texto(envelopeResposta, 'gnreRetornoMsg')
-  if (retorno === undefined) throw new ErroPortalGnre('resposta do portal sem gnreRetornoMsg')
+  // o WSDL chama a resposta de gnreRespostaMsg; o manual, de gnreRetornoMsg — aceita os dois
+  const retorno = texto(envelopeResposta, 'gnreRespostaMsg') ?? texto(envelopeResposta, 'gnreRetornoMsg')
+  if (retorno === undefined) throw new ErroPortalGnre('resposta do portal sem gnreRespostaMsg')
   // pode vir como XML escapado, em CDATA ou aninhado; os três acabam como XML puro aqui
   return retorno.replace(/^<!\[CDATA\[([\s\S]*)\]\]>$/, '$1').trim()
 }
@@ -163,7 +172,11 @@ async function chamar(empresa: EmpresaGnre, servico: NomeServico, dadosXml: stri
     try {
       const { data } = await axios.post<string>(url, envelope, {
         httpsAgent: agent,
-        headers: { 'Content-Type': 'application/soap+xml; charset=utf-8' },
+        // o servidor exige o SOAPAction (respondeu "no SOAPAction header!" sem ele)
+        headers: {
+          'Content-Type': `application/soap+xml; charset=utf-8; action="${soapAction(servico)}"`,
+          SOAPAction: soapAction(servico),
+        },
         responseType: 'text',
         timeout: 60000,
       })

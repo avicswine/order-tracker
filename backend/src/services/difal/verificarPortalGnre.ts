@@ -3,7 +3,7 @@
  *     npx tsx src/services/difal/verificarPortalGnre.ts
  * Monta o envelope SOAP e lê respostas de exemplo montadas a partir dos XSD do manual.
  */
-import { montarEnvelope, extrairRetorno, lerConfigUf, lerRecibo, lerResultadoLote, ErroPortalGnre } from './portalGnre'
+import { montarEnvelope, extrairRetorno, lerConfigUf, lerRecibo, lerResultadoLote, soapAction, ErroPortalGnre } from './portalGnre'
 
 let falhas = 0
 function caso(nome: string, ok: boolean, detalhe = '') {
@@ -16,15 +16,17 @@ console.log('Conferência do cliente do Portal GNRE\n')
 // envelope
 const env = montarEnvelope('loteRecepcao', '<?xml version="1.0" encoding="UTF-8"?>\n<TLote_GNRE xmlns="http://www.gnre.pe.gov.br" versao="2.00"><guias/></TLote_GNRE>')
 caso('envelope SOAP 1.2', env.includes('xmlns:soap12="http://www.w3.org/2003/05/soap-envelope"'))
-caso('cabeçalho gnreCabecMsg no namespace do serviço', env.includes('<gnreCabecMsg xmlns="http://www.gnre.pe.gov.br/wsdl/GnreLoteRecepcao">'))
+caso('cabeçalho gnreCabecMsg no namespace do serviço', env.includes('<gnreCabecMsg xmlns="http://www.gnre.pe.gov.br/webservice/GnreLoteRecepcao">'))
 caso('versaoDados 2.00 para o lote', env.includes('<versaoDados>2.00</versaoDados>'))
 caso('declaração <?xml?> do lote removida de dentro do Body', (env.match(/<\?xml/g) ?? []).length === 1)
+caso('soapAction do ConfigUF conforme o WSDL', soapAction('configUf') === 'http://www.gnre.pe.gov.br/webservice/GnreConfigUF/consultar')
+caso('resposta em gnreRespostaMsg (nome do WSDL) também é lida', lerRecibo(extrairRetorno('<e><Body><gnreRespostaMsg>&lt;TRetLote_GNRE&gt;&lt;situacaoRecepcao&gt;&lt;codigo&gt;100&lt;/codigo&gt;&lt;descricao&gt;ok&lt;/descricao&gt;&lt;/situacaoRecepcao&gt;&lt;/TRetLote_GNRE&gt;</gnreRespostaMsg></Body></e>')).situacao.codigo === '100')
 caso('configUf usa versaoDados 1.00', montarEnvelope('configUf', '<x/>').includes('<versaoDados>1.00</versaoDados>'))
 
 // retorno escapado dentro do envelope
 const respostaEscapada =
   '<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope"><soap:Body>' +
-  '<ns2:gnreLoteRecepcaoResponse xmlns:ns2="http://www.gnre.pe.gov.br/wsdl/GnreLoteRecepcao">' +
+  '<ns2:gnreLoteRecepcaoResponse xmlns:ns2="http://www.gnre.pe.gov.br/webservice/GnreLoteRecepcao">' +
   '<ns2:gnreRetornoMsg>&lt;TRetLote_GNRE xmlns="http://www.gnre.pe.gov.br"&gt;&lt;ambiente&gt;2&lt;/ambiente&gt;' +
   '&lt;situacaoRecepcao&gt;&lt;codigo&gt;100&lt;/codigo&gt;&lt;descricao&gt;Lote recebido com sucesso&lt;/descricao&gt;&lt;/situacaoRecepcao&gt;' +
   '&lt;recibo&gt;&lt;numero&gt;1234567890&lt;/numero&gt;&lt;dataHoraRecibo&gt;2026-11-18T15:00:00&lt;/dataHoraRecibo&gt;&lt;tempoEstimadoProc&gt;30000&lt;/tempoEstimadoProc&gt;&lt;/recibo&gt;' +
@@ -36,7 +38,7 @@ caso('recibo: tempo estimado 30000 ms', recibo.recibo?.tempoEstimadoMs === 30000
 
 // retorno aninhado (sem escapar)
 const respostaAninhada =
-  '<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope"><soap:Body><gnreLoteRecepcaoResponse xmlns="http://www.gnre.pe.gov.br/wsdl/GnreLoteRecepcao">' +
+  '<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope"><soap:Body><gnreLoteRecepcaoResponse xmlns="http://www.gnre.pe.gov.br/webservice/GnreLoteRecepcao">' +
   '<gnreRetornoMsg><TRetLote_GNRE xmlns="http://www.gnre.pe.gov.br"><ambiente>2</ambiente><situacaoRecepcao><codigo>402</codigo><descricao>Lote inválido</descricao><guiaErro>1</guiaErro></situacaoRecepcao></TRetLote_GNRE></gnreRetornoMsg>' +
   '</gnreLoteRecepcaoResponse></soap:Body></soap:Envelope>'
 const recusa = lerRecibo(extrairRetorno(respostaAninhada))
@@ -63,6 +65,7 @@ const cfg = lerConfigUf(
   '</receitas><qtdMaximas><guiasPorLote>50</guiasPorLote><itensPorGuia>100</itensPorGuia></qtdMaximas></TConfigUf>'
 )
 caso('configUF: UF e situação', cfg.uf === 'PI' && cfg.situacao.codigo === '450')
+caso('acentos em entidade numérica (&#xE7;) são decodificados', lerConfigUf('<TConfigUf><situacaoConsulta><codigo>450</codigo><descricao>Configura&#xE7;&#xE3;o ok</descricao></situacaoConsulta></TConfigUf>').situacao.descricao === 'Configuração ok')
 caso('configUF: 2 receitas lidas dos atributos', cfg.receitas.length === 2 && cfg.receitas[0].codigo === '100102', cfg.receitas.map((r) => r.codigo).join(','))
 caso('configUF: receita 100102 exige documento de origem NF-e (10)', cfg.receitas[0].exigeDocumentoOrigem && cfg.receitas[0].tiposDocumentosOrigem[0]?.codigo === '10')
 caso('configUF: receita 100056 é courier e tem campo adicional obrigatório', cfg.receitas[1].courier && cfg.receitas[1].camposAdicionais[0]?.obrigatorio)
