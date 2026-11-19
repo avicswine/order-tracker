@@ -11,6 +11,8 @@ import { prisma } from '../lib/prisma'
 import { DifalResponsavel, DifalSituacao, Prisma } from '@prisma/client'
 import { importarNotas } from '../services/difal/importar'
 import { semearAliquotas } from '../services/difal/aliquotas'
+import { listarGuiasPendentes, gerarLoteDasNotas } from '../services/difal/guias'
+import { ErroMontagemGnre } from '../services/difal/gnre'
 // A apuração das guias já pagas é dado fixo, vindo da auditoria dos comprovantes
 // do Mercado Livre. Importado como módulo para entrar no build.
 import historicoGuias from '../services/difal/dados/historico-guias.json'
@@ -136,13 +138,15 @@ router.put(
     body('interestadual').optional().isFloat({ min: 0, max: 20 }),
     body('metodo').optional().isIn(['carga', 'prop']),
     body('nota').optional().trim(),
+    body('codigoReceitaGnre').optional().trim().matches(/^\d{6}$/).withMessage('código de receita tem 6 dígitos'),
+    body('vencimentoRegra').optional().isIn(['saida', 'dia15']),
   ],
   async (req: Request, res: Response) => {
     const erros = validationResult(req)
     if (!erros.isEmpty()) return res.status(400).json({ errors: erros.array() })
 
     const uf = String(req.params.uf).toUpperCase()
-    const { aliquotaInterna, fcp, interestadual, metodo, nota } = req.body
+    const { aliquotaInterna, fcp, interestadual, metodo, nota, codigoReceitaGnre, vencimentoRegra } = req.body
     try {
     const atualizada = await prisma.difalAliquota.update({
       where: { uf },
@@ -152,6 +156,8 @@ router.put(
         ...(interestadual !== undefined && { interestadual: Number(interestadual) }),
         ...(metodo !== undefined && { metodo: String(metodo) }),
         ...(nota !== undefined && { nota: String(nota) }),
+        ...(codigoReceitaGnre !== undefined && { codigoReceitaGnre: String(codigoReceitaGnre) }),
+        ...(vencimentoRegra !== undefined && { vencimentoRegra: String(vencimentoRegra) }),
       },
     })
     res.json(atualizada)
@@ -182,6 +188,45 @@ router.post(
       res.json({ ok: true, desde, resultado })
     } catch (e) {
       res.status(500).json({ ok: false, erro: (e as Error).message })
+    }
+  }
+)
+
+// GET /difal/guias-pendentes — notas que precisam de guia nossa e o que falta em cada uma
+router.get('/guias-pendentes', [query('empresa').optional().trim()], async (req: Request, res: Response) => {
+  const erros = validationResult(req)
+  if (!erros.isEmpty()) return res.status(400).json({ errors: erros.array() })
+  try {
+    const guias = await listarGuiasPendentes(
+      prisma,
+      req.query.empresa ? String(req.query.empresa).toUpperCase() : undefined
+    )
+    res.json(guias)
+  } catch (e) {
+    res.status(500).json({ erro: (e as Error).message })
+  }
+})
+
+// POST /difal/guias/lote — monta o XML do lote GNRE com as notas escolhidas e devolve para download.
+// Não envia nada ao portal; marca as notas como "guia gerada".
+router.post(
+  '/guias/lote',
+  [body('ids').isArray({ min: 1, max: 50 }), body('ids.*').isString().notEmpty()],
+  async (req: Request, res: Response) => {
+    const erros = validationResult(req)
+    if (!erros.isEmpty()) return res.status(400).json({ errors: erros.array() })
+    try {
+      const lote = await gerarLoteDasNotas(prisma, req.body.ids as string[])
+      res.setHeader('Content-Type', 'application/xml; charset=utf-8')
+      res.setHeader('Content-Disposition', `attachment; filename="gnre-lote-${lote.loteId}.xml"`)
+      res.setHeader('X-Lote-Id', lote.loteId)
+      res.setHeader('X-Lote-Guias', String(lote.guias))
+      res.setHeader('X-Lote-Total', lote.total.toFixed(2))
+      res.setHeader('Access-Control-Expose-Headers', 'X-Lote-Id, X-Lote-Guias, X-Lote-Total')
+      res.send(lote.xml)
+    } catch (e) {
+      if (e instanceof ErroMontagemGnre) return res.status(422).json({ erro: e.message })
+      res.status(500).json({ erro: (e as Error).message })
     }
   }
 )

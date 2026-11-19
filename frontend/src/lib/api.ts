@@ -202,6 +202,19 @@ export interface DifalAliquota {
   metodo: string
   posicaoFisco: boolean
   nota: string | null
+  codigoReceitaGnre: string | null
+  vencimentoRegra: string
+}
+
+export interface DifalGuiaPendente {
+  id: string
+  empresa: string
+  nfNumero: string
+  emitidaEm: string
+  clienteUf: string
+  difalCalculado: number
+  pronta: boolean
+  faltando: string[]
 }
 
 
@@ -271,4 +284,14 @@ export const difalApi = {
   historico: () => api.get<DifalHistorico>('/difal/historico').then((r) => r.data),
   importar: (dias?: number) =>
     api.post<{ ok: boolean; resultado: unknown }>('/difal/importar', { dias }).then((r) => r.data),
+  guiasPendentes: () => api.get<DifalGuiaPendente[]>('/difal/guias-pendentes').then((r) => r.data),
+  // devolve o XML do lote GNRE como arquivo para baixar
+  gerarLote: (ids: string[]) =>
+    api.post<Blob>('/difal/guias/lote', { ids }, { responseType: 'blob' }).then((r) => ({
+      arquivo: r.data,
+      nome: /filename="([^"]+)"/.exec(r.headers['content-disposition'] ?? '')?.[1] ?? 'gnre-lote.xml',
+      loteId: String(r.headers['x-lote-id'] ?? ''),
+      guias: Number(r.headers['x-lote-guias'] ?? 0),
+      total: Number(r.headers['x-lote-total'] ?? 0),
+    })),
 }

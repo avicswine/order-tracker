@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { difalApi } from '../lib/api'
-import type { DifalNota, DifalResponsavel, DifalHistorico } from '../lib/api'
+import type { DifalNota, DifalResponsavel, DifalHistorico, DifalGuiaPendente } from '../lib/api'
 
 function brl(v: number | null | undefined) {
   return (v ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -151,6 +151,8 @@ function Vendas() {
         />
       </div>
 
+      <GuiasPendentes />
+
       <div className="flex flex-wrap items-center gap-2">
         <select
           value={responsavel}
@@ -241,6 +243,126 @@ function Vendas() {
           </tbody>
         </table>
       </div>
+    </div>
+  )
+}
+
+// ------------------------------------------------------------- Guias a emitir (GNRE)
+// Como pedimos a resposta como arquivo (blob), o erro em JSON do backend chega como texto.
+async function erroDoLote(e: unknown): Promise<string> {
+  const resp = (e as { response?: { data?: Blob } }).response
+  if (resp?.data instanceof Blob) {
+    try {
+      return (JSON.parse(await resp.data.text()) as { erro?: string }).erro ?? 'erro desconhecido'
+    } catch {
+      return 'erro desconhecido'
+    }
+  }
+  return (e as Error).message
+}
+
+function GuiasPendentes() {
+  const qc = useQueryClient()
+  const [escolhidas, setEscolhidas] = useState<Set<string>>(new Set())
+  const [aviso, setAviso] = useState<string | null>(null)
+  const [erroTexto, setErroTexto] = useState<string | null>(null)
+  const { data: guias = [], isLoading } = useQuery({
+    queryKey: ['difal-guias-pendentes'],
+    queryFn: difalApi.guiasPendentes,
+  })
+
+  const prontas = guias.filter((g) => g.pronta)
+  const empresaEscolhida = guias.find((g) => escolhidas.has(g.id))?.empresa
+
+  const gerar = useMutation({
+    mutationFn: () => difalApi.gerarLote([...escolhidas]),
+    onSuccess: (lote) => {
+      // entrega o XML como download no navegador
+      const url = URL.createObjectURL(lote.arquivo)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = lote.nome
+      a.click()
+      URL.revokeObjectURL(url)
+      setAviso(`Lote ${lote.loteId} gerado: ${lote.guias} guia(s), ${brl(lote.total)}. O arquivo foi baixado.`)
+      setEscolhidas(new Set())
+      qc.invalidateQueries({ queryKey: ['difal-guias-pendentes'] })
+      qc.invalidateQueries({ queryKey: ['difal-notas'] })
+    },
+    onError: async (e) => setErroTexto(await erroDoLote(e)),
+  })
+
+  function alternar(g: DifalGuiaPendente) {
+    setEscolhidas((atual) => {
+      const novo = new Set(atual)
+      if (novo.has(g.id)) novo.delete(g.id)
+      else novo.add(g.id)
+      return novo
+    })
+  }
+
+  if (isLoading) return null
+  if (guias.length === 0) {
+    return (
+      <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+        Nenhuma guia nossa pendente. Tudo o que saiu para fora do RS está sendo recolhido pelo Mercado Livre ou é do cliente.
+      </div>
+    )
+  }
+
+  return (
+    <div className="rounded-lg border border-amber-200 bg-white">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-4 py-3">
+        <div>
+          <p className="font-medium text-amber-900">Guias de DIFAL que nós precisamos emitir</p>
+          <p className="text-xs text-amber-800">
+            {guias.length} nota(s) pendente(s) · {prontas.length} com todos os dados para a guia (GNRE).
+            Um lote por empresa, até 50 guias.
+          </p>
+        </div>
+        <button
+          onClick={() => { setAviso(null); setErroTexto(null); gerar.mutate() }}
+          disabled={escolhidas.size === 0 || gerar.isPending}
+          className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+        >
+          {gerar.isPending ? 'Montando lote…' : `Baixar lote GNRE (${escolhidas.size})`}
+        </button>
+      </div>
+      {aviso && <div className="border-b border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-900">{aviso}</div>}
+      {erroTexto && (
+        <div className="border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800">
+          Não deu para montar o lote: {erroTexto}
+        </div>
+      )}
+      <table className="min-w-full text-sm">
+        <tbody className="divide-y divide-gray-100">
+          {guias.map((g) => {
+            const bloqueada = !g.pronta || (empresaEscolhida !== undefined && g.empresa !== empresaEscolhida && !escolhidas.has(g.id))
+            return (
+              <tr key={g.id} className={g.pronta ? '' : 'bg-gray-50'}>
+                <td className="px-4 py-2">
+                  <input
+                    type="checkbox"
+                    checked={escolhidas.has(g.id)}
+                    disabled={bloqueada}
+                    onChange={() => alternar(g)}
+                    title={bloqueada && g.pronta ? 'Lote de uma empresa só' : undefined}
+                  />
+                </td>
+                <td className="px-2 py-2 font-medium text-gray-900">
+                  {g.nfNumero} <span className="text-xs text-gray-400">{g.empresa}</span>
+                </td>
+                <td className="px-2 py-2 text-gray-600">{dataBr(g.emitidaEm)}</td>
+                <td className="px-2 py-2 text-gray-600">{g.clienteUf}</td>
+                <td className="px-2 py-2 text-right tabular-nums font-medium">{brl(g.difalCalculado)}</td>
+                <td className="px-4 py-2 text-xs text-gray-500">
+                  {g.pronta ? <span className="text-emerald-700">pronta</span> : `falta: ${g.faltando.join('; ')}`}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
     </div>
   )
 }
