@@ -157,17 +157,23 @@ export async function gerarLoteDasNotas(prisma: PrismaClient, ids: string[], hoj
     telefone: emitente.telefone ?? undefined,
   })
 
-  const loteId = `${empresa}-${hoje.toISOString().replace(/[-:T]/g, '').slice(0, 14)}`
+  const sufixo = Math.random().toString(36).slice(2, 6).toUpperCase()
+  const loteId = `${empresa}-${hoje.toISOString().replace(/[-:T]/g, '').slice(0, 14)}-${sufixo}`
   const total = guias.reduce((s, g) => s + g.valorPrincipal, 0)
-  await prisma.$transaction([
-    prisma.difalLoteGnre.create({
+  // Transação: só marca notas que AINDA estão livres; se outra requisição levou alguma
+  // no meio do caminho (duplo clique), a contagem não bate e tudo é desfeito.
+  await prisma.$transaction(async (tx) => {
+    await tx.difalLoteGnre.create({
       data: { id: loteId, empresa, ambiente: ambienteGnre(), xml, guias: guias.length, total },
-    }),
-    prisma.difalNota.updateMany({
-      where: { id: { in: ids } },
+    })
+    const marcadas = await tx.difalNota.updateMany({
+      where: { id: { in: ids }, guiaGeradaEm: null },
       data: { guiaGeradaEm: hoje, guiaLoteId: loteId },
-    }),
-  ])
+    })
+    if (marcadas.count !== ids.length) {
+      throw new ErroMontagemGnre('alguma nota já entrou em outro lote neste instante; recarregue a lista e tente de novo')
+    }
+  })
 
   return { loteId, xml, guias: guias.length, total }
 }
