@@ -5,3 +5,9 @@ dist/
 *.env.local
 .DS_Store
 .bling-tokens.json
+
+# certificados digitais (A1) nunca entram no git
+Certificados/
+*.pfx
+*.PFX
+*.p12
