@@ -74,7 +74,9 @@ router.get(
       prisma.difalNota.count({ where }),
     ])
 
-    res.json({ notas, total, pagina, porPagina })
+    // LGPD: o documento do destinatário existe só para montar a guia; não vai para a tela
+    const semDocumento = notas.map(({ documentoDestinatario: _doc, clienteIe: _ie, ...resto }) => resto)
+    res.json({ notas: semDocumento, total, pagina, porPagina })
     } catch (e) {
       res.status(500).json({ erro: (e as Error).message })
     }
