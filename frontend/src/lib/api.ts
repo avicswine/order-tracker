@@ -265,6 +265,24 @@ export interface DifalHistorico {
   }[]
 }
 
+export interface DifalFechamentoMes {
+  mes: string
+  empresa: string
+  cobradoMl: number
+  lancamentos: number
+  calculado: number
+  notas: number
+  diferenca: number
+}
+
+export interface DifalSincronizacaoMl {
+  empresa: string
+  periodos: string[]
+  lidos: number
+  cdifal: number
+  erro?: string
+}
+
 export const difalApi = {
   listar: (params?: {
     responsavel?: string
@@ -284,6 +302,9 @@ export const difalApi = {
   historico: () => api.get<DifalHistorico>('/difal/historico').then((r) => r.data),
   importar: (dias?: number) =>
     api.post<{ ok: boolean; resultado: unknown }>('/difal/importar', { dias }).then((r) => r.data),
+  fechamentoMensal: () => api.get<DifalFechamentoMes[]>('/difal/fechamento-mensal').then((r) => r.data),
+  sincronizarCobrancasMl: () =>
+    api.post<DifalSincronizacaoMl[]>('/difal/cobrancas-ml/sincronizar', { meses: 2 }).then((r) => r.data),
   guiasPendentes: () => api.get<DifalGuiaPendente[]>('/difal/guias-pendentes').then((r) => r.data),
   // devolve o XML do lote GNRE como arquivo para baixar
   gerarLote: (ids: string[]) =>

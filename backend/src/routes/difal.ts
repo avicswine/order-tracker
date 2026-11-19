@@ -13,6 +13,7 @@ import { importarNotas } from '../services/difal/importar'
 import { semearAliquotas } from '../services/difal/aliquotas'
 import { listarGuiasPendentes, gerarLoteDasNotas } from '../services/difal/guias'
 import { ErroMontagemGnre } from '../services/difal/gnre'
+import { sincronizarCobrancasMl, fechamentoMensal } from '../services/difal/cobrancasMl'
 // A apuração das guias já pagas é dado fixo, vindo da auditoria dos comprovantes
 // do Mercado Livre. Importado como módulo para entrar no build.
 import historicoGuias from '../services/difal/dados/historico-guias.json'
@@ -230,6 +231,28 @@ router.post(
     }
   }
 )
+
+// GET /difal/fechamento-mensal — o que o ML cobrou (CDIFAL) x o que calculamos, por mês e empresa
+router.get('/fechamento-mensal', [query('meses').optional().isInt({ min: 1, max: 12 })], async (req: Request, res: Response) => {
+  const erros = validationResult(req)
+  if (!erros.isEmpty()) return res.status(400).json({ errors: erros.array() })
+  try {
+    res.json(await fechamentoMensal(prisma, Number(req.query.meses ?? 6)))
+  } catch (e) {
+    res.status(500).json({ erro: (e as Error).message })
+  }
+})
+
+// POST /difal/cobrancas-ml/sincronizar — busca os lançamentos CDIFAL na fatura do ML (só leitura)
+router.post('/cobrancas-ml/sincronizar', [body('meses').optional().isInt({ min: 1, max: 12 })], async (req: Request, res: Response) => {
+  const erros = validationResult(req)
+  if (!erros.isEmpty()) return res.status(400).json({ errors: erros.array() })
+  try {
+    res.json(await sincronizarCobrancasMl(prisma, Number(req.body?.meses ?? 2)))
+  } catch (e) {
+    res.status(500).json({ erro: (e as Error).message })
+  }
+})
 
 // GET /difal/historico — a apuração das guias já pagas (dez/2025 a out/2026)
 // Dado fixo: veio da auditoria dos ZIPs de comprovantes do Mercado Livre.

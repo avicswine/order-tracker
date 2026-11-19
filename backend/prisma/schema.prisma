@@ -562,3 +562,19 @@ enum DifalSituacao {
   PAGO         // guia recolhida
   ATRASADO     // passou do prazo sem guia
 }
+
+// Lançamentos CDIFAL da fatura do Mercado Livre (o que ele cobra de nós pelo DIFAL que
+// recolheu). O ML não informa pedido nem envio nesses lançamentos, então o fechamento é
+// por mês e por empresa — nunca nota a nota.
+model DifalCobrancaMl {
+  id        String   @id      // "EMPRESA:detail_id"
+  empresa   String            // AVIC | AGRO
+  periodo   String            // chave do período da fatura, ex.: 2026-11-01
+  data      DateTime          // data do lançamento
+  natureza  String            // CHARGE (cobrou) | BONUS (estornou)
+  valor     Float             // já vem negativo no estorno
+  criadoEm  DateTime @default(now())
+
+  @@index([empresa, periodo])
+  @@map("difal_cobrancas_ml")
+}

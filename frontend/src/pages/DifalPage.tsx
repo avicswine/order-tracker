@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { difalApi } from '../lib/api'
-import type { DifalNota, DifalResponsavel, DifalHistorico, DifalGuiaPendente } from '../lib/api'
+import type { DifalNota, DifalResponsavel, DifalHistorico, DifalGuiaPendente, DifalFechamentoMes } from '../lib/api'
 
 function brl(v: number | null | undefined) {
   return (v ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -152,6 +152,8 @@ function Vendas() {
       </div>
 
       <GuiasPendentes />
+
+      <FechamentoMensal />
 
       <div className="flex flex-wrap items-center gap-2">
         <select
@@ -363,6 +365,101 @@ function GuiasPendentes() {
           })}
         </tbody>
       </table>
+    </div>
+  )
+}
+
+// ------------------------------------------------- Fechamento mensal: ML cobrou x calculamos
+const TOLERANCIA_FECHAMENTO = 0.05 // até 5% de diferença é normal (arredondamentos, estornos)
+
+function mesBr(aaaaMm: string) {
+  const [ano, mes] = aaaaMm.split('-')
+  const nomes = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
+  return `${nomes[Number(mes) - 1]}/${ano}`
+}
+
+function FechamentoMensal() {
+  const qc = useQueryClient()
+  const { data: linhas = [] } = useQuery({ queryKey: ['difal-fechamento'], queryFn: difalApi.fechamentoMensal })
+  const sincronizar = useMutation({
+    mutationFn: difalApi.sincronizarCobrancasMl,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['difal-fechamento'] }),
+  })
+  const avisos = (sincronizar.data ?? []).filter((r) => r.erro)
+
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-4 py-3">
+        <div>
+          <p className="font-medium text-gray-900">Fechamento mensal: o que o Mercado Livre cobrou × o que calculamos</p>
+          <p className="text-xs text-gray-500">
+            Lançamentos CDIFAL da fatura do ML (sem número de pedido, por isso o fechamento é por mês).
+            Verde até {TOLERANCIA_FECHAMENTO * 100}% de diferença.
+          </p>
+        </div>
+        <button
+          onClick={() => sincronizar.mutate()}
+          disabled={sincronizar.isPending}
+          className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:opacity-50"
+        >
+          {sincronizar.isPending ? 'Buscando na fatura…' : 'Atualizar cobranças do ML'}
+        </button>
+      </div>
+      {sincronizar.isError && (
+        <div className="border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800">
+          Não foi possível buscar a fatura: {(sincronizar.error as Error).message}
+        </div>
+      )}
+      {avisos.map((a) => (
+        <div key={a.empresa} className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+          {a.empresa}: {a.erro}
+        </div>
+      ))}
+      {linhas.length === 0 ? (
+        <p className="px-4 py-6 text-center text-sm text-gray-500">
+          Nenhuma cobrança do ML importada ainda. Clique em &ldquo;Atualizar cobranças do ML&rdquo;.
+        </p>
+      ) : (
+        <table className="min-w-full text-sm">
+          <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+            <tr>
+              <th className="px-4 py-2 text-left">Mês</th>
+              <th className="px-2 py-2 text-left">Empresa</th>
+              <th className="px-2 py-2 text-right">ML cobrou</th>
+              <th className="px-2 py-2 text-right">Calculamos</th>
+              <th className="px-2 py-2 text-right">Diferença</th>
+              <th className="px-4 py-2 text-left">Situação</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {linhas.map((l: DifalFechamentoMes) => {
+              const base = Math.max(l.calculado, l.cobradoMl)
+              const ok = base === 0 || Math.abs(l.diferenca) / base <= TOLERANCIA_FECHAMENTO
+              const semDados = l.lancamentos === 0 || l.notas === 0
+              return (
+                <tr key={`${l.mes}-${l.empresa}`}>
+                  <td className="px-4 py-2 font-medium text-gray-900">{mesBr(l.mes)}</td>
+                  <td className="px-2 py-2 text-gray-600">{l.empresa}</td>
+                  <td className="px-2 py-2 text-right tabular-nums" title={`${l.lancamentos} lançamento(s)`}>{brl(l.cobradoMl)}</td>
+                  <td className="px-2 py-2 text-right tabular-nums" title={`${l.notas} nota(s)`}>{brl(l.calculado)}</td>
+                  <td className="px-2 py-2 text-right tabular-nums">{brl(l.diferenca)}</td>
+                  <td className="px-4 py-2">
+                    {semDados ? (
+                      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+                        {l.lancamentos === 0 ? 'ML ainda não cobrou' : 'sem notas importadas'}
+                      </span>
+                    ) : ok ? (
+                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800">fecha</span>
+                    ) : (
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">conferir</span>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      )}
     </div>
   )
 }
