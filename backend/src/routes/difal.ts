@@ -14,6 +14,10 @@ import { semearAliquotas } from '../services/difal/aliquotas'
 import { listarGuiasPendentes, gerarLoteDasNotas } from '../services/difal/guias'
 import { ErroMontagemGnre } from '../services/difal/gnre'
 import { sincronizarCobrancasMl, fechamentoMensal } from '../services/difal/cobrancasMl'
+import {
+  statusPortal, portalConfigurado, consultarConfigUf, enviarLote, consultarResultadoLote,
+  lerResultadoLote, ErroPortalGnre, type EmpresaGnre,
+} from '../services/difal/portalGnre'
 // A apuração das guias já pagas é dado fixo, vindo da auditoria dos comprovantes
 // do Mercado Livre. Importado como módulo para entrar no build.
 import historicoGuias from '../services/difal/dados/historico-guias.json'
@@ -251,6 +255,141 @@ router.post('/cobrancas-ml/sincronizar', [body('meses').optional().isInt({ min: 
     res.json(await sincronizarCobrancasMl(prisma, Number(req.body?.meses ?? 2)))
   } catch (e) {
     res.status(500).json({ erro: (e as Error).message })
+  }
+})
+
+// ------------------------------------------------------------ Portal GNRE
+const EMPRESAS_GNRE: EmpresaGnre[] = ['AVIC', 'AGRO']
+const empresaGnre = (v: unknown): EmpresaGnre | null =>
+  EMPRESAS_GNRE.includes(String(v).toUpperCase() as EmpresaGnre) ? (String(v).toUpperCase() as EmpresaGnre) : null
+
+function responderErroPortal(res: Response, e: unknown) {
+  if (e instanceof ErroPortalGnre) return res.status(502).json({ erro: e.message })
+  res.status(500).json({ erro: (e as Error).message })
+}
+
+// GET /difal/portal/status — ambiente e se o certificado de cada empresa está configurado
+router.get('/portal/status', (_req: Request, res: Response) => res.json(statusPortal()))
+
+// GET /difal/portal/config/:uf?empresa= — receitas e exigências da UF (GnreConfigUF)
+router.get(
+  '/portal/config/:uf',
+  [query('empresa').isIn(EMPRESAS_GNRE)],
+  async (req: Request, res: Response) => {
+    const erros = validationResult(req)
+    if (!erros.isEmpty()) return res.status(400).json({ errors: erros.array() })
+    const empresa = empresaGnre(req.query.empresa)!
+    const uf = String(req.params.uf).toUpperCase()
+    if (!/^[A-Z]{2}$/.test(uf)) return res.status(400).json({ erro: 'UF inválida' })
+    try {
+      const cfg = await consultarConfigUf(empresa, uf)
+      // o XML bruto fica fora da resposta (grande); só o que a tela usa
+      const { bruto: _bruto, ...resto } = cfg
+      res.json(resto)
+    } catch (e) {
+      responderErroPortal(res, e)
+    }
+  }
+)
+
+// GET /difal/lotes — lotes gerados, do mais novo para o mais velho (sem XML nem PDF)
+router.get('/lotes', async (_req: Request, res: Response) => {
+  try {
+    const lotes = await prisma.difalLoteGnre.findMany({
+      orderBy: { criadoEm: 'desc' },
+      take: 100,
+      select: {
+        id: true, empresa: true, ambiente: true, guias: true, total: true, criadoEm: true,
+        enviadoEm: true, numeroRecibo: true, situacaoCodigo: true, situacaoDescricao: true,
+        consultadoEm: true, resultadoXml: true, pdfGuias: false, xml: false,
+      },
+    })
+    res.json(lotes.map((l) => ({
+      ...l,
+      resultadoXml: undefined,
+      guiasResultado: l.resultadoXml ? lerResultadoLote(l.resultadoXml).guias : [],
+    })))
+  } catch (e) {
+    res.status(500).json({ erro: (e as Error).message })
+  }
+})
+
+// GET /difal/lotes/:id/xml — baixar de novo o XML do lote
+router.get('/lotes/:id/xml', async (req: Request, res: Response) => {
+  try {
+    const lote = await prisma.difalLoteGnre.findUnique({ where: { id: String(req.params.id) } })
+    if (!lote) return res.status(404).json({ erro: 'lote não encontrado' })
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8')
+    res.setHeader('Content-Disposition', `attachment; filename="gnre-lote-${lote.id}.xml"`)
+    res.send(lote.xml)
+  } catch (e) {
+    res.status(500).json({ erro: (e as Error).message })
+  }
+})
+
+// GET /difal/lotes/:id/pdf — PDF das guias que o portal devolveu
+router.get('/lotes/:id/pdf', async (req: Request, res: Response) => {
+  try {
+    const lote = await prisma.difalLoteGnre.findUnique({ where: { id: String(req.params.id) }, select: { id: true, pdfGuias: true } })
+    if (!lote) return res.status(404).json({ erro: 'lote não encontrado' })
+    if (!lote.pdfGuias) return res.status(404).json({ erro: 'o portal ainda não devolveu o PDF deste lote' })
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `attachment; filename="gnre-guias-${lote.id}.pdf"`)
+    res.send(Buffer.from(lote.pdfGuias, 'base64'))
+  } catch (e) {
+    res.status(500).json({ erro: (e as Error).message })
+  }
+})
+
+// POST /difal/lotes/:id/enviar — transmite o lote ao portal (GnreLoteRecepcao). Não paga nada.
+router.post('/lotes/:id/enviar', async (req: Request, res: Response) => {
+  try {
+    const lote = await prisma.difalLoteGnre.findUnique({ where: { id: String(req.params.id) } })
+    if (!lote) return res.status(404).json({ erro: 'lote não encontrado' })
+    if (lote.numeroRecibo) return res.status(409).json({ erro: `lote já enviado (recibo ${lote.numeroRecibo})` })
+    const empresa = empresaGnre(lote.empresa)
+    if (!empresa || !portalConfigurado(empresa)) return res.status(409).json({ erro: `certificado da ${lote.empresa} não configurado` })
+
+    const recibo = await enviarLote(empresa, lote.xml)
+    const atualizado = await prisma.difalLoteGnre.update({
+      where: { id: lote.id },
+      data: {
+        enviadoEm: new Date(),
+        numeroRecibo: recibo.recibo?.numero ?? null,
+        situacaoCodigo: recibo.situacao.codigo,
+        situacaoDescricao: recibo.situacao.descricao,
+      },
+      select: { id: true, numeroRecibo: true, situacaoCodigo: true, situacaoDescricao: true, enviadoEm: true },
+    })
+    res.json({ ...atualizado, tempoEstimadoMs: recibo.recibo?.tempoEstimadoMs ?? null })
+  } catch (e) {
+    responderErroPortal(res, e)
+  }
+})
+
+// POST /difal/lotes/:id/consultar — busca o resultado do recibo (GnreResultadoLote), com PDF
+router.post('/lotes/:id/consultar', async (req: Request, res: Response) => {
+  try {
+    const lote = await prisma.difalLoteGnre.findUnique({ where: { id: String(req.params.id) } })
+    if (!lote) return res.status(404).json({ erro: 'lote não encontrado' })
+    if (!lote.numeroRecibo) return res.status(409).json({ erro: 'lote ainda não foi enviado ao portal' })
+    const empresa = empresaGnre(lote.empresa)
+    if (!empresa || !portalConfigurado(empresa)) return res.status(409).json({ erro: `certificado da ${lote.empresa} não configurado` })
+
+    const resultado = await consultarResultadoLote(empresa, lote.numeroRecibo, true)
+    await prisma.difalLoteGnre.update({
+      where: { id: lote.id },
+      data: {
+        consultadoEm: new Date(),
+        situacaoCodigo: resultado.situacao.codigo,
+        situacaoDescricao: resultado.situacao.descricao,
+        resultadoXml: resultado.bruto,
+        ...(resultado.pdfGuias && { pdfGuias: resultado.pdfGuias }),
+      },
+    })
+    res.json({ situacao: resultado.situacao, guias: resultado.guias, temPdf: !!resultado.pdfGuias })
+  } catch (e) {
+    responderErroPortal(res, e)
   }
 })
 

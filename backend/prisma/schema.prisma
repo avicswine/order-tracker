@@ -578,3 +578,26 @@ model DifalCobrancaMl {
   @@index([empresa, periodo])
   @@map("difal_cobrancas_ml")
 }
+
+// Lote GNRE montado a partir das notas (guiaLoteId das difal_notas aponta para cá).
+// Guarda o XML enviado e o que o portal respondeu: recibo, situação, resultado e o PDF
+// das guias em base64. Gerar/enviar lote NÃO paga nada — o pagamento continua no banco.
+model DifalLoteGnre {
+  id                String    @id        // EMPRESA-AAAAMMDDHHMMSS
+  empresa           String
+  ambiente          String               // homologacao | producao (de onde saiu/para onde foi)
+  xml               String
+  guias             Int
+  total             Float
+  criadoEm          DateTime  @default(now())
+  enviadoEm         DateTime?
+  numeroRecibo      String?
+  situacaoCodigo    String?              // última situação devolvida pelo portal
+  situacaoDescricao String?
+  consultadoEm      DateTime?
+  resultadoXml      String?
+  pdfGuias          String?              // base64
+
+  @@index([empresa, criadoEm])
+  @@map("difal_lotes_gnre")
+}

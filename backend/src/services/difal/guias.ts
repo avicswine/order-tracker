@@ -11,6 +11,7 @@
  */
 import type { PrismaClient, DifalNota, DifalAliquota, DifalEmitente } from '@prisma/client'
 import { montarLoteGnre, ErroMontagemGnre, LIMITE_GUIAS_POR_LOTE, type GuiaGnre } from './gnre'
+import { ambienteGnre } from './portalGnre'
 
 export interface GuiaPendente {
   id: string
@@ -157,10 +158,16 @@ export async function gerarLoteDasNotas(prisma: PrismaClient, ids: string[], hoj
   })
 
   const loteId = `${empresa}-${hoje.toISOString().replace(/[-:T]/g, '').slice(0, 14)}`
-  await prisma.difalNota.updateMany({
-    where: { id: { in: ids } },
-    data: { guiaGeradaEm: hoje, guiaLoteId: loteId },
-  })
+  const total = guias.reduce((s, g) => s + g.valorPrincipal, 0)
+  await prisma.$transaction([
+    prisma.difalLoteGnre.create({
+      data: { id: loteId, empresa, ambiente: ambienteGnre(), xml, guias: guias.length, total },
+    }),
+    prisma.difalNota.updateMany({
+      where: { id: { in: ids } },
+      data: { guiaGeradaEm: hoje, guiaLoteId: loteId },
+    }),
+  ])
 
-  return { loteId, xml, guias: guias.length, total: guias.reduce((s, g) => s + g.valorPrincipal, 0) }
+  return { loteId, xml, guias: guias.length, total }
 }
