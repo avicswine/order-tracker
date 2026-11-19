@@ -86,7 +86,7 @@ export interface GuiaGnre {
 
 export class ErroMontagemGnre extends Error {}
 
-function escapar(v: string): string {
+export function escapar(v: string): string {
   return String(v).replace(/[<>&'"]/g, (c) =>
     ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' })[c] as string
   )

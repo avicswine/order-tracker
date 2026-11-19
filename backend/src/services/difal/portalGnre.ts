@@ -24,6 +24,7 @@
  */
 import https from 'https'
 import axios, { AxiosError } from 'axios'
+import { escapar } from './gnre'
 
 export type AmbienteGnre = 'homologacao' | 'producao'
 export type EmpresaGnre = 'AVIC' | 'AGRO'
@@ -76,10 +77,6 @@ export function statusPortal() {
 }
 
 // ------------------------------------------------------------------ utilidades XML
-
-function escapar(v: string): string {
-  return v.replace(/[<>&'"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' })[c] as string)
-}
 
 function desescapar(v: string): string {
   return v
