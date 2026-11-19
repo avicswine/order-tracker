@@ -1,6 +1,6 @@
 # STATUS — Order Tracker
 
-Última atualização: 2026-11-07 (conformidade com os Termos do Mercado Livre + correção da Rodonaves)
+Última atualização: 2026-11-18 (monitor de DIFAL implementado na branch `feat-monitor-difal`; gerador de lote GNRE pronto, envio ao portal pendente)
 
 ## Regra de trabalho (definida por José em 2026-11-07)
 
@@ -9,6 +9,246 @@
 que é inferência, nunca apresentar como fato. O motivo: na sessão de 07/11 três
 afirmações minhas sobre políticas do ML caíram quando a fonte foi cobrada, gerando
 retrabalho e custo.
+
+## Monitor de DIFAL — ESTADO ATUAL (2026-11-18, branch `feat-monitor-difal`, PR ainda não aberto)
+
+Link para abrir o PR: <https://github.com/avicswine/order-tracker/pull/new/feat-monitor-difal>
+
+### O que já existe
+
+| parte | onde | estado |
+|---|---|---|
+| Tabelas `difal_notas`, `difal_aliquotas`, `difal_emitentes` | `backend/prisma/schema.prisma` + migrações `20261117120000` e `20261118120000` | aplicadas no banco local; Railway aplica no deploy (`npm start` roda `migrate deploy`) |
+| Cálculo (carga/prop, redução NCM 8436, quem paga) | `backend/src/services/difal/calculo.ts` | 8 casos em `verificar.ts` passam |
+| Importação do Bling (AVIC e AGRO; EQUI fora) + leitura do XML | `importar.ts`, `xmlNota.ts` | aceita situações 5, 6 e 7 (quase tudo vem como 6) |
+| Gerador do lote GNRE, layout 2.00 | `gnre.ts` | 20 casos em `verificarGnre.ts` passam; validação formal contra o XSD pendente (sem lxml/xmllint na máquina) |
+| Guias pendentes + download do lote | `guias.ts`, rotas `GET /api/difal/guias-pendentes` e `POST /api/difal/guias/lote` | testado local (200/422/400); lote gravado em `difal_lotes_gnre` |
+| Fechamento mensal CDIFAL (ML cobrou × calculamos) | `cobrancasMl.ts`, tabela `difal_cobrancas_ml`, rotas `fechamento-mensal` e `cobrancas-ml/sincronizar` | só leitura na API de faturamento do ML; dados reais só no Railway (tokens) |
+| Cliente do Portal GNRE (ConfigUF, envio, resultado, PDF) | `portalGnre.ts` + rotas `portal/*` e `lotes/*` | 21 casos em `verificarPortalGnre.ts`; **nunca falou com o portal** (sem certificado) |
+| Aba Configuração | status do portal, alíquotas, receita GNRE por UF, vencimento | no ar local |
+| Tela | `frontend/src/pages/DifalPage.tsx` — abas "Vendas" (com bloco "Guias que nós precisamos emitir") e "O que já pagamos" | no ar local em `/difal` |
+
+### O que falta (em ordem)
+
+1. **Certificado A1 + habilitação em homologação** (<https://www.testegnre.pe.gov.br>) — José. Depois: variáveis `GNRE_PFX_BASE64_{AVIC,AGRO}` e `GNRE_PFX_SENHA_{AVIC,AGRO}` no Railway (`GNRE_AMBIENTE=homologacao` até validar).
+2. Na homologação: confirmar com o WSDL o nome do elemento de entrada do Body (hoje `gnreDadosMsg`) e os `versaoDados` (2.00 lote, 1.00 config/consulta); buscar as receitas por UF na aba Configuração.
+3. Cruzamento CDIFAL nota a nota é **impossível** (lançamentos sem pedido) — ficou o fechamento mensal.
+4. Abrir o PR, segunda revisão (codex não instalado), merge com "pode" do José.
+
+### Como conferir
+
+- `/difal` → "Atualizar do Bling" → tabela com notas dos últimos 90 dias e "Quem paga".
+- Bloco âmbar lista as guias nossas pendentes e **o que falta** em cada (hoje: código de receita da UF).
+- Selecionar notas prontas de uma empresa → "Baixar lote GNRE" → baixa `gnre-lote-<EMPRESA>-<data>.xml`; a nota sai da lista (`guiaGeradaEm`).
+- `npx tsx src/services/difal/verificar.ts` e `npx tsx src/services/difal/verificarGnre.ts` no backend.
+
+### Regras aprendidas na planilha fiscal do ML (16–17/11/2026)
+
+- Subir **Regras Tributárias antes** dos Dados Fiscais (senão "Regra Fiscal inválida").
+- NCM nunca vai sem regra; "Código do produto" = SKU do Bling; um SKU pode estar em vários anúncios.
+- Aba Kits: "Preço do item no kit" é percentual (100); a aba **não aceita** Regra tributária.
+- Regras de Transferência/Remessa nas 4 regras (AVIC 821700/821701, AGRO 828518/828519): CST 41 + PIS/COFINS CST 49, padrão da granja.
+
+---
+
+## Módulo de DIFAL — ESPECIFICAÇÃO ORIGINAL (2026-11-16)
+
+Controle do ICMS-DIFAL das vendas interestaduais para consumidor final **não contribuinte**:
+conferir se o valor recolhido bate com o que a regra manda, e acompanhar multa e juros.
+
+### Decisões tomadas por José
+
+| decisão | escolha |
+|---|---|
+| Onde mora | order-tracker (Railway, Postgres) |
+| Acesso da Victória | papel novo `FISCAL` no login existente — vê só as telas de DIFAL |
+| Aviso automático | nenhum por ora; ela olha o painel. Rever se ela pedir |
+| PDFs | **não** são guardados. Só os valores lidos; originais ficam no OneDrive do José |
+| Redução de base | NCM com prefixo **8436** tem redução; o resto não |
+
+Para permitir mudar os PDFs para o Railway depois sem retrabalho, cada guia e comprovante
+guarda `zip_nome`, `caminho_no_zip` e `arquivo_hash`. A migração vira uma reimportação dos
+mesmos ZIPs, sem remexer no que já foi lido.
+
+**Consequência aceita:** a tela não mostra o PDF, só diz onde ele está no OneDrive.
+Pendente confirmar com a Victória se ela tem acesso à mesma pasta.
+
+### A regra de cálculo (da calculadora interna, revisada em 05/11/2026)
+
+Origem RS, consumidor final sem Inscrição Estadual. Base: Convênio ICMS 52/91 (Anexo II),
+153/15, 236/21 e LC 190/2022.
+
+```
+carga interna do destino: 5,6%
+carga de origem: importado 4%  ·  interestadual 7% → 4,1%  ·  interestadual 12% → 7%
+
+método "carga" (maioria):      DIFAL = valor × (5,6% − carga de origem)
+método "prop" (CE, MT, PE):    DIFAL = valor × (5,6 ÷ alíq. interna) × (alíq. interna − inter)
+```
+
+Resultado prático:
+
+| destino | alíq. interestadual | DIFAL esperado |
+|---|---|---|
+| MG, PR, RJ, SC, SP | 12% | **zero** (carga de origem 7% já passa de 5,6%) |
+| demais estados | 7% | **1,5% do valor** |
+| importado | 4% | 1,6% do valor |
+
+Só **6 estados** têm posição do fisco ou da contabilidade (CE, MG, PA, PE, PI, SP). Os
+outros 17 estão como "a validar" e a calculadora já traz o valor alternativo pelo outro
+método — os dois ficam guardados, e divergência em estado "a validar" aparece como
+*interpretação*, não como erro.
+
+### Achados da investigação da API (2026-11-16) — mudam o desenho
+
+1. **Não existe API do ML para guias e comprovantes de DIFAL.** Verificado em
+   <https://developers.mercadolivre.com.br/pt_br/configuracao-do-calculo-do-diferencial-de-aliquota-difal>
+   (só configura o modo de cálculo na tela), no `GET /processes` do
+   [download em lote](https://developers.mercadolivre.com.br/pt_br/download-em-lote-de-documentos-fiscais)
+   (devolve apenas `cte`, `disablement`, `invoice-arg`, `invoice-bra`, `invoice-mex`) e em
+   [baixar documento legal](https://developers.mercadolivre.com.br/pt_br/baixar-documento-legal)
+   (faturas do ML/MP). **O ZIP é a única fonte.**
+2. **O `CDIFAL` da fatura NÃO liga a nota nenhuma.** `sales_info`, `shipping_info` e
+   `items_info` vêm nulos; o único identificador é `document_info.document_id`, que é o id
+   da **fatura** do ML (confirmado: 5396852020 = BILL de R$ 1.715,99 do período 23/10–23/11).
+   Por isso a coluna "cobrado" da aba vem da **guia do ZIP**, que tem a chave da NF-e no nome
+   da pasta. O `CDIFAL` fica só como conferência de total mensal.
+3. **Suspeita em aberto:** o `CDIFAL` pode ser DIFAL do **frete**, não das vendas —
+   `marketplace_info.marketplace = SHIPPING`, só 260 lançamentos em 10 meses (R$ 25.235,89
+   somando AVIC e AGRO) e valores de R$ 3 a R$ 45. Confirma sozinho quando as primeiras
+   guias forem lidas: se as ordens de grandeza não baterem, está respondido.
+4. **O filtro `detail_sub_types` da API não funciona** — devolve zero mesmo havendo
+   lançamentos. Tem que paginar e filtrar por `charge_info.detail_sub_type` na mão.
+5. **Paginar por `from_id`, nunca `offset`** (teto de 10.000, a leitura para sem erro), e
+   **não parar em página curta** — a API devolve menos que o `limit` mesmo havendo mais.
+   Armadilhas que o cmvsync já pagou para descobrir ([ml_cobrancas.py:61](../cmvsync/ml_cobrancas.py#L61)).
+6. **Convênio 52/91 vence em 31/12/2026.** O 131/2026 prorroga até 2028 mas depende de
+   ratificação nacional. Precisa de aviso na tela com data.
+7. **O fundo de pobreza sai em guia separada** → uma nota pode ter mais de uma guia.
+8. **Rondônia exige a guia paga antes da saída** (TATE/RO negou a redução em nota sem DIFAL
+   recolhido, decisão de 2026). O semáforo de RO não pode esperar o prazo.
+
+### Tabelas
+
+| tabela | conteúdo |
+|---|---|
+| `difal_notas` | chave da NF-e, número, data, UF destino, valor, NCM, `tem_reducao`, `dest_contribuinte` (do `indIEDest` do XML), origem do produto, DIFAL esperado, DIFAL alternativo, método, confiança, status |
+| `difal_guias` | modelo, UF, **principal, multa, juros e atualização separados**, vencimento, linha digitável, código de receita, DIFAL ou autuação, `leitura_incerta` + campos incertos |
+| `difal_comprovantes` | data do pagamento, valor, autenticação, NSU, protocolo, linha digitável, pagador |
+| `difal_cobrancas_ml` | o `CDIFAL` da fatura (conferência mensal apenas) |
+| `difal_zips` | nome, hash do arquivo, data, pastas lidas, erros |
+
+### Conferências
+
+```
+1. DIFAL esperado × principal da guia   → o cálculo bate com o recolhido?
+2. linha digitável da guia × do comprovante → o comprovante é dessa guia?
+3. total da guia × valor pago           → pagou o valor certo?
+4. CDIFAL do mês × soma das guias       → fechamento mensal (informativo)
+```
+
+A conferência 1 tem três resultados: **bate**, **diverge dentro da interpretação** (estado
+"a validar", valor igual ao método alternativo) e **erro**.
+
+### Telas
+
+1. **Análise** — uma linha por nota: deveria ser × foi recolhido × diferença, com a multa e
+   os juros abertos. Filtros por empresa, UF, mês e "só divergentes". Totalizador no topo.
+2. **Notas** — lista com semáforo (paga, em aberto, vencendo, atrasada).
+3. **Detalhe da nota** — as conferências lado a lado e onde achar cada PDF no OneDrive.
+4. **Resumo** — por mês e UF: principal, multa, juros, dias médios até o pagamento.
+5. **Importação** — upload do ZIP e histórico, com controle por hash.
+
+### Ordem de construção
+
+1. Importar o ZIP: ler XML, criar notas, controlar por hash (sem ler guia ainda)
+2. Leitor de guia, um modelo por vez, nesta ordem: **CE, RN, PI** (83 das 108 guias),
+   depois TO, AL, PB, AM
+3. Leitor de comprovante, começando pelos 2 modelos maiores (Smart Online e
+   "Comprovante de arrecadação" = 42 dos 60 lidos)
+4. Conferências 2 e 3, e o semáforo
+5. Cálculo do DIFAL esperado e a conferência 1
+6. Tela de análise e o resumo
+7. `CDIFAL` da fatura (informativo, por último)
+
+### Inventário dos ZIPs reais (10 arquivos, dez/2025 a nov/2026)
+
+José forneceu os ZIPs em `C:\Users\josef\Downloads\*Comprovantes_do_DIFAL.zip` (originais
+também em `C:\Users\josef\AVIC VENTILACAO\Transferências\DIFAL`). O ZIP é exportado do
+próprio Mercado Livre.
+
+```
+120 notas · ~108 guias · R$ 10.082,22 nas 98 guias que o parser leu
+estrutura: <pasta do zip>/<DD de mês AAAA - Chave da NF-e {44 dígitos}>/<arquivo>
+```
+
+**Só 7 estados emitem guia por operação** — não 23 como a calculadora cobre:
+
+| UF | guias | total | modelo do documento |
+|---|---|---|---|
+| CE | 43 | R$ 2.444,33 | DAE (valor dentro do código de barras — o mais trabalhoso) |
+| RN | 28 | R$ 3.202,45 | GRI — Guia de Recolhimento Instantâneo |
+| PI | 12 | R$ 2.306,16 | DAR com campos numerados |
+| TO | 5 | R$ 1.051,03 | DARE — já traz multa, juros e atualização separados (o mais fácil) |
+| AL | 5 | R$ 761,42 | DAR |
+| PB | 3 | R$ 230,56 | GNRE (o único) |
+| AM | 2 | R$ 86,27 | DAR |
+
+Confirmar com a contabilidade o que acontece nos **outros estados**: não geram guia, ou o
+DIFAL é recolhido de outra forma? Muda a conta do que está "em aberto".
+
+**Comprovantes: 6 modelos**, que mudam por pagador e não por estado (60 lidos):
+
+| modelo | qtd | identificação no texto |
+|---|---|---|
+| Smart Online / Online2 (Bradesco) | 21 | `DATA DE VENCIMENTO VALOR COBRADO … Smart Online` |
+| Comprovante de arrecadação (sem marca) | 21 | `Comprovante de Pagamento de Guias de Arrecadação` |
+| Itaú — código de barras | 8 | `Comprovante de pagamento com código de barras - SEFAZ-CE/DAE` |
+| Pag Util / Itaú | 5 | `Código de Barras: SEFAZ-CE/DAE` |
+| Bradesco — Tesouraria on-line | 3 | `Tesouraria on-line … SEFAZ/CE` |
+| Itaú/Bradesco — agência | 2 | `Agência: 0302 … Empresa/Órgão: SEFAZ/CE` |
+
+**Total: 13 leitores** (7 guias + 6 comprovantes). Começando pelos 2 maiores modelos de
+comprovante e pelos 3 estados de maior volume (CE, RN, PI = 83 das 108 guias), a maior
+parte do dinheiro fica coberta na primeira rodada.
+
+**Nenhum PDF é escaneado** — todos têm texto extraível, então o leitor dispensa OCR.
+
+**Quatro padrões de nome de arquivo**, todos precisam ser tratados (mas o dado confiável é
+a chave de 44 dígitos no nome da pasta, não o nome do arquivo):
+
+```
+guia-de-pagamento000009358al641-5647715256000149.pdf   nota com zeros, valor com hífen
+guia-de-pagamento8270ce181-9947715256000149.pdf        nota sem zeros
+guia-de-pagamento-8615-ce-46-37-47715256000149.pdf     tudo com hífen
+guia-de-pagamento-8606-ce-201.65-47715256000149.pdf    valor com ponto
+guia-de-pagamento-9609-am-79-83-difald.pdf             sufixo "difald", sem CNPJ
+```
+
+### ACHADO FISCAL — guias em nome de pessoa física
+
+As guias e comprovantes de **PI, AL, RN e TO** saem com o nome e CPF da sócia no campo
+"Nome ou Razão Social", **não** com a AVIC e o CNPJ.
+
+É o mesmo erro de cadastro do Mercado Livre registrado na sessão de 07/11 (razão social da
+conta como "DIRLENE JOANA BAZZANELLA" em vez de "AVIC VENTILACAO E EXAUSTAO INDUSTRIAL
+LTDA"). O ML emite a guia com a razão social que tem cadastrada, então **o erro está
+vazando para o recolhimento de imposto**.
+
+Duas ações, nenhuma de programação:
+- perguntar à contabilidade se recolhimento em nome de pessoa física compromete o crédito
+  ou gera risco de autuação;
+- conferir se a correção do cadastro no ML saiu — se não saiu, todas as guias novas
+  continuam erradas.
+
+### O que falta antes de escrever código
+
+- ~~Amostras de guia~~ — **resolvido**, os 10 ZIPs cobrem os 7 estados e os 6 modelos de
+  comprovante.
+- **Confirmar o acesso da Victória** à pasta do OneDrive (sem ele, ela não abre nenhum PDF
+  a partir da tela).
+- **Saber se existem outros NCMs** fora do 8436, para a tela mostrar os dois modos.
+- **Confirmar com a contabilidade** o tratamento dos estados que não emitem guia.
 
 ## Sessão 2026-11-07 — Conformidade ML e Rodonaves
 

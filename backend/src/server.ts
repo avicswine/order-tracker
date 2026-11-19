@@ -14,6 +14,7 @@ import setupRouter from './routes/setup'
 import whatsappRouter from './routes/whatsapp'
 import notificationsRouter from './routes/notifications'
 import pendenciasRouter from './routes/pendencias'
+import difalRouter from './routes/difal'
 import mlRouter, { mlPublicRouter } from './routes/ml'
 import { syncMlClaims, mlAtualizarPendentes, mlVarrerMensagens, mlRecuperarNotificacoesPerdidas, mlReconciliarClaims } from './services/mercadolivre'
 import { reconciliarPendenciasEntregues } from './services/pendencias'
@@ -71,6 +72,7 @@ app.use('/api/tracking', requireAuth, trackingRouter)
 app.use('/api/whatsapp', requireAuth, whatsappRouter)
 app.use('/api/notifications', requireAuth, notificationsRouter)
 app.use('/api/pendencias', requireAuth, pendenciasRouter)
+app.use('/api/difal', requireAuth, difalRouter)
 app.use('/api/ml', mlPublicRouter) // callback OAuth do ML (público — o navegador chega sem JWT)
 app.use('/api/ml', requireAuth, mlRouter)
 app.use('/api/separacao', separacaoRouter) // auth própria (operador + PIN) dentro do router
