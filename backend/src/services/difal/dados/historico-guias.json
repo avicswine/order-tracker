@@ -1,22 +1,22 @@
 {
- "apuradoEm": "2026-11-17",
+ "apuradoEm": "2026-11-19",
  "periodo": {
   "de": "2025-12-08",
   "ate": "2026-10-19"
  },
  "resumo": {
-  "notas": 88,
+  "notas": 94,
   "guiasTotal": 108,
-  "pago": 7880.28,
-  "devido": 2270.21,
-  "aMais": 5610.07,
-  "encargos": 585.34,
+  "pago": 9654.51,
+  "devido": 2977.07,
+  "aMais": 6677.44,
+  "encargos": 511.98,
   "autuacoes": {
    "notas": 7,
    "valor": 1360.14
   },
-  "guiasComReducao": 27,
-  "guiasComparadas": 88
+  "guiasComReducao": 28,
+  "guiasComparadas": 94
  },
  "estados": [
   {
@@ -24,13 +24,13 @@
    "estado": "Ceará",
    "notas": 49,
    "base": 47368.88,
-   "pago": 4273.01,
+   "pago": 4410.62,
    "devido": 1724.25,
-   "aMais": 2548.76,
-   "pctCobrado": 9.02,
+   "encargos": 75.78,
    "pctDevido": 3.64,
-   "encargos": 213.39,
-   "metodo": "prop"
+   "metodo": "prop",
+   "aMais": 2686.37,
+   "pctCobrado": 9.31
   },
   {
    "uf": "RN",
@@ -39,11 +39,11 @@
    "base": 20128.18,
    "pago": 1780.54,
    "devido": 301.91,
-   "aMais": 1478.63,
-   "pctCobrado": 8.85,
-   "pctDevido": 1.5,
    "encargos": 67.73,
-   "metodo": "carga"
+   "pctDevido": 1.5,
+   "metodo": "carga",
+   "aMais": 1478.63,
+   "pctCobrado": 8.85
   },
   {
    "uf": "PI",
@@ -52,11 +52,37 @@
    "base": 8353.26,
    "pago": 1169.46,
    "devido": 125.28,
-   "aMais": 1044.18,
-   "pctCobrado": 14.0,
-   "pctDevido": 1.5,
    "encargos": 272.58,
-   "metodo": "carga"
+   "pctDevido": 1.5,
+   "metodo": "carga",
+   "aMais": 1044.18,
+   "pctCobrado": 14.0
+  },
+  {
+   "uf": "TO",
+   "estado": "Tocantins",
+   "notas": 5,
+   "base": 8084.78,
+   "pago": 1051.03,
+   "devido": 121.27,
+   "encargos": 0.0,
+   "pctDevido": 1.5,
+   "metodo": "carga",
+   "aMais": 929.76,
+   "pctCobrado": 13.0
+  },
+  {
+   "uf": "AL",
+   "estado": "Alagoas",
+   "notas": 7,
+   "base": 9804.41,
+   "pago": 853.67,
+   "devido": 659.45,
+   "encargos": 64.25,
+   "pctDevido": 6.73,
+   "metodo": "carga",
+   "aMais": 194.22,
+   "pctCobrado": 8.71
   },
   {
    "uf": "PB",
@@ -65,24 +91,11 @@
    "base": 2369.05,
    "pago": 307.98,
    "devido": 35.54,
-   "aMais": 272.44,
-   "pctCobrado": 13.0,
-   "pctDevido": 1.5,
    "encargos": 26.58,
-   "metodo": "carga"
-  },
-  {
-   "uf": "AL",
-   "estado": "Alagoas",
-   "notas": 6,
-   "base": 4924.51,
-   "pago": 268.08,
-   "devido": 73.86,
-   "aMais": 194.22,
-   "pctCobrado": 5.44,
    "pctDevido": 1.5,
-   "encargos": 0.0,
-   "metodo": "carga"
+   "metodo": "carga",
+   "aMais": 272.44,
+   "pctCobrado": 13.0
   },
   {
    "uf": "AM",
@@ -91,11 +104,11 @@
    "base": 624.75,
    "pago": 81.21,
    "devido": 9.37,
-   "aMais": 71.84,
-   "pctCobrado": 13.0,
-   "pctDevido": 1.5,
    "encargos": 5.06,
-   "metodo": "carga"
+   "pctDevido": 1.5,
+   "metodo": "carga",
+   "aMais": 71.84,
+   "pctCobrado": 13.0
   }
  ],
  "meses": [
@@ -103,17 +116,17 @@
    "mes": "2025-12",
    "label": "dez/25",
    "notas": 3,
-   "pago": 241.23,
+   "pago": 331.83,
    "devido": 137.4,
-   "aMais": 103.83
+   "aMais": 194.43
   },
   {
    "mes": "2026-01",
    "label": "jan/26",
-   "notas": 7,
-   "pago": 531.69,
-   "devido": 292.76,
-   "aMais": 238.93
+   "notas": 8,
+   "pago": 680.0,
+   "devido": 304.45,
+   "aMais": 375.55
   },
   {
    "mes": "2026-02",
@@ -126,10 +139,10 @@
   {
    "mes": "2026-03",
    "label": "mar/26",
-   "notas": 14,
-   "pago": 1902.18,
-   "devido": 477.81,
-   "aMais": 1424.37
+   "notas": 16,
+   "pago": 2665.06,
+   "devido": 1083.86,
+   "aMais": 1581.2
   },
   {
    "mes": "2026-04",
@@ -142,10 +155,10 @@
   {
    "mes": "2026-05",
    "label": "mai/26",
-   "notas": 8,
-   "pago": 377.63,
-   "devido": 146.04,
-   "aMais": 231.59
+   "notas": 9,
+   "pago": 797.53,
+   "devido": 194.49,
+   "aMais": 603.04
   },
   {
    "mes": "2026-06",
@@ -166,10 +179,10 @@
   {
    "mes": "2026-08",
    "label": "ago/26",
-   "notas": 12,
-   "pago": 722.99,
-   "devido": 286.34,
-   "aMais": 436.65
+   "notas": 13,
+   "pago": 912.13,
+   "devido": 308.16,
+   "aMais": 603.97
   },
   {
    "mes": "2026-09",
@@ -182,10 +195,10 @@
   {
    "mes": "2026-10",
    "label": "out/26",
-   "notas": 2,
-   "pago": 263.95,
-   "devido": 70.83,
-   "aMais": 193.12
+   "notas": 3,
+   "pago": 427.35,
+   "devido": 89.68,
+   "aMais": 337.67
   }
  ],
  "notas": [
@@ -202,7 +215,7 @@
    "diferenca": 25.96,
    "pct_pago": 3.36,
    "pct_devido": 1.5,
-   "encargos": 0,
+   "encargos": 4.24,
    "guia": "DAR/AL",
    "autuacao": false
   },
@@ -231,13 +244,13 @@
    "mes_label": "dez/25",
    "base": 1799.8,
    "icms_origem": 73.79,
-   "difal_pago": 12.35,
+   "difal_pago": 102.95,
    "difal_devido": 65.51,
-   "diferenca": -53.16,
-   "pct_pago": 0.69,
+   "diferenca": 37.44,
+   "pct_pago": 5.72,
    "pct_devido": 3.64,
-   "encargos": 106.42,
-   "guia": "DAE/CE",
+   "encargos": 15.82,
+   "guia": "DAE/CE (campos trocados na guia)",
    "autuacao": false
   },
   {
@@ -248,13 +261,13 @@
    "mes_label": "jan/26",
    "base": 1447.69,
    "icms_origem": 59.35,
-   "difal_pago": 5.69,
+   "difal_pago": 52.7,
    "difal_devido": 52.7,
-   "diferenca": -47.01,
-   "pct_pago": 0.39,
+   "diferenca": 0.0,
+   "pct_pago": 3.64,
    "pct_devido": 3.64,
-   "encargos": 53.86,
-   "guia": "DAE/CE",
+   "encargos": 6.85,
+   "guia": "DAE/CE (campos trocados na guia)",
    "autuacao": false
   },
   {
@@ -306,6 +319,24 @@
    "pct_devido": 3.64,
    "encargos": 0,
    "guia": "DAE/CE",
+   "autuacao": false
+  },
+  {
+   "nf": "8649",
+   "uf": "TO",
+   "estado": "Tocantins",
+   "data": "2026-01-20",
+   "mes": "2026-01",
+   "mes_label": "jan/26",
+   "base": 779.2,
+   "icms_origem": 31.95,
+   "difal_pago": 101.3,
+   "difal_devido": 11.69,
+   "diferenca": 89.61,
+   "pct_pago": 13.0,
+   "pct_devido": 1.5,
+   "encargos": 0.0,
+   "guia": "DARE/TO",
    "autuacao": false
   },
   {
@@ -411,6 +442,24 @@
    "autuacao": false
   },
   {
+   "nf": "9358",
+   "uf": "AL",
+   "estado": "Alagoas",
+   "data": "2026-03-06",
+   "mes": "2026-03",
+   "mes_label": "mar/26",
+   "base": 4879.9,
+   "icms_origem": 341.59,
+   "difal_pago": 585.59,
+   "difal_devido": 585.59,
+   "diferenca": 0.0,
+   "pct_pago": 12.0,
+   "pct_devido": 12.0,
+   "encargos": 7.17,
+   "guia": "DAR/AL",
+   "autuacao": false
+  },
+  {
    "nf": "9395",
    "uf": "CE",
    "estado": "Ceará",
@@ -445,6 +494,23 @@
    "autuacao": false
   },
   {
+   "nf": "9407",
+   "uf": "RN",
+   "estado": "Rio Grande do Norte",
+   "data": "2026-03-11",
+   "mes_label": "mar/26",
+   "base": 96.09,
+   "icms_origem": 3.94,
+   "difal_pago": 12.49,
+   "difal_devido": 1.44,
+   "diferenca": 11.05,
+   "pct_pago": 13.0,
+   "pct_devido": 1.5,
+   "encargos": 1.09,
+   "guia": "GRI/RN",
+   "autuacao": false
+  },
+  {
    "nf": "9408",
    "uf": "RN",
    "estado": "Rio Grande do Norte",
@@ -462,20 +528,21 @@
    "autuacao": false
   },
   {
-   "nf": "9407",
-   "uf": "RN",
-   "estado": "Rio Grande do Norte",
-   "data": "2026-03-11",
+   "nf": "9550",
+   "uf": "TO",
+   "estado": "Tocantins",
+   "data": "2026-03-20",
+   "mes": "2026-03",
    "mes_label": "mar/26",
-   "base": 96.09,
-   "icms_origem": 3.94,
-   "difal_pago": 12.49,
-   "difal_devido": 1.44,
-   "diferenca": 11.05,
+   "base": 1363.79,
+   "icms_origem": 55.91,
+   "difal_pago": 177.29,
+   "difal_devido": 20.46,
+   "diferenca": 156.83,
    "pct_pago": 13.0,
    "pct_devido": 1.5,
-   "encargos": 1.09,
-   "guia": "GRI/RN",
+   "encargos": 0.0,
+   "guia": "DARE/TO",
    "autuacao": false
   },
   {
@@ -513,7 +580,7 @@
    "autuacao": false
   },
   {
-   "nf": "9718",
+   "nf": "9712",
    "uf": "CE",
    "estado": "Ceará",
    "data": "2026-03-31",
@@ -530,7 +597,24 @@
    "autuacao": false
   },
   {
-   "nf": "9712",
+   "nf": "9713",
+   "uf": "CE",
+   "estado": "Ceará",
+   "data": "2026-03-31",
+   "mes_label": "mar/26",
+   "base": 1557.14,
+   "icms_origem": 63.84,
+   "difal_pago": 202.43,
+   "difal_devido": 56.68,
+   "diferenca": 145.75,
+   "pct_pago": 13.0,
+   "pct_devido": 3.64,
+   "encargos": 0,
+   "guia": "DAE/CE",
+   "autuacao": false
+  },
+  {
+   "nf": "9714",
    "uf": "CE",
    "estado": "Ceará",
    "data": "2026-03-31",
@@ -598,7 +682,7 @@
    "autuacao": false
   },
   {
-   "nf": "9714",
+   "nf": "9718",
    "uf": "CE",
    "estado": "Ceará",
    "data": "2026-03-31",
@@ -611,23 +695,6 @@
    "pct_pago": 13.0,
    "pct_devido": 3.64,
    "encargos": 0.3,
-   "guia": "DAE/CE",
-   "autuacao": false
-  },
-  {
-   "nf": "9713",
-   "uf": "CE",
-   "estado": "Ceará",
-   "data": "2026-03-31",
-   "mes_label": "mar/26",
-   "base": 1557.14,
-   "icms_origem": 63.84,
-   "difal_pago": 202.43,
-   "difal_devido": 56.68,
-   "diferenca": 145.75,
-   "pct_pago": 13.0,
-   "pct_devido": 3.64,
-   "encargos": 0,
    "guia": "DAE/CE",
    "autuacao": false
   },
@@ -649,23 +716,6 @@
    "autuacao": false
   },
   {
-   "nf": "9862",
-   "uf": "AL",
-   "estado": "Alagoas",
-   "data": "2026-04-10",
-   "mes_label": "abr/26",
-   "base": 262.33,
-   "icms_origem": 10.76,
-   "difal_pago": 9.22,
-   "difal_devido": 3.93,
-   "diferenca": 5.29,
-   "pct_pago": 3.51,
-   "pct_devido": 1.5,
-   "encargos": 0,
-   "guia": "DAR/AL",
-   "autuacao": false
-  },
-  {
    "nf": "9854",
    "uf": "CE",
    "estado": "Ceará",
@@ -680,6 +730,23 @@
    "pct_devido": 3.64,
    "encargos": 1.28,
    "guia": "DAE/CE",
+   "autuacao": false
+  },
+  {
+   "nf": "9862",
+   "uf": "AL",
+   "estado": "Alagoas",
+   "data": "2026-04-10",
+   "mes_label": "abr/26",
+   "base": 262.33,
+   "icms_origem": 10.76,
+   "difal_pago": 9.22,
+   "difal_devido": 3.93,
+   "diferenca": 5.29,
+   "pct_pago": 3.51,
+   "pct_devido": 1.5,
+   "encargos": 2.97,
+   "guia": "DAR/AL",
    "autuacao": false
   },
   {
@@ -746,25 +813,8 @@
    "diferenca": 74.88,
    "pct_pago": 7.03,
    "pct_devido": 1.5,
-   "encargos": 0,
+   "encargos": 30.67,
    "guia": "DAR/AL",
-   "autuacao": false
-  },
-  {
-   "nf": "10108",
-   "uf": "CE",
-   "estado": "Ceará",
-   "data": "2026-04-27",
-   "mes_label": "abr/26",
-   "base": 3847.17,
-   "icms_origem": 157.73,
-   "difal_pago": 611.7,
-   "difal_devido": 140.04,
-   "diferenca": 471.66,
-   "pct_pago": 15.9,
-   "pct_devido": 3.64,
-   "encargos": 0,
-   "guia": "DAE/CE",
    "autuacao": false
   },
   {
@@ -782,6 +832,23 @@
    "pct_devido": 1.5,
    "encargos": 2.71,
    "guia": "GRI/RN",
+   "autuacao": false
+  },
+  {
+   "nf": "10108",
+   "uf": "CE",
+   "estado": "Ceará",
+   "data": "2026-04-27",
+   "mes_label": "abr/26",
+   "base": 3847.17,
+   "icms_origem": 157.73,
+   "difal_pago": 611.7,
+   "difal_devido": 140.04,
+   "diferenca": 471.66,
+   "pct_pago": 15.9,
+   "pct_devido": 3.64,
+   "encargos": 0,
+   "guia": "DAE/CE",
    "autuacao": false
   },
   {
@@ -814,7 +881,7 @@
    "diferenca": 53.9,
    "pct_pago": 26.3,
    "pct_devido": 1.5,
-   "encargos": 0,
+   "encargos": 18.42,
    "guia": "DAR/AL",
    "autuacao": false
   },
@@ -887,6 +954,24 @@
    "autuacao": false
   },
   {
+   "nf": "10472",
+   "uf": "TO",
+   "estado": "Tocantins",
+   "data": "2026-05-18",
+   "mes": "2026-05",
+   "mes_label": "mai/26",
+   "base": 3230,
+   "icms_origem": 132.43,
+   "difal_pago": 419.9,
+   "difal_devido": 48.45,
+   "diferenca": 371.45,
+   "pct_pago": 13.0,
+   "pct_devido": 1.5,
+   "encargos": 0.0,
+   "guia": "DARE/TO",
+   "autuacao": false
+  },
+  {
    "nf": "10487",
    "uf": "CE",
    "estado": "Ceará",
@@ -938,23 +1023,6 @@
    "autuacao": true
   },
   {
-   "nf": "10614",
-   "uf": "CE",
-   "estado": "Ceará",
-   "data": "2026-05-26",
-   "mes_label": "mai/26",
-   "base": 94.65,
-   "icms_origem": 3.88,
-   "difal_pago": 12.3,
-   "difal_devido": 3.45,
-   "diferenca": 8.85,
-   "pct_pago": 13.0,
-   "pct_devido": 3.64,
-   "encargos": 0,
-   "guia": "DAE/CE",
-   "autuacao": false
-  },
-  {
    "nf": "10603",
    "uf": "CE",
    "estado": "Ceará",
@@ -968,6 +1036,23 @@
    "pct_pago": 3.64,
    "pct_devido": 3.64,
    "encargos": 2.32,
+   "guia": "DAE/CE",
+   "autuacao": false
+  },
+  {
+   "nf": "10614",
+   "uf": "CE",
+   "estado": "Ceará",
+   "data": "2026-05-26",
+   "mes_label": "mai/26",
+   "base": 94.65,
+   "icms_origem": 3.88,
+   "difal_pago": 12.3,
+   "difal_devido": 3.45,
+   "diferenca": 8.85,
+   "pct_pago": 13.0,
+   "pct_devido": 3.64,
+   "encargos": 0,
    "guia": "DAE/CE",
    "autuacao": false
   },
@@ -1040,23 +1125,6 @@
    "autuacao": false
   },
   {
-   "nf": "10933",
-   "uf": "CE",
-   "estado": "Ceará",
-   "data": "2026-06-19",
-   "mes_label": "jun/26",
-   "base": 629.9,
-   "icms_origem": 25.83,
-   "difal_pago": 22.93,
-   "difal_devido": 22.93,
-   "diferenca": 0.0,
-   "pct_pago": 3.64,
-   "pct_devido": 3.64,
-   "encargos": 0,
-   "guia": "DAE/CE",
-   "autuacao": false
-  },
-  {
    "nf": "10932",
    "uf": "CE",
    "estado": "Ceará",
@@ -1068,6 +1136,23 @@
    "difal_devido": 6.07,
    "diferenca": -3.57,
    "pct_pago": 1.5,
+   "pct_devido": 3.64,
+   "encargos": 0,
+   "guia": "DAE/CE",
+   "autuacao": false
+  },
+  {
+   "nf": "10933",
+   "uf": "CE",
+   "estado": "Ceará",
+   "data": "2026-06-19",
+   "mes_label": "jun/26",
+   "base": 629.9,
+   "icms_origem": 25.83,
+   "difal_pago": 22.93,
+   "difal_devido": 22.93,
+   "diferenca": 0.0,
+   "pct_pago": 3.64,
    "pct_devido": 3.64,
    "encargos": 0,
    "guia": "DAE/CE",
@@ -1239,7 +1324,7 @@
    "diferenca": 496.69,
    "pct_pago": 31.0,
    "pct_devido": 1.5,
-   "encargos": 41.34,
+   "encargos": 46.56,
    "guia": "DAR/PI",
    "autuacao": true
   },
@@ -1324,12 +1409,12 @@
    "diferenca": 159.76,
    "pct_pago": 14.73,
    "pct_devido": 1.5,
-   "encargos": 18.78,
+   "encargos": 20.56,
    "guia": "DAR/PI",
    "autuacao": true
   },
   {
-   "nf": "11382",
+   "nf": "11380",
    "uf": "RN",
    "estado": "Rio Grande do Norte",
    "data": "2026-07-27",
@@ -1363,7 +1448,7 @@
    "autuacao": false
   },
   {
-   "nf": "11380",
+   "nf": "11382",
    "uf": "RN",
    "estado": "Rio Grande do Norte",
    "data": "2026-07-27",
@@ -1392,7 +1477,7 @@
    "diferenca": 1.2,
    "pct_pago": 3.51,
    "pct_devido": 1.5,
-   "encargos": 0,
+   "encargos": 0.08,
    "guia": "DAR/AL",
    "autuacao": false
   },
@@ -1482,23 +1567,6 @@
    "autuacao": false
   },
   {
-   "nf": "11689",
-   "uf": "CE",
-   "estado": "Ceará",
-   "data": "2026-08-12",
-   "mes_label": "ago/26",
-   "base": 1388.91,
-   "icms_origem": 56.94,
-   "difal_pago": 50.56,
-   "difal_devido": 50.56,
-   "diferenca": 0.0,
-   "pct_pago": 3.64,
-   "pct_devido": 3.64,
-   "encargos": 0,
-   "guia": "DAE/CE",
-   "autuacao": false
-  },
-  {
    "nf": "11680",
    "uf": "RN",
    "estado": "Rio Grande do Norte",
@@ -1513,6 +1581,23 @@
    "pct_devido": 1.5,
    "encargos": 0,
    "guia": "GRI/RN",
+   "autuacao": false
+  },
+  {
+   "nf": "11689",
+   "uf": "CE",
+   "estado": "Ceará",
+   "data": "2026-08-12",
+   "mes_label": "ago/26",
+   "base": 1388.91,
+   "icms_origem": 56.94,
+   "difal_pago": 50.56,
+   "difal_devido": 50.56,
+   "diferenca": 0.0,
+   "pct_pago": 3.64,
+   "pct_devido": 3.64,
+   "encargos": 0,
+   "guia": "DAE/CE",
    "autuacao": false
   },
   {
@@ -1567,6 +1652,24 @@
    "autuacao": false
   },
   {
+   "nf": "11909",
+   "uf": "TO",
+   "estado": "Tocantins",
+   "data": "2026-08-21",
+   "mes": "2026-08",
+   "mes_label": "ago/26",
+   "base": 1454.9,
+   "icms_origem": 59.65,
+   "difal_pago": 189.14,
+   "difal_devido": 21.82,
+   "diferenca": 167.32,
+   "pct_pago": 13.0,
+   "pct_devido": 1.5,
+   "encargos": 0.0,
+   "guia": "DARE/TO",
+   "autuacao": false
+  },
+  {
    "nf": "11947",
    "uf": "RN",
    "estado": "Rio Grande do Norte",
@@ -1584,23 +1687,6 @@
    "autuacao": false
   },
   {
-   "nf": "12002",
-   "uf": "CE",
-   "estado": "Ceará",
-   "data": "2026-08-27",
-   "mes_label": "ago/26",
-   "base": 916.44,
-   "icms_origem": 37.57,
-   "difal_pago": 33.36,
-   "difal_devido": 33.36,
-   "diferenca": 0.0,
-   "pct_pago": 3.64,
-   "pct_devido": 3.64,
-   "encargos": 0,
-   "guia": "DAE/CE",
-   "autuacao": false
-  },
-  {
    "nf": "11990",
    "uf": "CE",
    "estado": "Ceará",
@@ -1611,6 +1697,23 @@
    "difal_pago": 27.84,
    "difal_devido": 27.84,
    "diferenca": -0.0,
+   "pct_pago": 3.64,
+   "pct_devido": 3.64,
+   "encargos": 0,
+   "guia": "DAE/CE",
+   "autuacao": false
+  },
+  {
+   "nf": "12002",
+   "uf": "CE",
+   "estado": "Ceará",
+   "data": "2026-08-27",
+   "mes_label": "ago/26",
+   "base": 916.44,
+   "icms_origem": 37.57,
+   "difal_pago": 33.36,
+   "difal_devido": 33.36,
+   "diferenca": 0.0,
    "pct_pago": 3.64,
    "pct_devido": 3.64,
    "encargos": 0,
@@ -1635,23 +1738,6 @@
    "autuacao": true
   },
   {
-   "nf": "12093",
-   "uf": "CE",
-   "estado": "Ceará",
-   "data": "2026-08-31",
-   "mes_label": "ago/26",
-   "base": 381.73,
-   "icms_origem": 15.65,
-   "difal_pago": 49.62,
-   "difal_devido": 13.89,
-   "diferenca": 35.73,
-   "pct_pago": 13.0,
-   "pct_devido": 3.64,
-   "encargos": 0.52,
-   "guia": "DAE/CE",
-   "autuacao": false
-  },
-  {
    "nf": "12090",
    "uf": "CE",
    "estado": "Ceará",
@@ -1665,6 +1751,23 @@
    "pct_pago": 13.0,
    "pct_devido": 3.64,
    "encargos": 0.39,
+   "guia": "DAE/CE",
+   "autuacao": false
+  },
+  {
+   "nf": "12093",
+   "uf": "CE",
+   "estado": "Ceará",
+   "data": "2026-08-31",
+   "mes_label": "ago/26",
+   "base": 381.73,
+   "icms_origem": 15.65,
+   "difal_pago": 49.62,
+   "difal_devido": 13.89,
+   "diferenca": 35.73,
+   "pct_pago": 13.0,
+   "pct_devido": 3.64,
+   "encargos": 0.52,
    "guia": "DAE/CE",
    "autuacao": false
   },
@@ -1732,7 +1835,7 @@
    "diferenca": 32.99,
    "pct_pago": 3.52,
    "pct_devido": 1.5,
-   "encargos": 0,
+   "encargos": 0.7,
    "guia": "DAR/AL",
    "autuacao": false
   },
@@ -1802,6 +1905,24 @@
    "pct_devido": 3.64,
    "encargos": 0,
    "guia": "DAE/CE",
+   "autuacao": false
+  },
+  {
+   "nf": "13126",
+   "uf": "TO",
+   "estado": "Tocantins",
+   "data": "2026-10-27",
+   "mes": "2026-10",
+   "mes_label": "out/26",
+   "base": 1256.89,
+   "icms_origem": 51.53,
+   "difal_pago": 163.4,
+   "difal_devido": 18.85,
+   "diferenca": 144.55,
+   "pct_pago": 13.0,
+   "pct_devido": 1.5,
+   "encargos": 0.0,
+   "guia": "DARE/TO",
    "autuacao": false
   }
  ]
