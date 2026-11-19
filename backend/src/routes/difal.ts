@@ -142,7 +142,7 @@ router.put(
   [
     body('aliquotaInterna').optional().isFloat({ min: 0, max: 40 }),
     body('fcp').optional().isFloat({ min: 0, max: 10 }),
-    body('interestadual').optional().isFloat({ min: 0, max: 20 }),
+    body('interestadual').optional().isIn([7, 12, '7', '12']).withMessage('alíquota interestadual é 7 ou 12 (Convênio 52/91)'),
     body('metodo').optional().isIn(['carga', 'prop']),
     body('nota').optional().trim(),
     body('codigoReceitaGnre').optional().trim().matches(/^\d{6}$/).withMessage('código de receita tem 6 dígitos'),

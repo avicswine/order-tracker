@@ -258,6 +258,8 @@ export async function importarNotas(
           valorFrete: nf.valorFrete ?? 0,
         }
         const calc = calcularDifal(dados, porUf.get(uf))
+        const erroCalculo = (calc.detalhe as { erro?: string }).erro ?? null
+        if (erroCalculo) res.erros.push(`NF ${resumo.numero}: ${erroCalculo}`)
         const valorProdutos = itens.reduce((a, i) => a + i.valorTotal, 0)
 
         // O XML diz qual alíquota e qual redução o emissor usou de fato. Serve para
@@ -333,6 +335,8 @@ export async function importarNotas(
           responsavel: calc.responsavel,
           // só sobrescreve quando o XML respondeu; senão preserva o aviso anterior
           ...(avisoXml !== null ? { observacao: avisoXml } : {}),
+          // erro de cálculo nunca fica escondido: a nota vai para "conferir" com o motivo
+          ...(erroCalculo ? { situacao: 'DIVERGENTE' as const, observacao: `CÁLCULO: ${erroCalculo}` } : {}),
         }
 
         try {
