@@ -308,8 +308,10 @@ export async function importarNotas(
 
         const registro = {
           empresa: empresa.code,
-          municipioIbgeDestino: paraGuia?.municipioIbgeDestino ?? null,
-          documentoDestinatario: paraGuia?.documentoDestinatario ?? null,
+          // só sobrescreve quando o XML veio; senão preserva o que já foi lido antes
+          ...(paraGuia
+            ? { municipioIbgeDestino: paraGuia.municipioIbgeDestino, documentoDestinatario: paraGuia.documentoDestinatario }
+            : {}),
           nfNumero: numero,
           nfSerie: nf.serie != null ? String(nf.serie) : null,
           nfChave: nf.chaveAcesso || null,
