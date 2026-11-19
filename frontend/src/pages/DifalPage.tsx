@@ -640,6 +640,7 @@ function Configuracao() {
             <button onClick={() => setErro(null)} className="text-xs underline">fechar</button>
           </div>
         )}
+        <div className="overflow-x-auto">
         <table className="min-w-full text-sm">
           <thead className="bg-gray-50 text-xs uppercase text-gray-500">
             <tr>
@@ -719,6 +720,7 @@ function Configuracao() {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   )

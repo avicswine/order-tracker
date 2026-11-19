@@ -22,14 +22,17 @@ Link para abrir o PR: <https://github.com/avicswine/order-tracker/pull/new/feat-
 | Cálculo (carga/prop, redução NCM 8436, quem paga) | `backend/src/services/difal/calculo.ts` | 8 casos em `verificar.ts` passam |
 | Importação do Bling (AVIC e AGRO; EQUI fora) + leitura do XML | `importar.ts`, `xmlNota.ts` | aceita situações 5, 6 e 7 (quase tudo vem como 6) |
 | Gerador do lote GNRE, layout 2.00 | `gnre.ts` | 20 casos em `verificarGnre.ts` passam; validação formal contra o XSD pendente (sem lxml/xmllint na máquina) |
-| Guias pendentes + download do lote | `guias.ts`, rotas `GET /api/difal/guias-pendentes` e `POST /api/difal/guias/lote` | testado local (200/422/400) |
+| Guias pendentes + download do lote | `guias.ts`, rotas `GET /api/difal/guias-pendentes` e `POST /api/difal/guias/lote` | testado local (200/422/400); lote gravado em `difal_lotes_gnre` |
+| Fechamento mensal CDIFAL (ML cobrou × calculamos) | `cobrancasMl.ts`, tabela `difal_cobrancas_ml`, rotas `fechamento-mensal` e `cobrancas-ml/sincronizar` | só leitura na API de faturamento do ML; dados reais só no Railway (tokens) |
+| Cliente do Portal GNRE (ConfigUF, envio, resultado, PDF) | `portalGnre.ts` + rotas `portal/*` e `lotes/*` | 21 casos em `verificarPortalGnre.ts`; **nunca falou com o portal** (sem certificado) |
+| Aba Configuração | status do portal, alíquotas, receita GNRE por UF, vencimento | no ar local |
 | Tela | `frontend/src/pages/DifalPage.tsx` — abas "Vendas" (com bloco "Guias que nós precisamos emitir") e "O que já pagamos" | no ar local em `/difal` |
 
 ### O que falta (em ordem)
 
-1. **Código de receita GNRE por UF** — vem do webservice `GnreConfigUF`; sem ele nenhuma guia fica "pronta". Precisa do certificado e-CNPJ e da habilitação em homologação (<https://www.testegnre.pe.gov.br>) — José solicita.
-2. Cliente SOAP (`GnreLoteRecepcao` / `GnreResultadoLote`) com certificado — só depois da habilitação.
-3. Cruzar os 260 lançamentos `CDIFAL` (`cmvsync/vendas.db`, tabela `ml_cobrancas`) com as notas (`difalCobradoMl`).
+1. **Certificado A1 + habilitação em homologação** (<https://www.testegnre.pe.gov.br>) — José. Depois: variáveis `GNRE_PFX_BASE64_{AVIC,AGRO}` e `GNRE_PFX_SENHA_{AVIC,AGRO}` no Railway (`GNRE_AMBIENTE=homologacao` até validar).
+2. Na homologação: confirmar com o WSDL o nome do elemento de entrada do Body (hoje `gnreDadosMsg`) e os `versaoDados` (2.00 lote, 1.00 config/consulta); buscar as receitas por UF na aba Configuração.
+3. Cruzamento CDIFAL nota a nota é **impossível** (lançamentos sem pedido) — ficou o fechamento mensal.
 4. Abrir o PR, segunda revisão (codex não instalado), merge com "pode" do José.
 
 ### Como conferir
