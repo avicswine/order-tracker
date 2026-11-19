@@ -304,9 +304,14 @@ router.get('/lotes', async (_req: Request, res: Response) => {
         consultadoEm: true, resultadoXml: true, pdfGuias: false, xml: false,
       },
     })
+    // quais já têm PDF, sem carregar o base64 na listagem
+    const comPdf = new Set(
+      (await prisma.difalLoteGnre.findMany({ where: { pdfGuias: { not: null } }, select: { id: true } })).map((x) => x.id)
+    )
     res.json(lotes.map((l) => ({
       ...l,
       resultadoXml: undefined,
+      temPdf: comPdf.has(l.id),
       guiasResultado: l.resultadoXml ? lerResultadoLote(l.resultadoXml).guias : [],
     })))
   } catch (e) {

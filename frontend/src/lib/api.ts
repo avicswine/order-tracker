@@ -283,6 +283,62 @@ export interface DifalSincronizacaoMl {
   erro?: string
 }
 
+export interface DifalPortalStatus {
+  ambiente: 'homologacao' | 'producao'
+  host: string
+  empresas: { AVIC: boolean; AGRO: boolean }
+}
+
+export interface DifalReceitaUf {
+  codigo: string
+  descricao: string
+  courier: boolean
+  exigeDetalhamentoReceita: boolean
+  exigeProduto: boolean
+  exigePeriodoReferencia: boolean
+  exigeDocumentoOrigem: boolean
+  exigeDataVencimento: boolean
+  exigeContribuinteDestinatario: string
+  exigeCamposAdicionais: boolean
+  tiposDocumentosOrigem: { codigo: string; descricao: string }[]
+  camposAdicionais: { codigo: string; titulo: string; obrigatorio: boolean; tipo: string }[]
+}
+
+export interface DifalConfigUf {
+  uf: string
+  situacao: { codigo: string; descricao: string }
+  receitas: DifalReceitaUf[]
+  limites: { guiasPorLote?: string; itensPorGuia?: string; itensPorLote?: string }
+}
+
+export interface DifalGuiaResultado {
+  situacaoGuia: string
+  situacaoTexto: string
+  identificadorGuia?: string
+  ufFavorecida?: string
+  valorGNRE?: string
+  linhaDigitavel?: string
+  qrcodePayload?: string
+  dataLimitePagamento?: string
+  motivos: { codigo: string; descricao: string; campo?: string }[]
+}
+
+export interface DifalLote {
+  id: string
+  empresa: string
+  ambiente: string
+  guias: number
+  total: number
+  criadoEm: string
+  enviadoEm: string | null
+  numeroRecibo: string | null
+  situacaoCodigo: string | null
+  situacaoDescricao: string | null
+  consultadoEm: string | null
+  temPdf: boolean
+  guiasResultado: DifalGuiaResultado[]
+}
+
 export const difalApi = {
   listar: (params?: {
     responsavel?: string
@@ -302,6 +358,21 @@ export const difalApi = {
   historico: () => api.get<DifalHistorico>('/difal/historico').then((r) => r.data),
   importar: (dias?: number) =>
     api.post<{ ok: boolean; resultado: unknown }>('/difal/importar', { dias }).then((r) => r.data),
+  atualizarAliquota: (uf: string, dados: { codigoReceitaGnre?: string; vencimentoRegra?: string }) =>
+    api.put<DifalAliquota>(`/difal/aliquotas/${uf}`, dados).then((r) => r.data),
+  portalStatus: () => api.get<DifalPortalStatus>('/difal/portal/status').then((r) => r.data),
+  portalConfigUf: (uf: string, empresa: string) =>
+    api.get<DifalConfigUf>(`/difal/portal/config/${uf}`, { params: { empresa } }).then((r) => r.data),
+  lotes: () => api.get<DifalLote[]>('/difal/lotes').then((r) => r.data),
+  enviarLote: (id: string) =>
+    api.post<{ numeroRecibo: string | null; situacaoCodigo: string; situacaoDescricao: string }>(`/difal/lotes/${id}/enviar`).then((r) => r.data),
+  consultarLote: (id: string) =>
+    api.post<{ situacao: { codigo: string; descricao: string }; guias: DifalGuiaResultado[]; temPdf: boolean }>(`/difal/lotes/${id}/consultar`).then((r) => r.data),
+  // downloads passam pelo axios para levar o token de login
+  baixarXmlLote: (id: string) =>
+    api.get<Blob>(`/difal/lotes/${id}/xml`, { responseType: 'blob' }).then((r) => ({ arquivo: r.data, nome: `gnre-lote-${id}.xml` })),
+  baixarPdfLote: (id: string) =>
+    api.get<Blob>(`/difal/lotes/${id}/pdf`, { responseType: 'blob' }).then((r) => ({ arquivo: r.data, nome: `gnre-guias-${id}.pdf` })),
   fechamentoMensal: () => api.get<DifalFechamentoMes[]>('/difal/fechamento-mensal').then((r) => r.data),
   sincronizarCobrancasMl: () =>
     api.post<DifalSincronizacaoMl[]>('/difal/cobrancas-ml/sincronizar', { meses: 2 }).then((r) => r.data),

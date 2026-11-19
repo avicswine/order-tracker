@@ -1,7 +1,10 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { difalApi } from '../lib/api'
-import type { DifalNota, DifalResponsavel, DifalHistorico, DifalGuiaPendente, DifalFechamentoMes } from '../lib/api'
+import type {
+  DifalNota, DifalResponsavel, DifalHistorico, DifalGuiaPendente, DifalFechamentoMes,
+  DifalLote, DifalAliquota, DifalReceitaUf,
+} from '../lib/api'
 
 function brl(v: number | null | undefined) {
   return (v ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -153,6 +156,8 @@ function Vendas() {
 
       <GuiasPendentes />
 
+      <LotesGnre />
+
       <FechamentoMensal />
 
       <div className="flex flex-wrap items-center gap-2">
@@ -250,6 +255,16 @@ function Vendas() {
 }
 
 // ------------------------------------------------------------- Guias a emitir (GNRE)
+// entrega um arquivo vindo da API como download no navegador
+function baixarArquivo(arquivo: Blob, nome: string) {
+  const url = URL.createObjectURL(arquivo)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = nome
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 // Como pedimos a resposta como arquivo (blob), o erro em JSON do backend chega como texto.
 async function erroDoLote(e: unknown): Promise<string> {
   const resp = (e as { response?: { data?: Blob } }).response
@@ -279,13 +294,7 @@ function GuiasPendentes() {
   const gerar = useMutation({
     mutationFn: () => difalApi.gerarLote([...escolhidas]),
     onSuccess: (lote) => {
-      // entrega o XML como download no navegador
-      const url = URL.createObjectURL(lote.arquivo)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = lote.nome
-      a.click()
-      URL.revokeObjectURL(url)
+      baixarArquivo(lote.arquivo, lote.nome)
       setAviso(`Lote ${lote.loteId} gerado: ${lote.guias} guia(s), ${brl(lote.total)}. O arquivo foi baixado.`)
       setEscolhidas(new Set())
       qc.invalidateQueries({ queryKey: ['difal-guias-pendentes'] })
@@ -464,6 +473,257 @@ function FechamentoMensal() {
   )
 }
 
+// --------------------------------------------------------------- Lotes GNRE gerados
+function mensagemErro(e: unknown): string {
+  const resp = (e as { response?: { data?: { erro?: string } } }).response
+  return resp?.data?.erro ?? (e as Error).message
+}
+
+function LotesGnre() {
+  const qc = useQueryClient()
+  const [erro, setErro] = useState<string | null>(null)
+  const { data: lotes = [] } = useQuery({ queryKey: ['difal-lotes'], queryFn: difalApi.lotes })
+  const { data: portal } = useQuery({ queryKey: ['difal-portal-status'], queryFn: difalApi.portalStatus })
+  const recarregar = () => qc.invalidateQueries({ queryKey: ['difal-lotes'] })
+
+  const enviar = useMutation({ mutationFn: difalApi.enviarLote, onSuccess: recarregar, onError: (e) => setErro(mensagemErro(e)) })
+  const consultar = useMutation({ mutationFn: difalApi.consultarLote, onSuccess: recarregar, onError: (e) => setErro(mensagemErro(e)) })
+  const xml = useMutation({ mutationFn: difalApi.baixarXmlLote, onSuccess: (r) => baixarArquivo(r.arquivo, r.nome) })
+  const pdf = useMutation({ mutationFn: difalApi.baixarPdfLote, onSuccess: (r) => baixarArquivo(r.arquivo, r.nome), onError: (e) => setErro(mensagemErro(e)) })
+
+  if (lotes.length === 0) return null
+  const ocupado = enviar.isPending || consultar.isPending
+
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 px-4 py-3">
+        <p className="font-medium text-gray-900">Lotes GNRE gerados</p>
+        {portal && (
+          <span className="text-xs text-gray-500">
+            Portal: <b>{portal.ambiente === 'producao' ? 'PRODUÇÃO' : 'homologação (testes)'}</b> · certificado AVIC{' '}
+            {portal.empresas.AVIC ? 'ok' : 'não configurado'} · AGRO {portal.empresas.AGRO ? 'ok' : 'não configurado'}
+          </span>
+        )}
+      </div>
+      {erro && (
+        <div className="flex items-center justify-between border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800">
+          <span>{erro}</span>
+          <button onClick={() => setErro(null)} className="text-xs underline">fechar</button>
+        </div>
+      )}
+      <div className="divide-y divide-gray-100">
+        {lotes.map((l: DifalLote) => {
+          const podeEnviar = !l.numeroRecibo && !!portal?.empresas[l.empresa as 'AVIC' | 'AGRO']
+          return (
+            <div key={l.id} className="px-4 py-3 text-sm">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                <span className="font-medium text-gray-900">{l.id}</span>
+                <span className="text-gray-600">{l.guias} guia(s) · {brl(l.total)} · gerado em {dataBr(l.criadoEm)}</span>
+                {l.ambiente === 'homologacao' && (
+                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">teste</span>
+                )}
+                {l.numeroRecibo ? (
+                  <span className="text-gray-600">recibo {l.numeroRecibo} · {l.situacaoDescricao ?? 'aguardando consulta'}</span>
+                ) : l.situacaoDescricao ? (
+                  <span className="text-amber-700">{l.situacaoDescricao}</span>
+                ) : (
+                  <span className="text-gray-500">não enviado ao portal</span>
+                )}
+                <span className="ml-auto flex flex-wrap gap-2">
+                  <button onClick={() => xml.mutate(l.id)} className="rounded border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50">XML</button>
+                  {podeEnviar && (
+                    <button
+                      onClick={() => { setErro(null); enviar.mutate(l.id) }}
+                      disabled={ocupado}
+                      className="rounded bg-gray-900 px-2 py-1 text-xs text-white hover:bg-gray-800 disabled:opacity-50"
+                    >
+                      {enviar.isPending ? 'Enviando…' : 'Enviar ao portal'}
+                    </button>
+                  )}
+                  {l.numeroRecibo && (
+                    <button
+                      onClick={() => { setErro(null); consultar.mutate(l.id) }}
+                      disabled={ocupado}
+                      className="rounded border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      {consultar.isPending ? 'Consultando…' : 'Consultar resultado'}
+                    </button>
+                  )}
+                  {l.temPdf && (
+                    <button onClick={() => pdf.mutate(l.id)} className="rounded border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs text-emerald-800 hover:bg-emerald-100">
+                      PDF das guias
+                    </button>
+                  )}
+                </span>
+              </div>
+              {l.guiasResultado.length > 0 && (
+                <ul className="mt-2 space-y-1 text-xs text-gray-600">
+                  {l.guiasResultado.map((g, i) => (
+                    <li key={i}>
+                      <span className={g.situacaoGuia === '0' ? 'text-emerald-700' : 'text-red-700'}>{g.situacaoTexto}</span>
+                      {' · '}{g.identificadorGuia ?? g.ufFavorecida}
+                      {g.valorGNRE && <> · R$ {g.valorGNRE}</>}
+                      {g.dataLimitePagamento && <> · pagar até {g.dataLimitePagamento}</>}
+                      {g.linhaDigitavel && <> · linha digitável <code className="select-all">{g.linhaDigitavel}</code></>}
+                      {g.motivos.map((m) => <span key={m.codigo} className="text-red-700"> · {m.codigo} {m.descricao}{m.campo ? ` (${m.campo})` : ''}</span>)}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ------------------------------------------------------- Configuração (alíquotas + receita GNRE)
+function Configuracao() {
+  const qc = useQueryClient()
+  const [empresa, setEmpresa] = useState<'AVIC' | 'AGRO'>('AVIC')
+  const [ufAberta, setUfAberta] = useState<string | null>(null)
+  const [erro, setErro] = useState<string | null>(null)
+  const { data: aliquotas = [] } = useQuery({ queryKey: ['difal-aliquotas'], queryFn: difalApi.aliquotas })
+  const { data: portal } = useQuery({ queryKey: ['difal-portal-status'], queryFn: difalApi.portalStatus })
+  const recarregar = () => qc.invalidateQueries({ queryKey: ['difal-aliquotas'] })
+
+  const buscar = useMutation({
+    mutationFn: (uf: string) => difalApi.portalConfigUf(uf, empresa),
+    onError: (e) => setErro(mensagemErro(e)),
+  })
+  const salvar = useMutation({
+    mutationFn: ({ uf, dados }: { uf: string; dados: { codigoReceitaGnre?: string; vencimentoRegra?: string } }) =>
+      difalApi.atualizarAliquota(uf, dados),
+    onSuccess: () => { recarregar(); setUfAberta(null); buscar.reset() },
+    onError: (e) => setErro(mensagemErro(e)),
+  })
+
+  const certificadoOk = !!portal?.empresas[empresa]
+  const semReceita = aliquotas.filter((a) => !a.codigoReceitaGnre).length
+
+  return (
+    <div className="space-y-5">
+      <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm">
+        <p className="font-medium text-gray-900">Portal GNRE</p>
+        {portal ? (
+          <ul className="mt-1 space-y-0.5 text-gray-600">
+            <li>Ambiente: <b>{portal.ambiente === 'producao' ? 'PRODUÇÃO' : 'homologação (testes)'}</b> — {portal.host}</li>
+            <li>Certificado AVIC: {portal.empresas.AVIC ? 'configurado' : 'não configurado (GNRE_PFX_BASE64_AVIC / GNRE_PFX_SENHA_AVIC)'}</li>
+            <li>Certificado AGRO: {portal.empresas.AGRO ? 'configurado' : 'não configurado (GNRE_PFX_BASE64_AGRO / GNRE_PFX_SENHA_AGRO)'}</li>
+          </ul>
+        ) : (
+          <p className="text-gray-500">carregando…</p>
+        )}
+      </div>
+
+      <div className="rounded-lg border border-gray-200 bg-white">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-4 py-3">
+          <div>
+            <p className="font-medium text-gray-900">Código de receita GNRE por estado</p>
+            <p className="text-xs text-gray-500">
+              Cada UF publica o seu código no portal (serviço GnreConfigUF). Sem ele a guia não fica &ldquo;pronta&rdquo;.
+              {semReceita > 0 && <> <b>{semReceita}</b> estado(s) ainda sem código.</>}
+            </p>
+          </div>
+          <label className="text-sm text-gray-600">
+            Consultar com o certificado da{' '}
+            <select value={empresa} onChange={(e) => setEmpresa(e.target.value as 'AVIC' | 'AGRO')} className="rounded border border-gray-300 px-2 py-1 text-sm">
+              <option>AVIC</option>
+              <option>AGRO</option>
+            </select>
+          </label>
+        </div>
+        {erro && (
+          <div className="flex items-center justify-between border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800">
+            <span>{erro}</span>
+            <button onClick={() => setErro(null)} className="text-xs underline">fechar</button>
+          </div>
+        )}
+        <table className="min-w-full text-sm">
+          <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+            <tr>
+              <th className="px-4 py-2 text-left">UF</th>
+              <th className="px-2 py-2 text-right">Interna</th>
+              <th className="px-2 py-2 text-right">Interest.</th>
+              <th className="px-2 py-2 text-left">Método</th>
+              <th className="px-2 py-2 text-left">Receita GNRE</th>
+              <th className="px-2 py-2 text-left">Vencimento</th>
+              <th className="px-4 py-2"></th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {aliquotas.map((a: DifalAliquota) => (
+              <Fragment key={a.uf}>
+                <tr className={a.codigoReceitaGnre ? '' : 'bg-amber-50/40'}>
+                  <td className="px-4 py-2 font-medium text-gray-900" title={a.nome}>{a.uf}</td>
+                  <td className="px-2 py-2 text-right tabular-nums text-gray-600">{pct(a.aliquotaInterna)}</td>
+                  <td className="px-2 py-2 text-right tabular-nums text-gray-600">{pct(a.interestadual)}</td>
+                  <td className="px-2 py-2 text-gray-600">{a.metodo}</td>
+                  <td className="px-2 py-2 tabular-nums">{a.codigoReceitaGnre ?? <span className="text-amber-700">falta</span>}</td>
+                  <td className="px-2 py-2">
+                    <select
+                      value={a.vencimentoRegra}
+                      onChange={(e) => salvar.mutate({ uf: a.uf, dados: { vencimentoRegra: e.target.value } })}
+                      className="rounded border border-gray-300 px-2 py-1 text-xs"
+                    >
+                      <option value="saida">na saída (por operação)</option>
+                      <option value="dia15">dia 15 do mês seguinte</option>
+                    </select>
+                  </td>
+                  <td className="px-4 py-2 text-right">
+                    <button
+                      onClick={() => { setErro(null); setUfAberta(a.uf); buscar.mutate(a.uf) }}
+                      disabled={!certificadoOk || buscar.isPending}
+                      title={certificadoOk ? 'Consulta o portal GNRE' : `Certificado da ${empresa} não configurado`}
+                      className="rounded border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-40"
+                    >
+                      {buscar.isPending && ufAberta === a.uf ? 'Consultando…' : 'Buscar receitas no portal'}
+                    </button>
+                  </td>
+                </tr>
+                {ufAberta === a.uf && buscar.data && (
+                  <tr>
+                    <td colSpan={7} className="bg-gray-50 px-4 py-3">
+                      <p className="mb-2 text-xs text-gray-600">
+                        {buscar.data.receitas.length} receita(s) em {a.uf} ({buscar.data.situacao.descricao}). Escolha a de ICMS para consumidor final não contribuinte:
+                      </p>
+                      <ul className="space-y-1">
+                        {buscar.data.receitas.map((r: DifalReceitaUf) => (
+                          <li key={`${r.codigo}-${r.courier}`} className="flex flex-wrap items-center gap-2 text-xs">
+                            <button
+                              onClick={() => salvar.mutate({ uf: a.uf, dados: { codigoReceitaGnre: r.codigo } })}
+                              className="rounded bg-gray-900 px-2 py-0.5 text-white hover:bg-gray-800"
+                            >
+                              usar {r.codigo}
+                            </button>
+                            <span className="text-gray-800">{r.descricao}</span>
+                            {r.courier && <span className="text-gray-500">(courier)</span>}
+                            <span className="text-gray-500">
+                              {[
+                                r.exigeDocumentoOrigem && 'exige nota de origem',
+                                r.exigeDetalhamentoReceita && 'exige detalhamento',
+                                r.exigeProduto && 'exige produto',
+                                r.exigePeriodoReferencia && 'exige período',
+                                r.exigeCamposAdicionais && `campos extras: ${r.camposAdicionais.map((c) => c.titulo).join(', ')}`,
+                              ].filter(Boolean).join(' · ')}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                      <button onClick={() => { setUfAberta(null); buscar.reset() }} className="mt-2 text-xs text-gray-500 underline">fechar</button>
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 // ---------------------------------------------------------------- Histórico apurado
 function Historico() {
   const [verNotas, setVerNotas] = useState(false)
@@ -631,7 +891,7 @@ function Historico() {
 }
 
 export function DifalPage() {
-  const [aba, setAba] = useState<'vendas' | 'historico'>('vendas')
+  const [aba, setAba] = useState<'vendas' | 'historico' | 'config'>('vendas')
 
   return (
     <div className="space-y-5">
@@ -650,9 +910,12 @@ export function DifalPage() {
         <Aba ativa={aba === 'historico'} onClick={() => setAba('historico')}>
           O que já pagamos
         </Aba>
+        <Aba ativa={aba === 'config'} onClick={() => setAba('config')}>
+          Configuração
+        </Aba>
       </div>
 
-      {aba === 'vendas' ? <Vendas /> : <Historico />}
+      {aba === 'vendas' ? <Vendas /> : aba === 'config' ? <Configuracao /> : <Historico />}
     </div>
   )
 }
