@@ -477,6 +477,16 @@ model DifalNota {
   divergencia     Float?           // diferença entre o calculado e o cobrado/pago
   observacao      String?
 
+  // O que a guia (GNRE) exige do destinatário, lido do XML da nota:
+  // código IBGE do município com 5 dígitos (sem a UF) e o CPF/CNPJ.
+  // O documento fica aqui só para montar a guia — nunca vai para tela nem para log.
+  municipioIbgeDestino  String?
+  documentoDestinatario String?
+
+  // rastro da guia gerada a partir desta nota
+  guiaGeradaEm    DateTime?
+  guiaLoteId      String?   // identificador do lote GNRE em que a guia saiu
+
   criadoEm        DateTime @default(now())
   atualizadoEm    DateTime @updatedAt
 
@@ -507,9 +517,34 @@ model DifalAliquota {
   metodoObservado String?  // método que as guias mostram (pode diferir do configurado)
   evidenciaEm     DateTime?
 
+  // Parâmetros da GNRE desta UF. O código da receita não é fixo em lei: cada
+  // estado publica o seu no serviço GnreConfigUF, e é de lá que deve vir.
+  codigoReceitaGnre  String?
+  tipoDocOrigemGnre  String  @default("10")     // 10 = NF-e, conforme o manual
+  // quando a guia vence: "saida" = antes de a mercadoria sair (por operação);
+  // "dia15" = até o dia 15 do mês seguinte (quando a UF admite apuração)
+  vencimentoRegra    String  @default("saida")
+
   atualizadoEm    DateTime @updatedAt
 
   @@map("difal_aliquotas")
+}
+
+// Dados do emitente que entram na GNRE, por empresa. Vêm do bloco <emit> do XML
+// das nossas próprias notas, então não precisam de cadastro à mão.
+model DifalEmitente {
+  empresa        String   @id    // AVIC | AGRO
+  cnpj           String
+  inscricaoEstadual String?
+  razaoSocial    String
+  endereco       String
+  municipioIbge  String          // 5 dígitos, sem a UF
+  uf             String
+  cep            String
+  telefone       String?
+  atualizadoEm   DateTime @updatedAt
+
+  @@map("difal_emitentes")
 }
 
 // Quem é o responsável pelo recolhimento do DIFAL daquela nota.

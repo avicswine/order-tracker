@@ -13,6 +13,45 @@ import { blingGet, listarEmpresasBling } from '../../routes/bling'
 import { calcularDifal, type DadosNota, type RegraUf } from './calculo'
 import { lerDifalDoXml, conferirComCadastro } from './xmlNota'
 
+/** Pega o texto de uma tag dentro de um trecho do XML. */
+function tagXml(trecho: string, tag: string): string | null {
+  const m = trecho.match(new RegExp(`<${tag}>([^<]*)</${tag}>`))
+  return m ? m[1] : null
+}
+
+/** O município vem do IBGE com 7 dígitos; a GNRE quer os 5 sem a UF. */
+function municipioGnre(cMun: string | null): string | null {
+  const d = (cMun ?? '').replace(/\D/g, '')
+  return d.length === 7 ? d.slice(2) : null
+}
+
+/** Dados do destinatário e do emitente que a GNRE exige, lidos do XML da nota. */
+function dadosGnreDoXml(xml: string) {
+  const dest = xml.match(/<dest>([\s\S]*?)<\/dest>/)?.[1] ?? ''
+  const enderDest = dest.match(/<enderDest>([\s\S]*?)<\/enderDest>/)?.[1] ?? ''
+  const emit = xml.match(/<emit>([\s\S]*?)<\/emit>/)?.[1] ?? ''
+  const enderEmit = emit.match(/<enderEmit>([\s\S]*?)<\/enderEmit>/)?.[1] ?? ''
+  const logradouro = [tagXml(enderEmit, 'xLgr'), tagXml(enderEmit, 'nro'), tagXml(enderEmit, 'xCpl')]
+    .filter(Boolean)
+    .join(', ')
+  return {
+    municipioIbgeDestino: municipioGnre(tagXml(enderDest, 'cMun')),
+    documentoDestinatario: tagXml(dest, 'CNPJ') ?? tagXml(dest, 'CPF'),
+    emitente: emit
+      ? {
+          cnpj: tagXml(emit, 'CNPJ') ?? '',
+          inscricaoEstadual: tagXml(emit, 'IE'),
+          razaoSocial: tagXml(emit, 'xNome') ?? '',
+          endereco: logradouro,
+          municipioIbge: municipioGnre(tagXml(enderEmit, 'cMun')) ?? '',
+          uf: tagXml(enderEmit, 'UF') ?? '',
+          cep: tagXml(enderEmit, 'CEP') ?? '',
+          telefone: tagXml(enderEmit, 'fone'),
+        }
+      : null,
+  }
+}
+
 /** NF como o Bling devolve no detalhe. Só os campos que usamos. */
 interface NfeBlingDetalhe {
   id?: number | string
@@ -101,6 +140,7 @@ export async function importarNotas(
     .filter((e) => !opcoes.empresa || e.key === opcoes.empresa)
 
   const saida: ResultadoImportacao[] = []
+  const emitenteGravado = new Set<string>()
 
   for (const empresa of empresas) {
     const res: ResultadoImportacao = {
@@ -196,12 +236,15 @@ export async function importarNotas(
         // O XML diz qual alíquota e qual redução o emissor usou de fato. Serve para
         // conferir a nossa tabela: divergência aqui costuma ser tabela desatualizada.
         let avisoXml: string | null = null
+        let paraGuia: ReturnType<typeof dadosGnreDoXml> | null = null
         if (nf.xml) {
           try {
             // sem timeout, um download travado para a importação inteira
             const resp = await fetch(nf.xml, { signal: AbortSignal.timeout(15000) })
             if (resp.ok) {
-              const doXml = lerDifalDoXml(await resp.text())
+              const textoXml = await resp.text()
+              paraGuia = dadosGnreDoXml(textoXml)
+              const doXml = lerDifalDoXml(textoXml)
               const regra = porUf.get(uf)
               if (regra) {
                 const { avisos } = conferirComCadastro(doXml, regra)
@@ -220,8 +263,24 @@ export async function importarNotas(
         }
         const numero = String(bruto)
 
+        // nossos dados como a GNRE pede, vindos do XML da própria nota
+        if (paraGuia?.emitente && paraGuia.emitente.cnpj && !emitenteGravado.has(empresa.code)) {
+          try {
+            await prisma.difalEmitente.upsert({
+              where: { empresa: empresa.code },
+              create: { empresa: empresa.code, ...paraGuia.emitente },
+              update: paraGuia.emitente,
+            })
+            emitenteGravado.add(empresa.code)
+          } catch (e) {
+            res.erros.push(`emitente ${empresa.code}: ${(e as Error).message}`)
+          }
+        }
+
         const registro = {
           empresa: empresa.code,
+          municipioIbgeDestino: paraGuia?.municipioIbgeDestino ?? null,
+          documentoDestinatario: paraGuia?.documentoDestinatario ?? null,
           nfNumero: numero,
           nfSerie: nf.serie != null ? String(nf.serie) : null,
           nfChave: nf.chaveAcesso || null,
