@@ -211,14 +211,19 @@ function Numero({
   )
 }
 
-type NomeAba = 'vendas' | 'historico' | 'config'
+type NomeAba = 'vendas' | 'lotes' | 'historico' | 'fechamento' | 'config'
 const ABAS: { id: NomeAba; texto: string }[] = [
   { id: 'vendas', texto: 'Vendas' },
+  { id: 'lotes', texto: 'Lotes GNRE' },
   { id: 'historico', texto: 'O que já pagamos' },
+  { id: 'fechamento', texto: 'Fechamento ML' },
 ]
 
 // seletor de abas com um fundo escuro que desliza até a aba escolhida
 function Abas({ aba, onTrocar }: { aba: NomeAba; onTrocar: (a: NomeAba) => void }) {
+  // lotes esperando ação: ainda não enviados ao portal, ou enviados sem o resultado consultado
+  const { data: lotes = [] } = useQuery({ queryKey: ['difal-lotes'], queryFn: difalApi.lotes })
+  const lotesPendentes = lotes.filter((l) => !l.numeroRecibo || l.guiasResultado.length === 0).length
   const botoes = useRef<Partial<Record<NomeAba, HTMLButtonElement | null>>>({})
   const [indicador, setIndicador] = useState({ esquerda: 0, largura: 0 })
   useLayoutEffect(() => {
@@ -242,6 +247,9 @@ function Abas({ aba, onTrocar }: { aba: NomeAba; onTrocar: (a: NomeAba) => void 
           }`}
         >
           {a.texto}
+          {a.id === 'lotes' && lotesPendentes > 0 && (
+            <span className="ml-2 rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-semibold text-white" title="lotes esperando envio ou consulta">{lotesPendentes}</span>
+          )}
         </button>
       ))}
     </div>
@@ -335,9 +343,7 @@ function Vendas() {
 
       <GuiasPendentes />
 
-      <LotesGnre />
 
-      <FechamentoMensal />
 
     </div>
   )
@@ -413,7 +419,7 @@ function GuiasPendentes() {
     mutationFn: () => difalApi.gerarLote([...escolhidas]),
     onSuccess: (lote) => {
       baixarArquivo(lote.arquivo, lote.nome)
-      setAviso(`Lote ${lote.loteId} gerado: ${lote.guias} guia(s), ${brl(lote.total)}. O arquivo foi baixado.`)
+      setAviso(`Lote ${lote.loteId} gerado: ${lote.guias} guia(s), ${brl(lote.total)}. Envie ao portal na aba "Lotes GNRE".`)
       setEscolhidas(new Set())
       qc.invalidateQueries({ queryKey: ['difal-guias-pendentes'] })
       qc.invalidateQueries({ queryKey: ['difal-resumo'] })
@@ -968,7 +974,13 @@ function LotesGnre() {
   const xml = useMutation({ mutationFn: difalApi.baixarXmlLote, onSuccess: (r) => baixarArquivo(r.arquivo, r.nome) })
   const pdf = useMutation({ mutationFn: difalApi.baixarPdfLote, onSuccess: (r) => baixarArquivo(r.arquivo, r.nome), onError: (e) => setErro(mensagemErro(e)) })
 
-  if (lotes.length === 0) return null
+  if (lotes.length === 0) {
+    return (
+      <div className="rounded-2xl border border-violet-200 bg-white p-6 text-center text-sm text-slate-500">
+        Nenhum lote gerado ainda. Marque as notas em <b>Vendas</b> e clique em <b>Baixar lote GNRE</b>; o lote aparece aqui para enviar ao portal.
+      </div>
+    )
+  }
   const ocupado = enviar.isPending || consultar.isPending || desfazer.isPending
 
   return (
@@ -1588,7 +1600,7 @@ export function DifalPage() {
 
       {/* a chave muda a cada aba: a tela nova entra com a animação de entrada */}
       <div key={aba} className="difal-entrar">
-        {aba === 'vendas' ? <Vendas /> : aba === 'config' ? <Configuracao /> : <Historico />}
+        {aba === 'vendas' ? <Vendas /> : aba === 'lotes' ? <LotesGnre /> : aba === 'fechamento' ? <FechamentoMensal /> : aba === 'config' ? <Configuracao /> : <Historico />}
       </div>
     </div>
   )
