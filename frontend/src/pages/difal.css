@@ -34,3 +34,85 @@
   .difal-cartao, .difal-btn, .difal-indicador, .difal-barra { transition: none; }
   .difal-cartao:hover, .difal-btn:not(:disabled):hover, .difal-btn:not(:disabled):active { transform: none; }
 }
+
+/* ===================== Visual futurista (pedido do José, 20/11/2026) ===================== */
+
+/* fundo da página: leve brilho azul-violeta */
+.difal-fundo {
+  background:
+    radial-gradient(900px 400px at 0% 0%, rgba(99, 102, 241, 0.08), transparent 60%),
+    radial-gradient(700px 360px at 100% 0%, rgba(14, 165, 233, 0.07), transparent 60%);
+}
+
+/* faixa do topo: degradê escuro com grade e brilho */
+.difal-hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: 1.25rem;
+  color: #fff;
+  background: linear-gradient(120deg, #0f172a 0%, #1e1b4b 45%, #312e81 75%, #0e7490 120%);
+  box-shadow: 0 20px 40px -24px rgba(49, 46, 129, 0.7);
+}
+.difal-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+  background-size: 28px 28px;
+  mask-image: linear-gradient(90deg, transparent, #000 30%, #000 70%, transparent);
+}
+.difal-hero::after {
+  content: '';
+  position: absolute;
+  width: 320px;
+  height: 320px;
+  right: -80px;
+  top: -140px;
+  border-radius: 9999px;
+  background: radial-gradient(circle, rgba(56, 189, 248, 0.45), transparent 70%);
+  filter: blur(10px);
+}
+.difal-hero > * { position: relative; z-index: 1; }
+
+/* blocos: barra lateral e cabeçalho tingido por cor */
+.difal-secao { border-left-width: 4px; }
+.difal-secao-azul { border-left-color: #6366f1; }
+.difal-secao-rosa { border-left-color: #f43f5e; }
+.difal-secao-violeta { border-left-color: #8b5cf6; }
+.difal-secao-ciano { border-left-color: #06b6d4; }
+.difal-cab-azul { background: linear-gradient(90deg, rgba(99, 102, 241, 0.10), rgba(99, 102, 241, 0) 70%); }
+.difal-cab-rosa { background: linear-gradient(90deg, rgba(244, 63, 94, 0.10), rgba(244, 63, 94, 0) 70%); }
+.difal-cab-violeta { background: linear-gradient(90deg, rgba(139, 92, 246, 0.10), rgba(139, 92, 246, 0) 70%); }
+.difal-cab-ciano { background: linear-gradient(90deg, rgba(6, 182, 212, 0.10), rgba(6, 182, 212, 0) 70%); }
+
+/* cartões do topo com brilho */
+.difal-kpi { position: relative; overflow: hidden; }
+.difal-kpi::after {
+  content: '';
+  position: absolute;
+  inset: auto -40px -60px auto;
+  width: 160px;
+  height: 160px;
+  border-radius: 9999px;
+  opacity: 0.35;
+  filter: blur(18px);
+  transition: opacity 0.25s ease;
+}
+.difal-kpi:hover::after { opacity: 0.6; }
+.difal-kpi-alerta { background: linear-gradient(140deg, #fff 40%, #fffbeb); }
+.difal-kpi-alerta::after { background: #f59e0b; }
+.difal-kpi-ok { background: linear-gradient(140deg, #fff 40%, #ecfdf5); }
+.difal-kpi-ok::after { background: #10b981; }
+.difal-kpi-normal { background: linear-gradient(140deg, #fff 40%, #eef2ff); }
+.difal-kpi-normal::after { background: #6366f1; }
+
+/* linhas das tabelas: alternadas e destaque ao passar o mouse */
+.difal-linhas > tr:nth-child(even) { background-color: rgba(248, 250, 252, 0.7); }
+.difal-linhas > tr { transition: background-color 0.15s ease, box-shadow 0.15s ease; }
+.difal-linhas > tr:hover { background-color: rgba(238, 242, 255, 0.9); box-shadow: inset 3px 0 0 #6366f1; }
+
+@media (prefers-reduced-motion: reduce) {
+  .difal-kpi::after, .difal-linhas > tr { transition: none; }
+}

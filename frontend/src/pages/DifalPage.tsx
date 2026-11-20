@@ -195,11 +195,11 @@ function Numero({
   tom?: 'normal' | 'alerta' | 'ok'
   icone?: keyof typeof ICONES
 }) {
-  const borda = tom === 'alerta' ? 'border-amber-200' : tom === 'ok' ? 'border-emerald-200' : 'border-slate-200'
+  const borda = tom === 'alerta' ? 'border-amber-200 difal-kpi-alerta' : tom === 'ok' ? 'border-emerald-200 difal-kpi-ok' : 'border-indigo-100 difal-kpi-normal'
   const cor = tom === 'alerta' ? 'text-amber-700' : tom === 'ok' ? 'text-emerald-700' : 'text-slate-900'
   const fundoIcone = tom === 'alerta' ? 'bg-amber-50 text-amber-600' : tom === 'ok' ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue-600'
   return (
-    <div className={`difal-cartao rounded-2xl border bg-white p-5 ${borda}`}>
+    <div className={`difal-cartao difal-kpi rounded-2xl border p-5 ${borda}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="text-sm text-slate-500">{titulo}</div>
         {icone && <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${fundoIcone}`}><Icone nome={icone} /></span>}
@@ -226,9 +226,9 @@ function Abas({ aba, onTrocar }: { aba: NomeAba; onTrocar: (a: NomeAba) => void 
     if (b) setIndicador({ esquerda: b.offsetLeft, largura: b.offsetWidth })
   }, [aba])
   return (
-    <div className="relative inline-flex rounded-xl bg-white p-1 shadow-sm ring-1 ring-slate-200">
+    <div className="relative inline-flex rounded-xl bg-white/80 p-1 shadow-sm ring-1 ring-indigo-100 backdrop-blur">
       <span
-        className="difal-indicador absolute bottom-1 top-1 left-0 rounded-lg bg-slate-900"
+        className="difal-indicador absolute bottom-1 top-1 left-0 rounded-lg bg-gradient-to-r from-indigo-600 to-sky-500 shadow-md shadow-indigo-500/30"
         style={{ width: indicador.largura, transform: `translateX(${indicador.esquerda}px)` }}
       />
       {ABAS.map((a) => (
@@ -291,7 +291,7 @@ function Vendas() {
         <button
           onClick={() => importar.mutate()}
           disabled={importando}
-          className="difal-btn inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+          className="difal-btn inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-sky-500 px-4 py-2.5 text-sm font-medium text-white shadow-md shadow-indigo-500/30 hover:from-indigo-500 hover:to-sky-400 disabled:opacity-60"
         >
           <Icone nome="atualizar" className={`h-4 w-4 ${importando ? 'animate-spin' : ''}`} />
           {importando ? 'Buscando notas… (pode levar alguns minutos)' : 'Atualizar do Bling'}
@@ -458,10 +458,10 @@ function GuiasPendentes() {
         Nenhuma guia no prazo para emitir agora.
       </div>
     ) : (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+    <div className="difal-secao difal-secao-azul overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="difal-cab-azul flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
         <div>
-          <p className="font-semibold text-slate-900">Guias para emitir agora (no prazo)</p>
+          <p className="text-base font-semibold text-slate-900">Guias para emitir agora (no prazo)</p>
           <p className="text-xs text-slate-500">
             {noPrazo.length} nota(s) no prazo · {prontas.length} prontas para a guia (GNRE). Um lote por empresa, até {LIMITE_GUIAS_LOTE} guias.
             Vendas do Mercado Livre: depois de pagar, anexe o comprovante na venda do ML e clique em "Comprovante enviado".
@@ -480,7 +480,7 @@ function GuiasPendentes() {
         <button
           onClick={() => { setAviso(null); setErroTexto(null); gerar.mutate() }}
           disabled={escolhidas.size === 0 || gerar.isPending}
-          className="difal-btn rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-40"
+          className="difal-btn rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-4 py-2 text-sm font-medium text-white shadow-md shadow-indigo-500/30 hover:from-indigo-500 hover:to-violet-500 disabled:opacity-40"
         >
           {gerar.isPending ? 'Montando lote…' : `Baixar lote GNRE (${escolhidas.size})`}
         </button>
@@ -493,14 +493,14 @@ function GuiasPendentes() {
         </div>
       )}
       <table className="min-w-full text-sm">
-        <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+        <thead className="bg-gradient-to-r from-indigo-50 to-sky-50 text-left text-xs uppercase tracking-wide text-indigo-900/60">
           <tr><th className="w-10 px-5 py-2"></th><th className="px-2 py-2">Nota / cliente</th><th className="px-2 py-2">Emissão</th><th className="px-2 py-2">Prazo</th><th className="px-2 py-2">UF</th><th className="px-2 py-2">Canal</th><th className="px-2 py-2">Transportadora</th><th className="px-2 py-2">Status</th><th className="px-2 py-2">Envio</th><th className="px-2 py-2">Previsão</th><th className="px-2 py-2 text-right">DIFAL</th><th className="px-5 py-2">Situação</th></tr>
         </thead>
-        <tbody className="divide-y divide-gray-100">
+        <tbody className="difal-linhas divide-y divide-slate-100">
           {noPrazo.map((g) => {
             const bloqueada = !g.pronta || (empresaEscolhida !== undefined && g.empresa !== empresaEscolhida && !escolhidas.has(g.id))
             return (
-              <tr key={g.id} className={`transition-colors ${g.pronta ? 'hover:bg-slate-50' : 'bg-slate-50/60'}`}>
+              <tr key={g.id} className={g.pronta || g.guiaGeradaEm ? '' : 'opacity-75'}>
                 <td className="px-5 py-2.5">
                   {!g.guiaGeradaEm && <input
                     type="checkbox"
@@ -516,10 +516,10 @@ function GuiasPendentes() {
                 </td>
                 <td className="px-2 py-2.5 text-slate-500">{dataBr(g.emitidaEm)}</td>
                 <td className="px-2 py-2.5 text-xs text-slate-500">{g.ml ? 'pagar até' : 'vence'} {dataBr(g.prazo)}</td>
-                <td className="px-2 py-2.5 font-medium text-slate-700">{g.clienteUf}</td>
+                <td className="px-2 py-2.5"><span className="rounded-md bg-indigo-50 px-1.5 py-0.5 text-xs font-semibold text-indigo-700 ring-1 ring-indigo-100">{g.clienteUf}</span></td>
                 <CelulaCanal g={g} />
                 <CelulasEnvio envio={g.envio} />
-                <td className="px-2 py-2.5 text-right font-semibold tabular-nums text-slate-900">
+                <td className="px-2 py-2.5 text-right font-semibold tabular-nums text-indigo-700">
                   <ComDica largura={460} altura={340} conteudo={<CalculoDaNota d={g.calculoDetalhe} total={g.difalCalculado} />}>
                     <span className="cursor-help underline decoration-dotted decoration-slate-300 underline-offset-4">{brl(g.difalCalculado)}</span>
                   </ComDica>
@@ -613,12 +613,12 @@ function GuiasAtrasadas({ notas }: { notas: DifalGuiaPendente[] }) {
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-rose-200 bg-white">
-      <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+    <div className="difal-secao difal-secao-rosa overflow-hidden rounded-2xl border border-rose-200 bg-white shadow-sm">
+      <div className="difal-cab-rosa flex flex-wrap items-center justify-between gap-3 px-5 py-4">
         <div className="flex items-start gap-3">
           <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-rose-50 text-rose-600"><Icone nome="alerta" /></span>
           <div>
-            <p className="font-semibold text-slate-900">Atrasadas: com a contabilidade</p>
+            <p className="text-base font-semibold text-slate-900">Atrasadas: com a contabilidade</p>
             <p className="text-xs text-slate-500">
               {notas.length} nota(s) · {brl(total)} de DIFAL sem multa e juros. Passaram do prazo: não entram em lote GNRE.
             </p>
@@ -636,7 +636,7 @@ function GuiasAtrasadas({ notas }: { notas: DifalGuiaPendente[] }) {
       {aberta && (
         <div className="difal-entrar max-h-[360px] overflow-auto border-t border-rose-100">
           <table className="min-w-full text-sm">
-            <thead className="sticky top-0 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+            <thead className="sticky top-0 bg-gradient-to-r from-rose-50 to-orange-50 text-xs uppercase tracking-wide text-rose-900/60">
               <tr>
                 <th className="px-5 py-2 text-left">Nota / cliente</th>
                 <th className="px-2 py-2 text-left">Emissão</th>
@@ -650,16 +650,16 @@ function GuiasAtrasadas({ notas }: { notas: DifalGuiaPendente[] }) {
                 <th className="px-5 py-2 text-right">DIFAL</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="difal-linhas divide-y divide-slate-100">
               {notas.map((g) => (
-                <tr key={g.id} className="transition-colors hover:bg-rose-50/40">
+                <tr key={g.id}>
                   <td className="px-5 py-2"><NotaCliente nf={g.nfNumero} empresa={g.empresa} cliente={g.clienteNome} itens={g.itens} /></td>
                   <td className="px-2 py-2 text-slate-500">{dataBr(g.emitidaEm)}</td>
                   <td className="px-2 py-2 text-rose-700">{dataBr(g.prazo)}</td>
-                  <td className="px-2 py-2 font-medium text-slate-700">{g.clienteUf}</td>
+                  <td className="px-2 py-2"><span className="rounded-md bg-rose-50 px-1.5 py-0.5 text-xs font-semibold text-rose-700 ring-1 ring-rose-100">{g.clienteUf}</span></td>
                   <CelulaCanal g={g} />
                   <CelulasEnvio envio={g.envio} />
-                  <td className="px-5 py-2 text-right font-semibold tabular-nums">
+                  <td className="px-5 py-2 text-right font-semibold tabular-nums text-rose-700">
                     <ComDica largura={460} altura={340} conteudo={<CalculoDaNota d={g.calculoDetalhe} total={g.difalCalculado} />}>
                       <span className="cursor-help underline decoration-dotted decoration-slate-300 underline-offset-4">{brl(g.difalCalculado)}</span>
                     </ComDica>
@@ -682,15 +682,25 @@ const COR_LOGISTICA: Record<string, string> = {
   ME1: 'bg-violet-50 text-violet-700 ring-violet-200',
 }
 
+// cor do selo da plataforma da venda
+function corCanal(canal: string | null): string {
+  const c = (canal ?? '').toLowerCase()
+  if (c.includes('mercado livre')) return 'bg-yellow-50 text-yellow-800 ring-yellow-200'
+  if (c.includes('loja integrada')) return 'bg-blue-50 text-blue-700 ring-blue-200'
+  if (c.includes('shopee')) return 'bg-orange-50 text-orange-700 ring-orange-200'
+  return 'bg-slate-100 text-slate-600 ring-slate-200'
+}
+
 // plataforma da venda e, no Mercado Livre, o tipo de envio
 function CelulaCanal({ g }: { g: DifalGuiaPendente }) {
   return (
     <td className="px-2 py-2.5 text-xs">
       <span className="flex flex-col gap-1">
-        <span className="max-w-[140px] truncate text-slate-600" title={g.canal ?? undefined}>{g.canal ?? 'Balcão'}</span>
+        <span className={`w-fit max-w-[150px] truncate rounded-md px-1.5 py-0.5 font-medium ring-1 ${corCanal(g.canal)}`} title={g.canal ?? undefined}>{g.canal ?? 'Balcão'}</span>
         {g.ml && (
-          <span className={`w-fit rounded-md px-1.5 py-0.5 text-[11px] font-medium ring-1 ${COR_LOGISTICA[g.mlLogistica ?? ''] ?? 'bg-slate-50 text-slate-600 ring-slate-200'}`}>
-            {g.mlLogistica ?? 'envio ML: atualizar'}
+          <span title={g.mlLogistica ? undefined : 'Buscado na API do Mercado Livre no "Atualizar do Bling" em produção (o PC não tem acesso à conta do ML)'}
+            className={`w-fit rounded-md px-1.5 py-0.5 text-[11px] font-medium ring-1 ${COR_LOGISTICA[g.mlLogistica ?? ''] ?? 'bg-slate-50 text-slate-400 ring-slate-200'}`}>
+            {g.mlLogistica ?? 'tipo de envio: pendente'}
           </span>
         )}
       </span>
@@ -762,10 +772,10 @@ function FechamentoMensal() {
   const avisos = (sincronizar.data ?? []).filter((r) => r.erro)
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+    <div className="difal-secao difal-secao-ciano overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="difal-cab-ciano flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
         <div>
-          <p className="font-semibold text-slate-900">Fechamento mensal: o que o Mercado Livre cobrou × o que calculamos</p>
+          <p className="text-base font-semibold text-slate-900">Fechamento mensal: o que o Mercado Livre cobrou × o que calculamos</p>
           <p className="text-xs text-gray-500">
             Lançamentos CDIFAL da fatura do ML (sem número de pedido, por isso o fechamento é por mês).
             Verde até {TOLERANCIA_FECHAMENTO * 100}% de diferença.
@@ -909,9 +919,9 @@ function LotesGnre() {
   const ocupado = enviar.isPending || consultar.isPending || desfazer.isPending
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-5 py-4">
-        <p className="font-semibold text-slate-900">Lotes GNRE gerados</p>
+    <div className="difal-secao difal-secao-violeta overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="difal-cab-violeta flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-5 py-4">
+        <p className="text-base font-semibold text-slate-900">Lotes GNRE gerados</p>
         {portal && (
           <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600">
             Portal: <b>{portal.ambiente === 'producao' ? 'PRODUÇÃO' : 'homologação (testes)'}</b> · certificado AVIC{' '}
@@ -1336,10 +1346,14 @@ export function DifalPage() {
 
   return (
     // mesma margem das outras páginas (p-6): sem ela o conteúdo encosta na barra lateral
-    <div className="space-y-6 p-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">DIFAL</h1>
-        <p className="mt-1 max-w-3xl text-sm text-slate-500">
+    <div className="difal-fundo min-h-screen space-y-6 p-6">
+      <div className="difal-hero px-7 py-6">
+        <div className="flex items-center gap-3">
+          <span className="grid h-10 w-10 place-items-center rounded-xl bg-white/10 ring-1 ring-white/20 backdrop-blur"><Icone nome="documento" className="h-5 w-5 text-sky-300" /></span>
+          <h1 className="text-3xl font-semibold tracking-tight">DIFAL</h1>
+          <span className="rounded-full bg-sky-400/15 px-2.5 py-0.5 text-xs font-medium text-sky-200 ring-1 ring-sky-300/30">monitor de guias</span>
+        </div>
+        <p className="mt-2 max-w-3xl text-sm text-indigo-100/80">
           Diferencial de alíquota das vendas interestaduais. Produtos de NCM 8436 têm a redução do
           Convênio 52/91: a carga total é 5,6%, a origem recolhe 4,1% e sobra 1,5% para o destino.
         </p>
