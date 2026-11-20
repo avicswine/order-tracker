@@ -201,6 +201,10 @@ export interface DifalVendaMl {
   mlOrderId: string | null
   guiaGeradaEm: string | null
   guiaLoteId: string | null
+  /** guia processada com sucesso pelo portal: só então pagar e marcar o comprovante */
+  guiaAceita: boolean
+  situacao: string
+  observacao: string | null
   pronta: boolean
   faltando: string[]
 }

@@ -11,7 +11,7 @@
  */
 import type { PrismaClient, DifalNota, DifalAliquota, DifalEmitente } from '@prisma/client'
 import { montarLoteGnre, ErroMontagemGnre, LIMITE_GUIAS_POR_LOTE, type GuiaGnre } from './gnre'
-import { ambienteGnre } from './portalGnre'
+import { ambienteGnre, lerResultadoLote } from './portalGnre'
 import { dataBR, somarDias } from '../separacao/datas'
 
 export interface GuiaPendente {
@@ -153,9 +153,21 @@ export interface VendaMlBarreira {
   mlOrderId: string | null
   guiaGeradaEm: Date | null
   guiaLoteId: string | null
+  /** a guia desta nota foi processada com sucesso pelo portal (só então dá para pagar e marcar o comprovante) */
+  guiaAceita: boolean
+  /** DIVERGENTE = nota cancelada ou com problema depois da importação: não marcar comprovante */
+  situacao: string
+  observacao: string | null
   /** pode entrar em lote agora (sem guia, dentro da janela e com todos os dados) */
   pronta: boolean
   faltando: string[]
+}
+
+/** situação (0 = processada) da guia desta nota no resultado do lote; null se o lote não foi enviado/consultado */
+function situacaoDaGuia(nota: { nfNumero: string }, resultadoXml: string | null | undefined): string | null {
+  if (!resultadoXml) return null
+  const id = nota.nfNumero.replace(/\D/g, '').slice(-10) // mesmo identificadorGuia da montagem do lote
+  return lerResultadoLote(resultadoXml).guias.find((g) => g.identificadorGuia === id)?.situacaoGuia ?? null
 }
 
 /** Vendas do ML nos estados da barreira: sem guia e na janela, ou com guia gerada e comprovante ainda não enviado ao ML. */
@@ -178,11 +190,20 @@ export async function listarVendasMlBarreira(prisma: PrismaClient): Promise<Vend
   ])
   const porUf = new Map(aliquotas.map((a) => [a.uf, a]))
   const porEmpresa = new Map(emitentes.map((e) => [e.empresa, e]))
+  const lotes = await prisma.difalLoteGnre.findMany({
+    where: { id: { in: notas.map((n) => n.guiaLoteId).filter((x): x is string => !!x) } },
+    select: { id: true, resultadoXml: true },
+  })
+  const resultadoPorLote = new Map(lotes.map((l) => [l.id, l.resultadoXml]))
   return notas.map((n) => {
     const faltando = n.guiaGeradaEm ? [] : oQueFalta(n, porUf.get(n.clienteUf), porEmpresa.get(n.empresa))
+    // sem o número da venda não há onde anexar o comprovante: pagaríamos nós e o ML também, na barreira
+    if (!n.guiaGeradaEm && !n.mlOrderId) faltando.push('número da venda no ML (para anexar o comprovante)')
     return {
       id: n.id, empresa: n.empresa, nfNumero: n.nfNumero, emitidaEm: n.emitidaEm, clienteUf: n.clienteUf,
       difalCalculado: n.difalCalculado, mlOrderId: n.mlOrderId, guiaGeradaEm: n.guiaGeradaEm, guiaLoteId: n.guiaLoteId,
+      guiaAceita: situacaoDaGuia(n, n.guiaLoteId ? resultadoPorLote.get(n.guiaLoteId) : null) === '0',
+      situacao: n.situacao, observacao: n.observacao,
       pronta: !n.guiaGeradaEm && faltando.length === 0, faltando,
     }
   })
@@ -190,10 +211,15 @@ export async function listarVendasMlBarreira(prisma: PrismaClient): Promise<Vend
 
 /** José anexou o comprovante na venda do ML: a venda sai da lista e deixa de contar como 'ML cobra' no fechamento. */
 export async function marcarComprovanteMlEnviado(prisma: PrismaClient, id: string): Promise<void> {
-  const n = await prisma.difalNota.findUnique({ where: { id }, select: { responsavel: true, guiaGeradaEm: true, nfNumero: true } })
+  const n = await prisma.difalNota.findUnique({ where: { id }, select: { responsavel: true, guiaGeradaEm: true, guiaLoteId: true, nfNumero: true, situacao: true } })
   if (!n) throw new ErroMontagemGnre('nota não encontrada')
   if (n.responsavel !== 'ML_PAGA') throw new ErroMontagemGnre(`a nota ${n.nfNumero} não é venda do ML`)
-  if (!n.guiaGeradaEm) throw new ErroMontagemGnre(`a nota ${n.nfNumero} ainda não tem guia gerada`)
+  if (!n.guiaGeradaEm || !n.guiaLoteId) throw new ErroMontagemGnre(`a nota ${n.nfNumero} ainda não tem guia gerada`)
+  if (n.situacao === 'DIVERGENTE') throw new ErroMontagemGnre(`a nota ${n.nfNumero} está divergente (cancelada ou com problema): confira antes`)
+  const lote = await prisma.difalLoteGnre.findUnique({ where: { id: n.guiaLoteId }, select: { resultadoXml: true } })
+  if (situacaoDaGuia(n, lote?.resultadoXml) !== '0') {
+    throw new ErroMontagemGnre(`a guia da nota ${n.nfNumero} ainda não foi aceita pelo portal: envie o lote e consulte o resultado`)
+  }
   await prisma.difalNota.update({ where: { id }, data: { comprovanteMlEnviadoEm: new Date() } })
 }
 
@@ -343,6 +369,8 @@ export async function gerarLoteDasNotas(prisma: PrismaClient, ids: string[], hoj
   const hojeBr = dataBR(hoje) // dia de hoje em Brasília (o servidor roda em UTC)
   const naoNossa = notas.find((n) => !(n.difalCalculado > 0) || !(n.responsavel === 'NOSSO' || vendaMlNaJanela(n, hojeBr)))
   if (naoNossa) throw new ErroMontagemGnre(`a nota ${naoNossa.nfNumero} não é uma guia nossa (venda do ML só nos estados da barreira e com até ${JANELA_ML_DIAS} dias)`)
+  const semVenda = notas.find((n) => n.responsavel === 'ML_PAGA' && !n.mlOrderId)
+  if (semVenda) throw new ErroMontagemGnre(`a nota ${semVenda.nfNumero} não tem o número da venda no ML: não haveria onde anexar o comprovante`)
 
   const [aliquotas, emitente] = await Promise.all([
     prisma.difalAliquota.findMany({ where: { uf: { in: [...new Set(notas.map((n) => n.clienteUf))] } } }),

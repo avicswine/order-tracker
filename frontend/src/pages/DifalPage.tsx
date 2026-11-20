@@ -175,6 +175,7 @@ function Vendas() {
       qc.invalidateQueries({ queryKey: ['difal-notas'] })
       qc.invalidateQueries({ queryKey: ['difal-resumo'] })
       qc.invalidateQueries({ queryKey: ['difal-guias-pendentes'] })
+      qc.invalidateQueries({ queryKey: ['difal-ml-barreira'] })
     }
     estavaImportando.current = emAndamento
   }, [emAndamento, qc])
@@ -607,9 +608,13 @@ function VendasMlBarreira() {
                   ) : 'sem número da venda'}
                 </td>
                 <td className="px-5 py-2.5 text-right text-xs">
-                  {v.guiaGeradaEm ? (
+                  {v.situacao === 'DIVERGENTE' ? (
+                    <span title={v.observacao ?? undefined} className="rounded-full bg-rose-50 px-2.5 py-1 font-medium text-rose-700">● nota divergente (cancelada?) — conferir</span>
+                  ) : v.guiaGeradaEm && !v.guiaAceita ? (
+                    <span className="rounded-full bg-blue-50 px-2.5 py-1 font-medium text-blue-700">guia gerada · envie ao portal e consulte em "Lotes GNRE"</span>
+                  ) : v.guiaGeradaEm ? (
                     <span className="inline-flex items-center gap-2">
-                      <span className="rounded-full bg-blue-50 px-2.5 py-1 font-medium text-blue-700">guia gerada</span>
+                      <span className="rounded-full bg-emerald-50 px-2.5 py-1 font-medium text-emerald-700">guia aceita · pagar e anexar</span>
                       <button
                         onClick={() => { setErroTexto(null); if (window.confirm(`Confirma que o comprovante da NF ${v.nfNumero} foi anexado na venda do ML?`)) marcar.mutate(v.id) }}
                         disabled={marcar.isPending}
@@ -882,10 +887,18 @@ function LotesGnre() {
   const recarregar = () => qc.invalidateQueries({ queryKey: ['difal-lotes'] })
 
   const enviar = useMutation({ mutationFn: difalApi.enviarLote, onSuccess: recarregar, onError: (e) => setErro(mensagemErro(e)) })
-  const consultar = useMutation({ mutationFn: difalApi.consultarLote, onSuccess: recarregar, onError: (e) => setErro(mensagemErro(e)) })
+  const consultar = useMutation({
+    mutationFn: difalApi.consultarLote,
+    onSuccess: () => { recarregar(); qc.invalidateQueries({ queryKey: ['difal-ml-barreira'] }) }, // guia aceita libera o "Comprovante enviado"
+    onError: (e) => setErro(mensagemErro(e)),
+  })
   const desfazer = useMutation({
     mutationFn: difalApi.desfazerLote,
-    onSuccess: () => { recarregar(); qc.invalidateQueries({ queryKey: ['difal-guias-pendentes'] }) },
+    onSuccess: () => {
+      recarregar()
+      qc.invalidateQueries({ queryKey: ['difal-guias-pendentes'] })
+      qc.invalidateQueries({ queryKey: ['difal-ml-barreira'] })
+    },
     onError: (e) => setErro(mensagemErro(e)),
   })
   const xml = useMutation({ mutationFn: difalApi.baixarXmlLote, onSuccess: (r) => baixarArquivo(r.arquivo, r.nome) })

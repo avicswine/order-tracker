@@ -466,6 +466,11 @@ router.post('/lotes/:id/desfazer', async (req: Request, res: Response) => {
         return res.status(409).json({ erro: `lote já enviado ao portal (recibo ${lote.numeroRecibo}) e nem todas as guias foram invalidadas; não dá para desfazer` })
       }
     }
+    // comprovante já anexado na venda do ML: desfazer deixaria a venda sem guia e fora de todas as listas
+    const comComprovante = await prisma.difalNota.findFirst({ where: { guiaLoteId: lote.id, comprovanteMlEnviadoEm: { not: null } }, select: { nfNumero: true } })
+    if (comComprovante) {
+      return res.status(409).json({ erro: `a NF ${comComprovante.nfNumero} deste lote já teve o comprovante enviado ao ML; não dá para desfazer` })
+    }
     const [notas] = await prisma.$transaction([
       prisma.difalNota.updateMany({ where: { guiaLoteId: lote.id }, data: { guiaGeradaEm: null, guiaLoteId: null } }),
       prisma.difalLoteGnre.delete({ where: { id: lote.id } }),
