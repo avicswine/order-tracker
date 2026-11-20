@@ -257,6 +257,37 @@ function aaaaMmDd(d: Date): string {
 
 const REGRA_PADRAO = 'saida'
 
+/** domingo de Páscoa (algoritmo de Meeus/Jones/Butcher), base dos feriados móveis */
+function pascoa(ano: number): Date {
+  const a = ano % 19, b = Math.floor(ano / 100), c = ano % 100, d = Math.floor(b / 4), e = b % 4
+  const f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30
+  const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7
+  const m = Math.floor((a + 11 * h + 22 * l) / 451), mes = Math.floor((h + l - 7 * m + 114) / 31)
+  return new Date(Date.UTC(ano, mes - 1, ((h + l - 7 * m + 114) % 31) + 1))
+}
+
+/**
+ * Feriados bancários nacionais (calendário da FEBRABAN): fixos + Carnaval (segunda e terça), Sexta-feira Santa e
+ * Corpus Christi. 20/11 (Consciência Negra) é feriado nacional pela Lei 14.759/2023. Feriados estaduais e
+ * municipais ficam de fora.
+ */
+export function feriadosBancarios(ano: number): Set<string> {
+  const p = pascoa(ano)
+  const desloca = (dias: number) => aaaaMmDd(new Date(p.getTime() + dias * 86400000))
+  const fixos = ['01-01', '04-21', '05-01', '09-07', '10-12', '11-02', '11-15', '11-20', '12-25'].map((md) => `${ano}-${md}`)
+  return new Set([...fixos, desloca(-48), desloca(-47), desloca(-2), desloca(60)])
+}
+
+/** o próprio dia, se for dia útil bancário; senão, o próximo (alguns estados recusam pagamento em feriado) */
+export function proximoDiaUtil(dataIso: string): string {
+  let d = dataIso
+  for (;;) {
+    const semana = new Date(`${d}T12:00:00Z`).getUTCDay()
+    if (semana !== 0 && semana !== 6 && !feriadosBancarios(Number(d.slice(0, 4))).has(d)) return d
+    d = somarDias(d, 1)
+  }
+}
+
 /**
  * Estados em que o Mercado Livre pagou DIFAL na barreira fiscal (ZIPs de comprovantes do ML, dez/2025–nov/2026):
  * nesses, pagamos nós a guia logo após a venda e anexamos o comprovante na venda do ML.
@@ -320,6 +351,7 @@ export async function gerarLoteDasNotas(prisma: PrismaClient, ids: string[], hoj
   if (!emitente) throw new ErroMontagemGnre(`dados do emitente ${empresa} ainda não foram lidos de nenhuma nota`)
   const porUf = new Map(aliquotas.map((a) => [a.uf, a]))
 
+  const dataPagamento = proximoDiaUtil(hojeBr)
   const guias: GuiaGnre[] = notas.map((n) => {
     const faltando = oQueFalta(n, porUf.get(n.clienteUf), emitente)
     if (faltando.length) throw new ErroMontagemGnre(`nota ${n.nfNumero}: falta ${faltando.join('; ')}`)
@@ -338,8 +370,9 @@ export async function gerarLoteDasNotas(prisma: PrismaClient, ids: string[], hoj
         documentoOrigem: documentoOrigem(n, a.tipoDocOrigemGnre)!,
         tipoDocumentoOrigem: a.tipoDocOrigemGnre,
       }),
-      dataVencimento: ml && prazo < hojeBr ? hojeBr : prazo,
-      dataPagamento: hojeBr,
+      // o portal exige vencimento >= pagamento: se o prazo cai antes (venda do ML ou hoje é feriado), vence no dia do pagamento
+      dataVencimento: prazo < dataPagamento ? dataPagamento : prazo,
+      dataPagamento,
       camposExtras: camposExtrasDaUf(a).map((c) => ({ codigo: c.codigo, valor: valorCampoExtra(c, n)! })),
       valorPrincipal: n.difalCalculado,
       referencia: {
