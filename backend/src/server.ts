@@ -181,7 +181,8 @@ app.listen(Number(PORT), '0.0.0.0', () => {
     cron.schedule('0 17 * * *', () => {
       rodarRotinaDifal(prisma, { simulacao: false, agendada: true })
         .then(r => { if (r.pulou) console.log(`[Cron DIFAL] pulou: ${r.pulou}`) })
-        .catch(err => console.error('[Cron DIFAL] rotina falhou:', err))
+        // só a mensagem: o objeto de erro do banco pode repetir dados da nota (LGPD)
+        .catch(err => console.error('[Cron DIFAL] rotina falhou:', String((err as Error).message).split('\n')[0]))
     }, { timezone: 'America/Sao_Paulo' })
     console.log(`[Cron] DIFAL: rotina diária às 17h (${process.env.DIFAL_ROTINA_ENVIAR === '1' ? 'completa: gera e envia lotes' : 'só aviso'})`)
   } else {

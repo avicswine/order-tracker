@@ -16,7 +16,7 @@ import { semearAliquotas } from '../services/difal/aliquotas'
 import { listarGuiasPendentes, gerarLoteDasNotas, classificarCamposExtras, marcarComprovanteMlEnviado, filtroVendasMl } from '../services/difal/guias'
 import { ErroMontagemGnre } from '../services/difal/gnre'
 import { empresaGnre, enviarLoteGnre, consultarLoteGnre, ErroLote } from '../services/difal/lotesGnre'
-import { rodarRotinaDifal } from '../services/difal/rotinaDiaria'
+import { rodarRotinaDifal, ultimaExecucaoRotina } from '../services/difal/rotinaDiaria'
 import { sincronizarCobrancasMl, fechamentoMensal } from '../services/difal/cobrancasMl'
 import {
   statusPortal, consultarConfigUf, lerResultadoLote, ErroPortalGnre,
@@ -439,6 +439,7 @@ router.post('/rotina/simular', async (_req: Request, res: Response) => {
       agendada: process.env.DIFAL_ROTINA === '1',
       modoCompleto: process.env.DIFAL_ROTINA_ENVIAR === '1',
       temNumero: !!process.env.DIFAL_WHATSAPP_NUMERO?.trim(),
+      ultimaExecucao: ultimaExecucaoRotina(),
     })
   } catch (e) {
     res.status(500).json({ erro: (e as Error).message })

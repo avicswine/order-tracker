@@ -1035,8 +1035,16 @@ function RotinaDiaria() {
           <div className="difal-entrar mt-3 space-y-2">
             <ul className="text-xs text-slate-600">
               <li>Agendamento: <b>{r.agendada ? 'ligado' : 'desligado'}</b>{!r.agendada && ' (variável DIFAL_ROTINA=1 no Railway)'}</li>
-              <li>Modo: <b>{r.modoCompleto ? 'completo (gera e envia os lotes ao portal)' : 'só aviso'}</b></li>
+              <li>Modo: <b>{r.modoCompleto ? 'completo (gera e envia os lotes ao portal; só com o portal em produção)' : 'só aviso'}</b></li>
               <li>WhatsApp: <b>{r.temNumero ? 'número configurado' : 'sem número (DIFAL_WHATSAPP_NUMERO)'}</b></li>
+              <li>
+                Última execução:{' '}
+                {r.ultimaExecucao ? (
+                  <b className={r.ultimaExecucao.ok ? 'text-emerald-700' : 'text-rose-700'}>
+                    {new Date(r.ultimaExecucao.em).toLocaleString('pt-BR')} · {r.ultimaExecucao.ok ? 'ok' : 'FALHOU'} · {r.ultimaExecucao.enviadaWhatsapp ? 'WhatsApp enviado' : 'WhatsApp NÃO enviado'} — {r.ultimaExecucao.resumo}
+                  </b>
+                ) : <b>nenhuma desde o último deploy</b>}
+              </li>
             </ul>
             <p className="text-xs text-slate-500">Mensagem que iria agora (simulação: usa as notas já importadas, não gera lote nem envia nada):</p>
             <pre className="whitespace-pre-wrap rounded-xl bg-slate-50 p-3 text-xs text-slate-800 ring-1 ring-slate-100">{r.pulou ? `Não rodou: ${r.pulou}` : r.mensagem}</pre>
