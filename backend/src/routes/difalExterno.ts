@@ -9,9 +9,12 @@ import { prisma } from '../lib/prisma'
 
 const router = Router()
 
+/** chave curta poderia ser adivinhada: abaixo disso a rota fica desligada */
+const TAMANHO_MINIMO_CHAVE = 32
+
 function chaveConfere(recebida: string | undefined): boolean {
   const esperada = process.env.DIFAL_CHAVE_CMVSYNC
-  if (!esperada || !recebida) return false
+  if (!esperada || esperada.length < TAMANHO_MINIMO_CHAVE || !recebida) return false
   const a = Buffer.from(recebida)
   const b = Buffer.from(esperada)
   return a.length === b.length && timingSafeEqual(a, b)
@@ -26,7 +29,7 @@ router.get('/pagas', async (req: Request, res: Response) => {
     const notas = await prisma.difalNota.findMany({
       // emitidaEm guarda Brasília como se fosse UTC: a meia-noite UTC é o começo do dia da nota
       where: { guiaPagaEm: { not: null }, difalPagoGuia: { gt: 0 }, emitidaEm: { gte: new Date(`${desde}T00:00:00Z`) } },
-      select: { empresa: true, nfNumero: true, mlOrderId: true, valorNota: true, difalPagoGuia: true, guiaPagaEm: true, emitidaEm: true },
+      select: { empresa: true, nfNumero: true, mlOrderId: true, mlPackId: true, valorNota: true, difalPagoGuia: true, guiaPagaEm: true, emitidaEm: true },
       orderBy: { emitidaEm: 'asc' },
     })
     res.json(notas.map((n) => ({
@@ -34,6 +37,8 @@ router.get('/pagas', async (req: Request, res: Response) => {
       nf: n.nfNumero,
       // número do pedido na loja (ML, site, Shopee) como veio do Bling; balcão não tem
       pedidoLoja: n.mlOrderId,
+      // carrinho do ML: a NF pode guardar a order de um item só; o pack liga o carrinho inteiro
+      packLoja: n.mlPackId,
       emitidaEm: n.emitidaEm.toISOString().slice(0, 10),
       valorNota: n.valorNota,
       difalPago: n.difalPagoGuia,
