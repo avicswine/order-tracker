@@ -369,7 +369,7 @@ export const difalApi = {
   importar: (dias?: number) =>
     api.post<{ ok: boolean; iniciada: boolean }>('/difal/importar', { dias }).then((r) => r.data),
   importarStatus: () => api.get<DifalImportacaoStatus>('/difal/importar/status').then((r) => r.data),
-  atualizarAliquota: (uf: string, dados: { codigoReceitaGnre?: string; vencimentoRegra?: string }) =>
+  atualizarAliquota: (uf: string, dados: { codigoReceitaGnre?: string; vencimentoRegra?: string; tipoDocOrigemGnre?: string }) =>
     api.put<DifalAliquota>(`/difal/aliquotas/${uf}`, dados).then((r) => r.data),
   portalStatus: () => api.get<DifalPortalStatus>('/difal/portal/status').then((r) => r.data),
   portalConfigUf: (uf: string, empresa: string) =>
