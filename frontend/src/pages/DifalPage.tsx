@@ -390,6 +390,11 @@ function GuiasPendentes() {
   const noPrazo = visiveis.filter((g) => !g.atrasada)
   const atrasadas = visiveis.filter((g) => g.atrasada)
   const prontas = noPrazo.filter((g) => g.pronta)
+  // marcar em lote: todas as prontas visíveis de UMA empresa (o portal aceita lote de uma empresa só), até o limite
+  function marcarEmpresa(empresa: string) {
+    setEscolhidas(new Set(prontas.filter((g) => g.empresa === empresa).slice(0, LIMITE_GUIAS_LOTE).map((g) => g.id)))
+  }
+  const prontasPorEmpresa = (empresa: string) => prontas.filter((g) => g.empresa === empresa).length
   const empresaEscolhida = noPrazo.find((g) => escolhidas.has(g.id))?.empresa
 
   const gerar = useMutation({
@@ -458,10 +463,20 @@ function GuiasPendentes() {
         <div>
           <p className="font-semibold text-slate-900">Guias para emitir agora (no prazo)</p>
           <p className="text-xs text-slate-500">
-            {noPrazo.length} nota(s) no prazo · {prontas.length} prontas para a guia (GNRE). Um lote por empresa, até 50 guias.
+            {noPrazo.length} nota(s) no prazo · {prontas.length} prontas para a guia (GNRE). Um lote por empresa, até {LIMITE_GUIAS_LOTE} guias.
             Vendas do Mercado Livre: depois de pagar, anexe o comprovante na venda do ML e clique em "Comprovante enviado".
           </p>
         </div>
+        <span className="flex flex-wrap items-center gap-2">
+        {['AVIC', 'AGRO'].map((emp) => prontasPorEmpresa(emp) > 0 && (
+          <button key={emp} onClick={() => marcarEmpresa(emp)}
+            className="difal-btn rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:border-slate-300">
+            Marcar {emp} ({Math.min(prontasPorEmpresa(emp), LIMITE_GUIAS_LOTE)})
+          </button>
+        ))}
+        {escolhidas.size > 0 && (
+          <button onClick={() => setEscolhidas(new Set())} className="difal-btn rounded-xl px-3 py-2 text-sm text-slate-500 hover:text-slate-800">Limpar</button>
+        )}
         <button
           onClick={() => { setAviso(null); setErroTexto(null); gerar.mutate() }}
           disabled={escolhidas.size === 0 || gerar.isPending}
@@ -469,6 +484,7 @@ function GuiasPendentes() {
         >
           {gerar.isPending ? 'Montando lote…' : `Baixar lote GNRE (${escolhidas.size})`}
         </button>
+        </span>
       </div>
       {aviso && <div className="difal-entrar border-b border-emerald-100 bg-emerald-50 px-5 py-2 text-sm text-emerald-900">{aviso}</div>}
       {erroTexto && (
@@ -573,6 +589,9 @@ function atalhosPeriodo(): [string, string, string][] {
     ['Tudo', '', ''],
   ]
 }
+
+/** máximo de guias por lote: manual GNRE (o servidor usa LIMITE_GUIAS_POR_LOTE em gnre.ts com o mesmo valor) */
+const LIMITE_GUIAS_LOTE = 50
 
 // Notas que passaram do prazo: não vão para lote (sairiam sem multa e juros); a contabilidade regulariza.
 function GuiasAtrasadas({ notas }: { notas: DifalGuiaPendente[] }) {
