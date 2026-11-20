@@ -29,6 +29,22 @@ export interface GuiaPendente {
   prazo: string
   /** passou do prazo: não vai para lote GNRE, vai para a contabilidade (decisão do José, 20/11/2026) */
   atrasada: boolean
+  /** envio da nota no order-tracker; null quando a nota não está lá (retirada, Mercado Envios, Shopee…) */
+  envio: EnvioDaNota | null
+}
+
+export interface EnvioDaNota {
+  situacao: 'PENDING' | 'IN_TRANSIT' | 'DELIVERED' | 'CANCELLED'
+  transportadora: string | null
+  enviadoEm: Date | null
+  previsao: Date | null
+  entregueEm: Date | null
+  ultimoRastreio: string | null
+}
+
+/** mesmo formato que a importação do Bling usa para criar o pedido: AVIC-NF-013234 */
+function numeroDoPedido(empresa: string, nfNumero: string): string {
+  return `${empresa}-NF-${nfNumero.replace(/^0+/, '').padStart(6, '0')}`
 }
 
 /** Tipos de documento de origem que usam a chave de 44 dígitos (GnreConfigUF): 22 = chave da NF-e, 24 = chave do DF-e */
@@ -137,11 +153,27 @@ export async function listarGuiasPendentes(prisma: PrismaClient, empresa?: strin
         guiaGeradaEm: null,
         ...(empresa && { empresa }),
       },
-      orderBy: { emitidaEm: 'asc' },
+      orderBy: { emitidaEm: 'desc' }, // mais recentes primeiro (pedido do José, 20/11/2026)
     }),
     prisma.difalAliquota.findMany(),
     prisma.difalEmitente.findMany(),
   ])
+  // dados do envio no order-tracker (mesmo banco, só leitura): uma consulta para todas as notas
+  const pedidos = await prisma.order.findMany({
+    where: { orderNumber: { in: notas.map((n) => numeroDoPedido(n.empresa, n.nfNumero)) } },
+    select: {
+      orderNumber: true, status: true, shippedAt: true, estimatedDelivery: true, deliveredAt: true,
+      lastTracking: true, carrier: { select: { name: true } },
+    },
+  })
+  const envioPorPedido = new Map(pedidos.map((p) => [p.orderNumber, {
+    situacao: p.status,
+    transportadora: p.carrier?.name ?? null,
+    enviadoEm: p.shippedAt,
+    previsao: p.estimatedDelivery,
+    entregueEm: p.deliveredAt,
+    ultimoRastreio: p.lastTracking,
+  } satisfies EnvioDaNota]))
   const porUf = new Map(aliquotas.map((a) => [a.uf, a]))
   const porEmpresa = new Map(emitentes.map((e) => [e.empresa, e]))
   const hoje = dataBR()
@@ -160,6 +192,7 @@ export async function listarGuiasPendentes(prisma: PrismaClient, empresa?: strin
       faltando,
       prazo,
       atrasada: prazo < hoje,
+      envio: envioPorPedido.get(numeroDoPedido(n.empresa, n.nfNumero)) ?? null,
     }
   })
 }
