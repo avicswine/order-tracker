@@ -179,6 +179,8 @@ export interface DifalNota {
   situacao: DifalSituacao
   divergencia: number | null
   calculoDetalhe: Record<string, unknown> | null
+  /** itens da NF guardados na importação (tooltip) */
+  itens: unknown
 }
 
 export interface DifalImportacaoStatus {
@@ -191,11 +193,23 @@ export interface DifalImportacaoStatus {
   erro: string | null
 }
 
+/** item da NF guardado na importação (tooltip no número da nota) */
+export interface DifalItemNota {
+  sku: string | null
+  descricao: string | null
+  ncm: string | null
+  quantidade: number | null
+  unidade: string | null
+  valorUnitario: number | null
+  valorTotal: number
+}
+
 export interface DifalVendaMl {
   id: string
   empresa: string
   nfNumero: string
   clienteNome: string
+  itens: DifalItemNota[] | null
   emitidaEm: string
   clienteUf: string
   difalCalculado: number
@@ -240,6 +254,7 @@ export interface DifalGuiaPendente {
   empresa: string
   nfNumero: string
   clienteNome: string
+  itens: DifalItemNota[] | null
   emitidaEm: string
   clienteUf: string
   difalCalculado: number

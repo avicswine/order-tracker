@@ -74,7 +74,16 @@ interface NfeBlingDetalhe {
     ie?: string
     endereco?: { uf?: string; endereco?: { uf?: string } }
   }
-  itens?: Array<{ classificacaoFiscal?: string; valorTotal?: number; valor?: number; quantidade?: number }>
+  // mesmos campos que o cmvsync já lê dos itens da NF no Bling (codigo, descricao, unidade, quantidade, valor)
+  itens?: Array<{
+    codigo?: string
+    descricao?: string
+    unidade?: string
+    classificacaoFiscal?: string
+    valorTotal?: number
+    valor?: number
+    quantidade?: number
+  }>
 }
 
 export interface ResultadoImportacao {
@@ -239,9 +248,10 @@ export async function importarNotas(
               municipioIbgeDestino: { not: null },
               documentoDestinatario: { not: null },
             },
-            select: { id: true },
+            select: { id: true, itens: true, difalCalculado: true },
           })
-          if (completa) {
+          // nota com DIFAL ainda sem os itens guardados: lê de novo uma vez (só leitura no Bling)
+          if (completa && (completa.itens !== null || !(completa.difalCalculado > 0))) {
             res.puladas++
             continue
           }
@@ -283,6 +293,16 @@ export async function importarNotas(
         const erroCalculo = (calc.detalhe as { erro?: string }).erro ?? null
         if (erroCalculo) res.erros.push(`NF ${resumo.numero}: ${erroCalculo}`)
         const valorProdutos = itens.reduce((a, i) => a + i.valorTotal, 0)
+        // itens para o tooltip da tela (o cálculo acima só usa NCM e valor)
+        const itensNota = (nf.itens ?? []).map((i) => ({
+          sku: i.codigo ?? null,
+          descricao: i.descricao ?? null,
+          ncm: i.classificacaoFiscal ?? null,
+          quantidade: i.quantidade ?? null,
+          unidade: i.unidade ?? null,
+          valorUnitario: i.valor ?? null,
+          valorTotal: i.valorTotal ?? (i.valor ?? 0) * (i.quantidade ?? 1),
+        }))
 
         // O XML diz qual alíquota e qual redução o emissor usou de fato. Serve para
         // conferir a nossa tabela: divergência aqui costuma ser tabela desatualizada.
@@ -357,6 +377,7 @@ export async function importarNotas(
           difalCalculado: calc.difal,
           difalMetodo: calc.metodo,
           calculoDetalhe: calc.detalhe as object,
+          itens: itensNota as object[],
           responsavel: calc.responsavel,
           // só sobrescreve quando o XML respondeu; senão preserva o aviso anterior
           ...(avisoXml !== null ? { observacao: avisoXml } : {}),

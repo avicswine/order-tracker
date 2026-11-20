@@ -1,14 +1,16 @@
 /* Animações da página do DIFAL (só visual). Quem pede menos movimento no sistema não as vê. */
 
 /* tela entrando: sobe e aparece (troca de aba) */
-.difal-entrar { animation: difal-entrar 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+/* 'backwards' e não 'both': terminada a animação não sobra transform, que faria o tooltip fixo se posicionar
+   pela caixa da página em vez da janela */
+.difal-entrar { animation: difal-entrar 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
 @keyframes difal-entrar {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: none; }
 }
 
 /* itens entrando um depois do outro */
-.difal-escalonado > * { animation: difal-entrar 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.difal-escalonado > * { animation: difal-entrar 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
 .difal-escalonado > *:nth-child(2) { animation-delay: 0.04s; }
 .difal-escalonado > *:nth-child(3) { animation-delay: 0.08s; }
 .difal-escalonado > *:nth-child(4) { animation-delay: 0.12s; }

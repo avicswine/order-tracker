@@ -463,6 +463,8 @@ model DifalNota {
   difalCalculado  Float    @default(0)
   difalMetodo     String?  // carga | prop | sem_reducao | isento
   calculoDetalhe  Json?    // a conta aberta, para a contabilidade conferir
+  // itens da NF como vieram do Bling: [{ sku, descricao, ncm, quantidade, unidade, valorUnitario, valorTotal }]
+  itens           Json?
 
   // o que o ML cobrou de nós (lançamento CDIFAL do faturamento)
   difalCobradoMl  Float?

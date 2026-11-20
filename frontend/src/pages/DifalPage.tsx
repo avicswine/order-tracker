@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { difalApi } from '../lib/api'
 import type {
   DifalNota, DifalResponsavel, DifalHistorico, DifalGuiaPendente, DifalFechamentoMes,
-  DifalLote, DifalAliquota, DifalReceitaUf, DifalVendaMl,
+  DifalLote, DifalAliquota, DifalReceitaUf, DifalVendaMl, DifalItemNota,
 } from '../lib/api'
 import './difal.css'
 
@@ -27,11 +27,64 @@ function Icone({ nome, className = 'h-5 w-5' }: { nome: keyof typeof ICONES; cla
   )
 }
 
-// número da nota com o selo da empresa e, embaixo, o nome do cliente (ajuda a se organizar)
-function NotaCliente({ nf, empresa, cliente }: { nf: string; empresa: string; cliente: string }) {
+// quadro com os itens da NF, aberto ao passar o mouse no número da nota
+function ItensDaNota({ itens }: { itens: DifalItemNota[] | null | undefined }) {
+  if (!itens) return <p className="text-xs text-slate-500">Itens ainda não carregados: clique em "Atualizar do Bling".</p>
+  if (itens.length === 0) return <p className="text-xs text-slate-500">A nota veio sem itens do Bling.</p>
+  const total = itens.reduce((s, i) => s + (i.valorTotal ?? 0), 0)
+  return (
+    <table className="w-full text-xs">
+      <thead className="text-left text-[11px] uppercase tracking-wide text-slate-500">
+        <tr><th className="py-1 pr-2">SKU</th><th className="py-1 pr-2">Descrição</th><th className="py-1 pr-2">NCM</th><th className="py-1 pr-2 text-right">Qtd</th><th className="py-1 pr-2 text-right">Valor</th><th className="py-1 text-right">Total</th></tr>
+      </thead>
+      <tbody className="divide-y divide-slate-100">
+        {itens.map((i, k) => (
+          <tr key={k}>
+            <td className="py-1 pr-2 font-medium text-slate-800">{i.sku ?? '—'}</td>
+            <td className="max-w-[260px] py-1 pr-2 text-slate-700">{i.descricao ?? '—'}</td>
+            <td className="py-1 pr-2 text-slate-500">{i.ncm ?? '—'}</td>
+            <td className="py-1 pr-2 text-right tabular-nums">{i.quantidade ?? '—'}{i.unidade ? ` ${i.unidade}` : ''}</td>
+            <td className="py-1 pr-2 text-right tabular-nums">{i.valorUnitario != null ? brl(i.valorUnitario) : '—'}</td>
+            <td className="py-1 text-right font-medium tabular-nums">{brl(i.valorTotal)}</td>
+          </tr>
+        ))}
+      </tbody>
+      <tfoot><tr><td colSpan={5} className="pt-1.5 text-right text-slate-500">Total dos itens</td><td className="pt-1.5 text-right font-semibold tabular-nums">{brl(total)}</td></tr></tfoot>
+    </table>
+  )
+}
+
+// Tooltip com os itens: flutua em posição fixa na tela (as listas ficam em caixas que cortariam um tooltip comum)
+function ComItens({ itens, children }: { itens?: DifalItemNota[] | null; children: React.ReactNode }) {
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
+  function abrir(e: React.MouseEvent<HTMLSpanElement>) {
+    const r = e.currentTarget.getBoundingClientRect()
+    // abre embaixo do número; se não couber embaixo, abre em cima
+    const embaixo = r.bottom + 8
+    setPos({ x: Math.min(r.left, window.innerWidth - 660), y: embaixo + 260 > window.innerHeight ? Math.max(8, r.top - 268) : embaixo })
+  }
+  return (
+    <span onMouseEnter={abrir} onMouseLeave={() => setPos(null)}>
+      {children}
+      {pos && (
+        <span
+          style={{ left: Math.max(8, pos.x), top: pos.y }}
+          className="difal-entrar pointer-events-none fixed z-50 block max-h-[260px] w-[640px] max-w-[90vw] overflow-hidden rounded-xl border border-slate-200 bg-white p-3 text-left font-normal shadow-xl"
+        >
+          <ItensDaNota itens={itens} />
+        </span>
+      )}
+    </span>
+  )
+}
+
+// número da nota com o selo da empresa e, embaixo, o nome do cliente; os itens aparecem ao passar o mouse
+function NotaCliente({ nf, empresa, cliente, itens }: { nf: string; empresa: string; cliente: string; itens?: DifalItemNota[] | null }) {
   return (
     <span className="flex flex-col">
-      <span className="whitespace-nowrap font-medium text-slate-900">NF {nf} <SeloEmpresa empresa={empresa} /></span>
+      <ComItens itens={itens}>
+        <span className="w-fit cursor-help whitespace-nowrap font-medium text-slate-900 underline decoration-dotted decoration-slate-300 underline-offset-4">NF {nf} <SeloEmpresa empresa={empresa} /></span>
+      </ComItens>
       <span className="max-w-[220px] truncate text-xs font-normal text-slate-500" title={cliente}>{cliente}</span>
     </span>
   )
@@ -341,8 +394,11 @@ function Vendas() {
               const r = RESPONSAVEL[n.responsavel]
               return (
                 <tr key={n.id} className="transition-colors hover:bg-blue-50/40">
-                  <td className="px-3 py-2.5 whitespace-nowrap font-medium text-slate-900">
-                    {n.nfNumero} <SeloEmpresa empresa={n.empresa} />
+                  <td className="whitespace-nowrap px-3 py-2.5 font-medium text-slate-900">
+                    <ComItens itens={n.itens as DifalItemNota[] | null}>
+                      <span className="cursor-help underline decoration-dotted decoration-slate-300 underline-offset-4">{n.nfNumero}</span>
+                    </ComItens>{' '}
+                    <SeloEmpresa empresa={n.empresa} />
                   </td>
                   <td className="px-3 py-2 text-gray-600">{dataBr(n.emitidaEm)}</td>
                   <td className="max-w-[220px] truncate px-3 py-2 text-gray-700" title={n.clienteNome}>
@@ -491,7 +547,7 @@ function GuiasPendentes() {
                   />
                 </td>
                 <td className="px-2 py-2.5">
-                  <NotaCliente nf={g.nfNumero} empresa={g.empresa} cliente={g.clienteNome} />
+                  <NotaCliente nf={g.nfNumero} empresa={g.empresa} cliente={g.clienteNome} itens={g.itens} />
                 </td>
                 <td className="px-2 py-2.5 text-slate-500">{dataBr(g.emitidaEm)}</td>
                 <td className="px-2 py-2.5 text-xs text-slate-500">vence {dataBr(g.prazo)}</td>
@@ -608,7 +664,7 @@ function VendasMlBarreira() {
                       title={bloqueada && v.pronta ? 'Lote de uma empresa só' : undefined} className="h-4 w-4 accent-blue-600" />
                   )}
                 </td>
-                <td className="px-2 py-2.5"><NotaCliente nf={v.nfNumero} empresa={v.empresa} cliente={v.clienteNome} /></td>
+                <td className="px-2 py-2.5"><NotaCliente nf={v.nfNumero} empresa={v.empresa} cliente={v.clienteNome} itens={v.itens} /></td>
                 <td className="px-2 py-2.5 text-slate-500">{dataBr(v.emitidaEm)}</td>
                 <td className="px-2 py-2.5 font-medium text-slate-700">{v.clienteUf}</td>
                 <td className="px-2 py-2.5 text-right font-semibold tabular-nums text-slate-900">{brl(v.difalCalculado)}</td>
@@ -709,7 +765,7 @@ function GuiasAtrasadas({ notas }: { notas: DifalGuiaPendente[] }) {
             <tbody className="divide-y divide-slate-100">
               {notas.map((g) => (
                 <tr key={g.id} className="transition-colors hover:bg-rose-50/40">
-                  <td className="px-5 py-2"><NotaCliente nf={g.nfNumero} empresa={g.empresa} cliente={g.clienteNome} /></td>
+                  <td className="px-5 py-2"><NotaCliente nf={g.nfNumero} empresa={g.empresa} cliente={g.clienteNome} itens={g.itens} /></td>
                   <td className="px-2 py-2 text-slate-500">{dataBr(g.emitidaEm)}</td>
                   <td className="px-2 py-2 text-rose-700">{dataBr(g.prazo)}</td>
                   <td className="px-2 py-2 font-medium text-slate-700">{g.clienteUf}</td>
