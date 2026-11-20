@@ -195,6 +195,7 @@ export interface DifalVendaMl {
   id: string
   empresa: string
   nfNumero: string
+  clienteNome: string
   emitidaEm: string
   clienteUf: string
   difalCalculado: number
@@ -238,6 +239,7 @@ export interface DifalGuiaPendente {
   id: string
   empresa: string
   nfNumero: string
+  clienteNome: string
   emitidaEm: string
   clienteUf: string
   difalCalculado: number

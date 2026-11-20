@@ -18,6 +18,7 @@ export interface GuiaPendente {
   id: string
   empresa: string
   nfNumero: string
+  clienteNome: string
   emitidaEm: Date
   clienteUf: string
   difalCalculado: number
@@ -147,6 +148,7 @@ export interface VendaMlBarreira {
   id: string
   empresa: string
   nfNumero: string
+  clienteNome: string
   emitidaEm: Date
   clienteUf: string
   difalCalculado: number
@@ -200,7 +202,7 @@ export async function listarVendasMlBarreira(prisma: PrismaClient): Promise<Vend
     // sem o número da venda não há onde anexar o comprovante: pagaríamos nós e o ML também, na barreira
     if (!n.guiaGeradaEm && !n.mlOrderId) faltando.push('número da venda no ML (para anexar o comprovante)')
     return {
-      id: n.id, empresa: n.empresa, nfNumero: n.nfNumero, emitidaEm: n.emitidaEm, clienteUf: n.clienteUf,
+      id: n.id, empresa: n.empresa, nfNumero: n.nfNumero, clienteNome: n.clienteNome, emitidaEm: n.emitidaEm, clienteUf: n.clienteUf,
       difalCalculado: n.difalCalculado, mlOrderId: n.mlOrderId, guiaGeradaEm: n.guiaGeradaEm, guiaLoteId: n.guiaLoteId,
       guiaAceita: situacaoDaGuia(n, n.guiaLoteId ? resultadoPorLote.get(n.guiaLoteId) : null) === '0',
       situacao: n.situacao, observacao: n.observacao,
@@ -265,6 +267,7 @@ export async function listarGuiasPendentes(prisma: PrismaClient, empresa?: strin
       id: n.id,
       empresa: n.empresa,
       nfNumero: n.nfNumero,
+      clienteNome: n.clienteNome,
       emitidaEm: n.emitidaEm,
       clienteUf: n.clienteUf,
       difalCalculado: n.difalCalculado,

@@ -27,6 +27,16 @@ function Icone({ nome, className = 'h-5 w-5' }: { nome: keyof typeof ICONES; cla
   )
 }
 
+// número da nota com o selo da empresa e, embaixo, o nome do cliente (ajuda a se organizar)
+function NotaCliente({ nf, empresa, cliente }: { nf: string; empresa: string; cliente: string }) {
+  return (
+    <span className="flex flex-col">
+      <span className="whitespace-nowrap font-medium text-slate-900">NF {nf} <SeloEmpresa empresa={empresa} /></span>
+      <span className="max-w-[220px] truncate text-xs font-normal text-slate-500" title={cliente}>{cliente}</span>
+    </span>
+  )
+}
+
 // selo da empresa (AVIC / AGRO)
 function SeloEmpresa({ empresa }: { empresa: string }) {
   const cor = empresa === 'AGRO' ? 'bg-violet-50 text-violet-700' : 'bg-sky-50 text-sky-700'
@@ -462,6 +472,9 @@ function GuiasPendentes() {
         </div>
       )}
       <table className="min-w-full text-sm">
+        <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+          <tr><th className="w-10 px-5 py-2"></th><th className="px-2 py-2">Nota / cliente</th><th className="px-2 py-2">Emissão</th><th className="px-2 py-2">Prazo</th><th className="px-2 py-2">UF</th><th className="px-2 py-2">Envio</th><th className="px-2 py-2 text-right">DIFAL</th><th className="px-5 py-2">Situação</th></tr>
+        </thead>
         <tbody className="divide-y divide-gray-100">
           {noPrazo.map((g) => {
             const bloqueada = !g.pronta || (empresaEscolhida !== undefined && g.empresa !== empresaEscolhida && !escolhidas.has(g.id))
@@ -477,8 +490,8 @@ function GuiasPendentes() {
                     className="h-4 w-4 accent-blue-600"
                   />
                 </td>
-                <td className="px-2 py-2.5 whitespace-nowrap font-medium text-slate-900">
-                  NF {g.nfNumero} <SeloEmpresa empresa={g.empresa} />
+                <td className="px-2 py-2.5">
+                  <NotaCliente nf={g.nfNumero} empresa={g.empresa} cliente={g.clienteNome} />
                 </td>
                 <td className="px-2 py-2.5 text-slate-500">{dataBr(g.emitidaEm)}</td>
                 <td className="px-2 py-2.5 text-xs text-slate-500">vence {dataBr(g.prazo)}</td>
@@ -581,6 +594,9 @@ function VendasMlBarreira() {
         </div>
       )}
       <table className="min-w-full text-sm">
+        <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+          <tr><th className="w-10 px-5 py-2"></th><th className="px-2 py-2">Nota / cliente</th><th className="px-2 py-2">Emissão</th><th className="px-2 py-2">UF</th><th className="px-2 py-2 text-right">DIFAL</th><th className="px-2 py-2">Venda no ML</th><th className="px-5 py-2 text-right">Situação</th></tr>
+        </thead>
         <tbody className="divide-y divide-slate-100">
           {vendas.map((v) => {
             const bloqueada = !v.pronta || (empresaEscolhida !== undefined && v.empresa !== empresaEscolhida && !escolhidas.has(v.id))
@@ -592,7 +608,7 @@ function VendasMlBarreira() {
                       title={bloqueada && v.pronta ? 'Lote de uma empresa só' : undefined} className="h-4 w-4 accent-blue-600" />
                   )}
                 </td>
-                <td className="whitespace-nowrap px-2 py-2.5 font-medium text-slate-900">NF {v.nfNumero} <SeloEmpresa empresa={v.empresa} /></td>
+                <td className="px-2 py-2.5"><NotaCliente nf={v.nfNumero} empresa={v.empresa} cliente={v.clienteNome} /></td>
                 <td className="px-2 py-2.5 text-slate-500">{dataBr(v.emitidaEm)}</td>
                 <td className="px-2 py-2.5 font-medium text-slate-700">{v.clienteUf}</td>
                 <td className="px-2 py-2.5 text-right font-semibold tabular-nums text-slate-900">{brl(v.difalCalculado)}</td>
@@ -682,7 +698,7 @@ function GuiasAtrasadas({ notas }: { notas: DifalGuiaPendente[] }) {
           <table className="min-w-full text-sm">
             <thead className="sticky top-0 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
               <tr>
-                <th className="px-5 py-2 text-left">NF</th>
+                <th className="px-5 py-2 text-left">Nota / cliente</th>
                 <th className="px-2 py-2 text-left">Emissão</th>
                 <th className="px-2 py-2 text-left">Venceu em</th>
                 <th className="px-2 py-2 text-left">UF</th>
@@ -693,7 +709,7 @@ function GuiasAtrasadas({ notas }: { notas: DifalGuiaPendente[] }) {
             <tbody className="divide-y divide-slate-100">
               {notas.map((g) => (
                 <tr key={g.id} className="transition-colors hover:bg-rose-50/40">
-                  <td className="whitespace-nowrap px-5 py-2 font-medium text-slate-900">NF {g.nfNumero} <SeloEmpresa empresa={g.empresa} /></td>
+                  <td className="px-5 py-2"><NotaCliente nf={g.nfNumero} empresa={g.empresa} cliente={g.clienteNome} /></td>
                   <td className="px-2 py-2 text-slate-500">{dataBr(g.emitidaEm)}</td>
                   <td className="px-2 py-2 text-rose-700">{dataBr(g.prazo)}</td>
                   <td className="px-2 py-2 font-medium text-slate-700">{g.clienteUf}</td>
@@ -1334,7 +1350,8 @@ export function DifalPage() {
   const [aba, setAba] = useState<NomeAba>('vendas')
 
   return (
-    <div className="space-y-6">
+    // mesma margem das outras páginas (p-6): sem ela o conteúdo encosta na barra lateral
+    <div className="space-y-6 p-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-slate-900">DIFAL</h1>
         <p className="mt-1 max-w-3xl text-sm text-slate-500">
