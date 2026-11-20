@@ -43,6 +43,8 @@ export interface GuiaPendente {
   guiaAceita: boolean
   situacao: string
   observacao: string | null
+  /** estado em que já tivemos cobrança de DIFAL (UFS_COM_COBRANCA): a tela mostra só esses por padrão */
+  estadoComCobranca: boolean
 }
 
 export interface EnvioDaNota {
@@ -176,6 +178,13 @@ export async function marcarComprovanteMlEnviado(prisma: PrismaClient, id: strin
   await prisma.difalNota.update({ where: { id }, data: { comprovanteMlEnviadoEm: new Date() } })
 }
 
+/**
+ * Estados em que já tivemos cobrança de DIFAL: os 7 do histórico auditado (AL, AM, CE, PB, PI, RN, TO) mais o AC,
+ * que aparece nos ZIPs de comprovantes do ML (dez/2025–nov/2026). Os demais o José confere com a contabilidade
+ * (decisão de 20/11/2026): a tela esconde esses por padrão.
+ */
+export const UFS_COM_COBRANCA = ['AC', 'AL', 'AM', 'CE', 'PB', 'PI', 'RN', 'TO']
+
 /** Vendas do ML que pagamos nós: sem guia e com nota de até 7 dias, ou com guia gerada e comprovante ainda não enviado */
 export function filtroVendasMl(): Prisma.DifalNotaWhereInput {
   const limite = new Date(`${somarDias(dataBR(), -JANELA_ML_DIAS)}T00:00:00Z`) // emitidaEm guarda Brasília como UTC
@@ -262,6 +271,7 @@ export async function listarGuiasPendentes(prisma: PrismaClient, empresa?: strin
       guiaAceita: situacaoDaGuia(n, n.guiaLoteId ? resultadoPorLote.get(n.guiaLoteId) : null) === '0',
       situacao: n.situacao,
       observacao: n.observacao,
+      estadoComCobranca: UFS_COM_COBRANCA.includes(n.clienteUf),
       envio: envioPorPedido.get(numeroDoPedido(n.empresa, n.nfNumero)) ?? null,
     }
   })

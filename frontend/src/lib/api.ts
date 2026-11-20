@@ -234,6 +234,8 @@ export interface DifalGuiaPendente {
   guiaAceita: boolean
   situacao: string
   observacao: string | null
+  /** estado em que já tivemos cobrança de DIFAL */
+  estadoComCobranca: boolean
 }
 
 

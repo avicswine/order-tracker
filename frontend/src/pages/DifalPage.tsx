@@ -315,9 +315,14 @@ function GuiasPendentes() {
     queryFn: difalApi.guiasPendentes,
   })
 
+  // por padrão só os estados em que já tivemos cobrança de DIFAL; os outros o José confere com a contabilidade
+  const [soComCobranca, setSoComCobranca] = useState(true)
+  const visiveis = soComCobranca ? guias.filter((g) => g.estadoComCobranca) : guias
+  const escondidas = guias.length - visiveis.length
+  const ufsComCobranca = [...new Set(guias.filter((g) => g.estadoComCobranca).map((g) => g.clienteUf))].sort().join(', ')
   // no prazo: entram em lote GNRE; atrasadas: vão para a contabilidade (sairiam sem multa e juros)
-  const noPrazo = guias.filter((g) => !g.atrasada)
-  const atrasadas = guias.filter((g) => g.atrasada)
+  const noPrazo = visiveis.filter((g) => !g.atrasada)
+  const atrasadas = visiveis.filter((g) => g.atrasada)
   const prontas = noPrazo.filter((g) => g.pronta)
   const empresaEscolhida = noPrazo.find((g) => escolhidas.has(g.id))?.empresa
 
@@ -353,6 +358,13 @@ function GuiasPendentes() {
 
   return (
     <>
+    <label className="flex w-fit cursor-pointer select-none items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700">
+      <input type="checkbox" checked={soComCobranca} onChange={(e) => setSoComCobranca(e.target.checked)} className="h-4 w-4 accent-blue-600" />
+      <span>
+        Só estados com cobrança de DIFAL{ufsComCobranca && <span className="text-slate-500"> ({ufsComCobranca})</span>}
+        {soComCobranca && escondidas > 0 && <span className="ml-2 text-xs text-slate-400">· {escondidas} nota(s) de outros estados escondidas</span>}
+      </span>
+    </label>
     {noPrazo.length === 0 ? (
       <div className="difal-entrar flex items-center gap-3 rounded-2xl border border-emerald-200 bg-white p-4 text-sm text-emerald-900">
         <span className="grid h-8 w-8 place-items-center rounded-xl bg-emerald-50 text-emerald-600"><Icone nome="ok" className="h-4 w-4" /></span>
