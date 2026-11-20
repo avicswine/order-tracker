@@ -123,8 +123,10 @@ function Vendas() {
   }, [emAndamento, qc])
   const importar = useMutation({
     mutationFn: () => difalApi.importar(90),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['difal-importacao'] }),
+    // também no erro: se outra aba já está importando (409), esta passa a acompanhar
+    onSettled: () => qc.invalidateQueries({ queryKey: ['difal-importacao'] }),
   })
+  const erroDoClique = (importar.error as { response?: { data?: { erro?: string } }; message?: string } | null)
   const importando = importar.isPending || !!importacao?.emAndamento
   const resumoImportacao = importacao?.resultado
     ? importacao.resultado.map((r) => `${r.empresa}: ${r.gravadas} nova(s), ${r.atualizadas} atualizada(s), ${r.puladas} já completas, ${r.erros.length} erro(s)`).join(' · ')
@@ -152,7 +154,7 @@ function Vendas() {
 
       {(importar.isError || importacao?.erro) && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-          Não foi possível buscar as notas: {importacao?.erro ?? (importar.error as Error).message}
+          Não foi possível buscar as notas: {importacao?.erro ?? erroDoClique?.response?.data?.erro ?? erroDoClique?.message}
         </div>
       )}
       {!importando && resumoImportacao && (
