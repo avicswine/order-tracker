@@ -503,6 +503,11 @@ function GuiasPendentes() {
   )
 }
 
+// Tela "Envie o comprovante de pagamento do DIFAL" da venda no ML (endereço enviado pelo José em 20/11/2026)
+function linkComprovanteMl(mlOrderId: string): string {
+  return `https://vendedores.mercadolivre.com.br/emissor/informar-documento?orders_ids=${encodeURIComponent(mlOrderId)}`
+}
+
 // Vendas do ML nos estados em que o ML pagava na barreira: pagamos nós logo após a venda e o José anexa o
 // comprovante na venda do ML (não há API oficial para isso). Decisão do José em 20/11/2026.
 function VendasMlBarreira() {
@@ -591,7 +596,15 @@ function VendasMlBarreira() {
                 <td className="px-2 py-2.5 font-medium text-slate-700">{v.clienteUf}</td>
                 <td className="px-2 py-2.5 text-right font-semibold tabular-nums text-slate-900">{brl(v.difalCalculado)}</td>
                 <td className="px-2 py-2.5 text-xs text-slate-500">
-                  {v.mlOrderId ? <>venda ML {v.mlOrderId} <BotaoCopiar texto={v.mlOrderId} rotulo="copiar" /></> : 'sem número da venda'}
+                  {v.mlOrderId ? (
+                    <span className="inline-flex flex-wrap items-center gap-2">
+                      venda ML {v.mlOrderId}
+                      <a href={linkComprovanteMl(v.mlOrderId)} target="_blank" rel="noreferrer"
+                        className="difal-btn rounded-lg border border-yellow-300 bg-yellow-50 px-3 py-1.5 font-medium text-yellow-800 hover:bg-yellow-100">
+                        Enviar comprovante no ML ↗
+                      </a>
+                    </span>
+                  ) : 'sem número da venda'}
                 </td>
                 <td className="px-5 py-2.5 text-right text-xs">
                   {v.guiaGeradaEm ? (
