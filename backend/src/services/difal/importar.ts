@@ -427,7 +427,11 @@ async function importarNotasSemTrava(
             // não toca no que foi conferido depois (cobrança do ML, guia paga). Nota com guia gerada mantém a conta
             // com que a guia saiu: refazer mudaria o valor da guia que já existe.
             const { valorComReducao, valorSemReducao, difalCalculado, difalMetodo, calculoDetalhe, responsavel, ...semConta } = registro
-            await prisma.difalNota.update({ where: { id: existente.id }, data: existente.guiaLoteId ? semConta : registro })
+            // a condição vai na própria gravação: se o lote foi gerado durante esta leitura, a conta fica como saiu na guia
+            const semLote = existente.guiaLoteId
+              ? { count: 0 }
+              : await prisma.difalNota.updateMany({ where: { id: existente.id, guiaLoteId: null }, data: registro })
+            if (semLote.count === 0) await prisma.difalNota.update({ where: { id: existente.id }, data: semConta })
             res.atualizadas++
           } else {
             await prisma.difalNota.create({ data: registro })
