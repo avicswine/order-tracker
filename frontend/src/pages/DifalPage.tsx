@@ -183,6 +183,21 @@ function bateBusca(busca: string, g: { empresa: string; nfNumero: string; client
   return semAcento(busca).split(/\s+/).filter(Boolean).every((palavra) => texto.includes(palavra))
 }
 
+/** nome do canal como aparece na tela (nota sem loja = balcão) */
+const nomeCanal = (canal: string | null) => canal ?? 'Balcão'
+
+/** escolha de canal: só os canais que existem na lista; '' = todos */
+function FiltroCanal({ canais, valor, onTrocar }: { canais: (string | null)[]; valor: string; onTrocar: (c: string) => void }) {
+  const opcoes = [...new Set(canais.map(nomeCanal))].sort()
+  return (
+    <select value={valor} onChange={(e) => onTrocar(e.target.value)}
+      className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:ring-4 focus:ring-blue-100">
+      <option value="">Todos os canais</option>
+      {opcoes.map((c) => <option key={c} value={c}>{c}</option>)}
+    </select>
+  )
+}
+
 const CAMPO_BUSCA = 'w-64 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm outline-none focus:ring-4 focus:ring-blue-100'
 const DICA_BUSCA = 'Buscar NF, cliente, empresa, UF, canal, produto…'
 
@@ -387,11 +402,15 @@ function GuiasPendentes() {
   const [de, setDe] = useState('')
   const [ate, setAte] = useState('')
   const [busca, setBusca] = useState('')
+  const [canal, setCanal] = useState('')
   // a data da nota é o dia de calendário gravado (Brasília como UTC): os 10 primeiros caracteres
   const noPeriodo = (g: DifalGuiaPendente) => (!de || g.emitidaEm.slice(0, 10) >= de) && (!ate || g.emitidaEm.slice(0, 10) <= ate)
-  const visiveis = (soComCobranca ? guias.filter((g) => g.estadoComCobranca) : guias).filter(noPeriodo)
+  const semFiltroDeEstado = guias.filter(noPeriodo)
     .filter((g) => bateBusca(busca, g, [g.envio?.transportadora]))
-  const escondidas = guias.filter(noPeriodo).length - visiveis.length
+    .filter((g) => !canal || nomeCanal(g.canal) === canal)
+  const visiveis = soComCobranca ? semFiltroDeEstado.filter((g) => g.estadoComCobranca) : semFiltroDeEstado
+  // só as escondidas pelo filtro de estado (o aviso diz "de outros estados")
+  const escondidas = semFiltroDeEstado.length - visiveis.length
   const ufsComCobranca = [...new Set(guias.filter((g) => g.estadoComCobranca).map((g) => g.clienteUf))].sort().join(', ')
   // no prazo: entram em lote GNRE; atrasadas: vão para a contabilidade (sairiam sem multa e juros)
   const noPrazo = visiveis.filter((g) => !g.atrasada)
@@ -405,6 +424,8 @@ function GuiasPendentes() {
   const verAtrasadas = lista === 'atrasadas'
   const mostradas = verAtrasadas ? atrasadas : noPrazo
   const prontas = mostradas.filter((g) => g.pronta)
+  // o lote leva só as marcadas que estão na tela: busca, datas ou estado não podem esconder uma nota que vai para a guia
+  const marcadas = mostradas.filter((g) => escolhidas.has(g.id)).map((g) => g.id)
   function trocarLista(nova: 'prazo' | 'atrasadas') {
     setLista(nova)
     setEscolhidas(new Set()) // não mistura no lote o que foi marcado na outra lista
@@ -416,7 +437,7 @@ function GuiasPendentes() {
   const prontasPorEmpresa = (empresa: string) => prontas.filter((g) => g.empresa === empresa).length
   // atrasada sai só com o imposto: o José confirma antes de gerar (decisão de 20/11/2026)
   function gerarComAviso() {
-    const atrasadasEscolhidas = guias.filter((g) => escolhidas.has(g.id) && g.atrasada).length
+    const atrasadasEscolhidas = mostradas.filter((g) => marcadas.includes(g.id) && g.atrasada).length
     if (atrasadasEscolhidas > 0 && !window.confirm(
       `${atrasadasEscolhidas} guia(s) atrasada(s): vão sair só com o imposto, SEM multa e juros. O estado pode cobrar a diferença depois. Gerar mesmo assim?`
     )) return
@@ -427,7 +448,7 @@ function GuiasPendentes() {
   const empresaEscolhida = guias.find((g) => escolhidas.has(g.id))?.empresa
 
   const gerar = useMutation({
-    mutationFn: () => difalApi.gerarLote([...escolhidas]),
+    mutationFn: () => difalApi.gerarLote(marcadas),
     onSuccess: (lote) => {
       baixarArquivo(lote.arquivo, lote.nome)
       setAviso(`Lote ${lote.loteId} gerado: ${lote.guias} guia(s), ${brl(lote.total)}. Envie ao portal na aba "Lotes GNRE".`)
@@ -482,6 +503,7 @@ function GuiasPendentes() {
       </div>
     <div className="flex flex-wrap items-center gap-3">
     <input type="search" value={busca} onChange={(e) => setBusca(e.target.value)} placeholder={DICA_BUSCA} className={CAMPO_BUSCA} />
+    <FiltroCanal canais={guias.map((g) => g.canal)} valor={canal} onTrocar={(c) => { setCanal(c); setEscolhidas(new Set()) }} />
     <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700">
       <span>Emitidas de</span>
       <input type="date" value={de} onChange={(e) => setDe(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1 text-sm outline-none focus:ring-4 focus:ring-blue-100" />
@@ -550,7 +572,7 @@ function GuiasPendentes() {
             Marcar {emp} ({Math.min(prontasPorEmpresa(emp), LIMITE_GUIAS_LOTE)})
           </button>
         ))}
-        {escolhidas.size > 0 && (
+        {marcadas.length > 0 && (
           <button onClick={() => setEscolhidas(new Set())} className="difal-btn rounded-xl px-3 py-2 text-sm text-slate-500 hover:text-slate-800">Limpar</button>
         )}
         {verAtrasadas && (
@@ -560,10 +582,10 @@ function GuiasPendentes() {
         )}
         <button
           onClick={gerarComAviso}
-          disabled={escolhidas.size === 0 || gerar.isPending}
+          disabled={marcadas.length === 0 || gerar.isPending}
           className={`difal-btn rounded-xl bg-gradient-to-r ${verAtrasadas ? 'from-rose-600 to-orange-500 shadow-rose-500/30' : 'from-indigo-600 to-violet-600 shadow-indigo-500/30 hover:from-indigo-500 hover:to-violet-500'} px-4 py-2 text-sm font-medium text-white shadow-md disabled:opacity-40`}
         >
-          {gerar.isPending ? 'Montando lote…' : `Baixar lote GNRE (${escolhidas.size})`}
+          {gerar.isPending ? 'Montando lote…' : `Baixar lote GNRE (${marcadas.length})`}
         </button>
         </span>
       </div>
@@ -1248,6 +1270,7 @@ function GuiasEmitidas() {
   const [dataPagamento, setDataPagamento] = useState(isoDia(new Date()))
   const [filtro, setFiltro] = useState<'todas' | 'nao_pagas' | 'pagas'>('todas')
   const [busca, setBusca] = useState('')
+  const [canal, setCanal] = useState('')
   const [soComCobranca, setSoComCobranca] = useState(true)
   const [de, setDe] = useState('')
   const [ate, setAte] = useState('')
@@ -1269,6 +1292,7 @@ function GuiasEmitidas() {
     .filter((g) => (!de || g.geradaEm >= de) && (!ate || g.geradaEm <= ate))
     .filter((g) => filtro === 'todas' || (filtro === 'pagas' ? !!g.pagaEm : !g.pagaEm))
     .filter((g) => bateBusca(busca, g, [g.loteId, g.linhaDigitavel]))
+    .filter((g) => !canal || nomeCanal(g.canal) === canal)
   const totalPago = visiveis.reduce((s, g) => s + (g.valorPago ?? 0), 0)
   // só as marcadas que estão na tela: trocar o filtro não pode deixar escondida uma guia marcada
   const marcadas = visiveis.filter((g) => escolhidas.has(g.id)).map((g) => g.id)
@@ -1299,6 +1323,7 @@ function GuiasEmitidas() {
       {erro && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-800">{erro}</div>}
       <div className="flex flex-wrap items-center gap-3">
         <input type="search" value={busca} onChange={(e) => setBusca(e.target.value)} placeholder={DICA_BUSCA} className={CAMPO_BUSCA} />
+        <FiltroCanal canais={data.guias.map((g) => g.canal)} valor={canal} onTrocar={setCanal} />
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700">
           <span>Geradas de</span>
           <input type="date" value={de} onChange={(e) => setDe(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1 text-sm" />
