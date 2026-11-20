@@ -1228,6 +1228,166 @@ function Configuracao() {
   )
 }
 
+// ------------------------------------------------- Guias emitidas: registro e pagamento
+const SITUACAO_PORTAL: Record<string, [string, string]> = {
+  '0': ['aceita', 'bg-emerald-50 text-emerald-700 ring-emerald-200'],
+  '1': ['recusada pelo portal', 'bg-rose-50 text-rose-700 ring-rose-200'],
+  '2': ['recusada pelo estado', 'bg-rose-50 text-rose-700 ring-rose-200'],
+  '3': ['erro de comunicação', 'bg-amber-50 text-amber-700 ring-amber-200'],
+  '4': ['processando', 'bg-sky-50 text-sky-700 ring-sky-200'],
+}
+
+function GuiasEmitidas() {
+  const qc = useQueryClient()
+  const { data, isLoading } = useQuery({ queryKey: ['difal-guias-emitidas'], queryFn: difalApi.guiasEmitidas })
+  const [escolhidas, setEscolhidas] = useState<Set<string>>(new Set())
+  const [dataPagamento, setDataPagamento] = useState(isoDia(new Date()))
+  const [filtro, setFiltro] = useState<'todas' | 'nao_pagas' | 'pagas'>('todas')
+  const [soComCobranca, setSoComCobranca] = useState(true)
+  const [de, setDe] = useState('')
+  const [ate, setAte] = useState('')
+  const [erro, setErro] = useState<string | null>(null)
+  const marcar = useMutation({
+    mutationFn: ({ ids, data: d }: { ids: string[]; data: string | null }) => difalApi.marcarPagas(ids, d),
+    onSuccess: () => {
+      setEscolhidas(new Set())
+      qc.invalidateQueries({ queryKey: ['difal-guias-emitidas'] })
+      qc.invalidateQueries({ queryKey: ['difal-resumo'] })
+    },
+    onError: (e) => setErro(mensagemErro(e)),
+  })
+  if (isLoading || !data) return null
+
+  const visiveis = data.guias
+    .filter((g) => !soComCobranca || g.estadoComCobranca)
+    .filter((g) => (!de || g.geradaEm >= de) && (!ate || g.geradaEm <= ate))
+    .filter((g) => filtro === 'todas' || (filtro === 'pagas' ? !!g.pagaEm : !g.pagaEm))
+  const totalPago = visiveis.reduce((s, g) => s + (g.valorPago ?? 0), 0)
+  const totalAPagar = visiveis.filter((g) => !g.pagaEm && g.situacaoPortal === '0').reduce((s, g) => s + g.difalCalculado, 0)
+  function alternar(id: string) {
+    setEscolhidas((a) => { const n = new Set(a); if (n.has(id)) n.delete(id); else n.add(id); return n })
+  }
+  // planilha para a contabilidade: sem nome nem CPF do cliente (LGPD)
+  function baixar() {
+    const linhas = [['Empresa', 'NF', 'UF', 'Canal', 'DIFAL (R$)', 'Lote', 'Gerada em', 'Portal', 'Atrasada (sem multa/juros)', 'Paga em', 'Valor pago (R$)', 'Comprovante no ML'].join(';')].concat(
+      visiveis.map((g) => [
+        g.empresa, g.nfNumero, g.clienteUf, g.canal ?? 'Balcão', g.difalCalculado.toFixed(2).replace('.', ','), g.loteId, dataBr(g.geradaEm),
+        SITUACAO_PORTAL[g.situacaoPortal ?? '']?.[0] ?? 'sem resultado', g.atrasada ? 'sim' : 'não', g.pagaEm ? dataBr(g.pagaEm) : '',
+        g.valorPago != null ? g.valorPago.toFixed(2).replace('.', ',') : '', g.comprovanteMlEnviadoEm ? dataBr(g.comprovanteMlEnviadoEm) : '',
+      ].map((v) => String(v).replace(/;/g, ',')).join(';'))
+    )
+    baixarArquivo(new Blob(['\ufeff' + linhas.join('\r\n')], { type: 'text/csv;charset=utf-8' }), `difal-guias-emitidas-${isoDia(new Date())}.csv`)
+  }
+
+  return (
+    <div className="space-y-4">
+      {data.alertas.map((a, i) => (
+        <div key={i} className={`difal-entrar flex items-start gap-3 rounded-xl border px-4 py-3 text-sm ${a.tipo === 'dobro' ? 'border-rose-300 bg-rose-50 text-rose-900' : 'border-amber-200 bg-amber-50 text-amber-900'}`}>
+          <Icone nome="alerta" className="mt-0.5 h-4 w-4 shrink-0" />
+          <span><b>{a.tipo === 'dobro' ? 'Possível guia em dobro: ' : 'Sem pagamento marcado: '}</b>{a.texto}</span>
+        </div>
+      ))}
+      {erro && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-800">{erro}</div>}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700">
+          <span>Geradas de</span>
+          <input type="date" value={de} onChange={(e) => setDe(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1 text-sm" />
+          <span>até</span>
+          <input type="date" value={ate} onChange={(e) => setAte(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1 text-sm" />
+          <span className="ml-1 inline-flex rounded-lg bg-slate-100 p-0.5 text-xs">
+            {atalhosPeriodo().map(([rotulo, d, a]) => (
+              <button key={rotulo} onClick={() => { setDe(d); setAte(a) }}
+                className={`rounded-md px-2.5 py-1 ${de === d && ate === a ? 'bg-white font-medium text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>{rotulo}</button>
+            ))}
+          </span>
+        </div>
+        <span className="inline-flex rounded-xl bg-white p-1 text-sm ring-1 ring-slate-200">
+          {([['todas', 'Todas'], ['nao_pagas', 'Não pagas'], ['pagas', 'Pagas']] as const).map(([v, r]) => (
+            <button key={v} onClick={() => setFiltro(v)} className={`rounded-lg px-3 py-1 ${filtro === v ? 'bg-gradient-to-r from-indigo-600 to-sky-500 text-white' : 'text-slate-600 hover:text-slate-900'}`}>{r}</button>
+          ))}
+        </span>
+        <label className="flex cursor-pointer select-none items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700">
+          <input type="checkbox" checked={soComCobranca} onChange={(e) => setSoComCobranca(e.target.checked)} className="h-4 w-4 accent-blue-600" />
+          Só estados com cobrança de DIFAL
+        </label>
+      </div>
+      <div className="difal-secao difal-secao-violeta overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="difal-cab-violeta flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+          <div>
+            <p className="text-base font-semibold text-slate-900">Guias emitidas</p>
+            <p className="text-xs text-slate-500">{visiveis.length} guia(s) · pago {brl(totalPago)} · aceitas e ainda não pagas {brl(totalAPagar)}</p>
+          </div>
+          <span className="flex flex-wrap items-center gap-2">
+            {escolhidas.size > 0 && (
+              <>
+                <input type="date" value={dataPagamento} onChange={(e) => setDataPagamento(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm" />
+                <button onClick={() => { setErro(null); marcar.mutate({ ids: [...escolhidas], data: dataPagamento }) }} disabled={marcar.isPending}
+                  className="difal-btn rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 px-4 py-2 text-sm font-medium text-white shadow-md shadow-emerald-500/30 disabled:opacity-40">
+                  Marcar como paga ({escolhidas.size})
+                </button>
+                <button onClick={() => { setErro(null); if (window.confirm(`Desmarcar ${escolhidas.size} guia(s) como paga(s)?`)) marcar.mutate({ ids: [...escolhidas], data: null }) }}
+                  className="difal-btn rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">Desmarcar</button>
+              </>
+            )}
+            <button onClick={baixar} className="difal-btn rounded-xl border border-violet-200 bg-white px-4 py-2 text-sm text-violet-700 hover:bg-violet-50">Baixar planilha</button>
+          </span>
+        </div>
+        {visiveis.length === 0 ? (
+          <p className="px-5 py-6 text-center text-sm text-slate-500">Nenhuma guia emitida com esses filtros.</p>
+        ) : (
+        <div className="max-h-[560px] overflow-auto">
+        <table className="min-w-full text-sm">
+          <thead className="sticky top-0 bg-gradient-to-r from-violet-50 to-indigo-50 text-left text-xs uppercase tracking-wide text-violet-900/60">
+            <tr><th className="w-10 px-5 py-2"></th><th className="px-2 py-2">Nota / cliente</th><th className="px-2 py-2">UF</th><th className="px-2 py-2">Canal</th><th className="px-2 py-2 text-right">DIFAL</th><th className="px-2 py-2">Gerada</th><th className="px-2 py-2">Portal</th><th className="px-2 py-2">Pagamento</th><th className="px-5 py-2">Código</th></tr>
+          </thead>
+          <tbody className="difal-linhas divide-y divide-slate-100">
+            {visiveis.map((g) => {
+              const portal = SITUACAO_PORTAL[g.situacaoPortal ?? '']
+              return (
+                <tr key={g.id}>
+                  <td className="px-5 py-2.5"><input type="checkbox" checked={escolhidas.has(g.id)} onChange={() => alternar(g.id)} className="h-4 w-4 accent-violet-600" /></td>
+                  <td className="px-2 py-2.5"><NotaCliente nf={g.nfNumero} empresa={g.empresa} cliente={g.clienteNome} itens={g.itens} /></td>
+                  <td className="px-2 py-2.5"><span className="rounded-md bg-indigo-50 px-1.5 py-0.5 text-xs font-semibold text-indigo-700 ring-1 ring-indigo-100">{g.clienteUf}</span></td>
+                  <td className="px-2 py-2.5 text-xs">
+                    <span className="flex flex-col gap-1">
+                      <span className={`w-fit max-w-[150px] truncate rounded-md px-1.5 py-0.5 font-medium ring-1 ${corCanal(g.canal)}`}>{g.canal ?? 'Balcão'}</span>
+                      {g.ml && g.mlLogistica && <span className={`w-fit rounded-md px-1.5 py-0.5 text-[11px] font-medium ring-1 ${COR_LOGISTICA[g.mlLogistica] ?? 'bg-slate-50 text-slate-600 ring-slate-200'}`}>{g.mlLogistica}</span>}
+                    </span>
+                  </td>
+                  <td className="px-2 py-2.5 text-right font-semibold tabular-nums text-violet-700">
+                    <ComDica largura={460} altura={340} conteudo={<CalculoDaNota d={g.calculoDetalhe} total={g.difalCalculado} />}>
+                      <span className="cursor-help underline decoration-dotted decoration-slate-300 underline-offset-4">{brl(g.difalCalculado)}</span>
+                    </ComDica>
+                  </td>
+                  <td className="px-2 py-2.5 text-xs text-slate-600">
+                    {dataBr(g.geradaEm)}
+                    <span className="block text-[11px] text-slate-400">{g.loteId}{g.ambiente === 'homologacao' ? ' · teste' : ''}</span>
+                  </td>
+                  <td className="px-2 py-2.5 text-xs">
+                    <span className={`rounded-full px-2 py-0.5 font-medium ring-1 ${portal?.[1] ?? 'bg-slate-50 text-slate-500 ring-slate-200'}`}>{portal?.[0] ?? (g.enviadaEm ? 'aguardando resultado' : 'não enviada')}</span>
+                  </td>
+                  <td className="px-2 py-2.5 text-xs">
+                    <span className="flex flex-col gap-1">
+                      {g.pagaEm
+                        ? <span className="w-fit rounded-full bg-emerald-50 px-2 py-0.5 font-medium text-emerald-700 ring-1 ring-emerald-200">paga em {dataBr(g.pagaEm)}</span>
+                        : <span className="w-fit rounded-full bg-slate-50 px-2 py-0.5 text-slate-500 ring-1 ring-slate-200">não paga</span>}
+                      {g.atrasada && <span className="w-fit rounded-full bg-rose-50 px-2 py-0.5 font-medium text-rose-700 ring-1 ring-rose-200">atrasada · sem multa e juros</span>}
+                      {g.ml && <span className="w-fit rounded-full bg-yellow-50 px-2 py-0.5 text-yellow-800 ring-1 ring-yellow-200">{g.comprovanteMlEnviadoEm ? `comprovante no ML ${dataBr(g.comprovanteMlEnviadoEm)}` : 'comprovante no ML: falta'}</span>}
+                    </span>
+                  </td>
+                  <td className="px-5 py-2.5 text-xs">{g.linhaDigitavel ? <BotaoCopiar texto={g.linhaDigitavel} rotulo="Copiar código" /> : <span className="text-slate-400">—</span>}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+        </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ---------------------------------------------------------------- Histórico apurado
 function Historico() {
   const [verNotas, setVerNotas] = useState(false)
@@ -1244,6 +1404,9 @@ function Historico() {
 
   return (
     <div className="space-y-6">
+      <GuiasEmitidas />
+
+      <h2 className="pt-2 text-base font-semibold text-slate-900">Histórico auditado: o que cada estado cobrou (dez/2025 a nov/2026)</h2>
       <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-5">
         <p className="text-sm text-amber-900">
           Entre {dataBr(h.periodo.de)} e {dataBr(h.periodo.ate)} pagamos{' '}

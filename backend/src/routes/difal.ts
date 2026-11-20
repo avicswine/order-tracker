@@ -11,6 +11,7 @@ import { prisma } from '../lib/prisma'
 import { Prisma } from '@prisma/client'
 import { importarNotas, type ResultadoImportacao } from '../services/difal/importar'
 import { preencherLogisticaMl } from '../services/difal/logisticaMl'
+import { listarGuiasEmitidas, marcarGuiasPagas } from '../services/difal/guiasEmitidas'
 import { semearAliquotas } from '../services/difal/aliquotas'
 import { listarGuiasPendentes, gerarLoteDasNotas, classificarCamposExtras, marcarComprovanteMlEnviado, filtroVendasMl } from '../services/difal/guias'
 import { ErroMontagemGnre } from '../services/difal/gnre'
@@ -205,6 +206,31 @@ router.post('/notas/:id/comprovante-ml', async (req: Request, res: Response) => 
     res.status(500).json({ erro: (e as Error).message })
   }
 })
+
+// GET /difal/guias-emitidas — registro das guias geradas, situação no portal, pagamento e alertas
+router.get('/guias-emitidas', async (_req: Request, res: Response) => {
+  try {
+    res.json(await listarGuiasEmitidas(prisma))
+  } catch (e) {
+    res.status(500).json({ erro: (e as Error).message })
+  }
+})
+
+// POST /difal/guias-emitidas/pagas — marca (data AAAA-MM-DD) ou desmarca (data null) guias como pagas
+router.post(
+  '/guias-emitidas/pagas',
+  [body('ids').isArray({ min: 1, max: 500 }), body('ids.*').isString().notEmpty(), body('data').optional({ nullable: true }).isISO8601()],
+  async (req: Request, res: Response) => {
+    const erros = validationResult(req)
+    if (!erros.isEmpty()) return res.status(400).json({ errors: erros.array() })
+    try {
+      const n = await marcarGuiasPagas(prisma, req.body.ids as string[], req.body.data ? String(req.body.data).slice(0, 10) : null)
+      res.json({ ok: true, notas: n })
+    } catch (e) {
+      res.status(500).json({ erro: (e as Error).message })
+    }
+  }
+)
 
 // GET /difal/guias-pendentes — notas que precisam de guia nossa e o que falta em cada uma
 router.get('/guias-pendentes', [query('empresa').optional().trim()], async (req: Request, res: Response) => {

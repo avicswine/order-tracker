@@ -177,6 +177,34 @@ export interface DifalItemNota {
 }
 
 
+/** guia gerada, com situação no portal e pagamento (aba 'O que já pagamos') */
+export interface DifalGuiaEmitida {
+  id: string
+  empresa: string
+  nfNumero: string
+  clienteNome: string
+  clienteUf: string
+  estadoComCobranca: boolean
+  canal: string | null
+  ml: boolean
+  mlLogistica: string | null
+  mlOrderId: string | null
+  difalCalculado: number
+  calculoDetalhe: DifalCalculoDetalhe | null
+  itens: DifalItemNota[] | null
+  emitidaEm: string
+  loteId: string
+  ambiente: string | null
+  geradaEm: string
+  enviadaEm: string | null
+  situacaoPortal: string | null
+  linhaDigitavel: string | null
+  atrasada: boolean
+  pagaEm: string | null
+  valorPago: number | null
+  comprovanteMlEnviadoEm: string | null
+}
+
 export interface DifalResumo {
   porResponsavel: {
     responsavel: DifalResponsavel
@@ -419,6 +447,8 @@ export const difalApi = {
   sincronizarCobrancasMl: () =>
     api.post<DifalSincronizacaoMl[]>('/difal/cobrancas-ml/sincronizar', { meses: 2 }).then((r) => r.data),
   marcarComprovanteMl: (id: string) => api.post<{ ok: boolean }>(`/difal/notas/${id}/comprovante-ml`).then((r) => r.data),
+  guiasEmitidas: () => api.get<{ guias: DifalGuiaEmitida[]; alertas: { tipo: string; texto: string }[] }>('/difal/guias-emitidas').then((r) => r.data),
+  marcarPagas: (ids: string[], data: string | null) => api.post<{ ok: boolean; notas: number }>('/difal/guias-emitidas/pagas', { ids, data }).then((r) => r.data),
   guiasPendentes: () => api.get<DifalGuiaPendente[]>('/difal/guias-pendentes').then((r) => r.data),
   // devolve o XML do lote GNRE como arquivo para baixar
   gerarLote: (ids: string[]) =>
