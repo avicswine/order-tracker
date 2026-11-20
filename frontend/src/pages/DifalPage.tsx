@@ -1599,25 +1599,23 @@ export function DifalPage() {
   return (
     // mesma margem das outras páginas (p-6): sem ela o conteúdo encosta na barra lateral
     <div className="difal-fundo min-h-screen space-y-6 p-6">
-      <div className="difal-hero px-7 py-6">
+      {/* cabeçalho numa linha só; a engrenagem fica dentro da linha (antes, absoluta, o título passava por cima e engolia o clique) */}
+      <div className="difal-hero flex flex-wrap items-center gap-x-4 gap-y-2 px-6 py-4">
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/10 ring-1 ring-white/20 backdrop-blur"><Icone nome="documento" className="h-5 w-5 text-sky-300" /></span>
+        <h1 className="text-2xl font-semibold tracking-tight">DIFAL</h1>
+        <span className="rounded-full bg-sky-400/15 px-2.5 py-0.5 text-xs font-medium text-sky-200 ring-1 ring-sky-300/30">monitor de guias</span>
+        <p className="min-w-0 flex-1 text-xs text-indigo-100/75" title="Convênio ICMS 52/91: carga total de 5,6% para o NCM 8436; a origem (RS) já recolhe 4,1%">
+          NCM 8436: carga de 5,6% − 4,1% na origem = <b className="text-sky-200">1,5%</b> para o destino. Pagar no dia da emissão da NF.
+        </p>
         <button
           onClick={() => setAba(aba === 'config' ? 'vendas' : 'config')}
-          title={aba === 'config' ? 'Voltar para Vendas' : 'Configuração (portal GNRE e receitas por estado)'}
-          className={`difal-btn absolute right-5 top-5 grid h-10 w-10 place-items-center rounded-xl ring-1 backdrop-blur transition-colors ${
+          title={aba === 'config' ? 'Voltar para Vendas' : 'Configuração (portal GNRE, receitas por estado e rotina diária)'}
+          className={`difal-btn grid h-9 w-9 shrink-0 place-items-center rounded-xl ring-1 backdrop-blur transition-colors ${
             aba === 'config' ? 'bg-sky-400/30 text-white ring-sky-300/50' : 'bg-white/10 text-sky-200 ring-white/20 hover:bg-white/20'
           }`}
         >
           <Icone nome="engrenagem" className="h-5 w-5" />
         </button>
-        <div className="flex items-center gap-3">
-          <span className="grid h-10 w-10 place-items-center rounded-xl bg-white/10 ring-1 ring-white/20 backdrop-blur"><Icone nome="documento" className="h-5 w-5 text-sky-300" /></span>
-          <h1 className="text-3xl font-semibold tracking-tight">DIFAL</h1>
-          <span className="rounded-full bg-sky-400/15 px-2.5 py-0.5 text-xs font-medium text-sky-200 ring-1 ring-sky-300/30">monitor de guias</span>
-        </div>
-        <p className="mt-2 max-w-3xl text-sm text-indigo-100/80">
-          Diferencial de alíquota das vendas interestaduais. Produtos de NCM 8436 têm a redução do
-          Convênio 52/91: a carga total é 5,6%, a origem recolhe 4,1% e sobra 1,5% para o destino.
-        </p>
       </div>
 
       <Abas aba={aba} onTrocar={setAba} />
