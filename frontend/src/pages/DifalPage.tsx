@@ -174,6 +174,18 @@ function brl(v: number | null | undefined) {
   return (v ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
+// busca da lista: sem diferença de acento nem maiúscula; todas as palavras digitadas precisam aparecer
+const semAcento = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+function bateBusca(busca: string, g: { empresa: string; nfNumero: string; clienteNome: string; clienteUf: string; canal: string | null; mlLogistica: string | null; mlOrderId: string | null; itens: DifalItemNota[] | null }, extra: (string | null | undefined)[] = []) {
+  if (!busca.trim()) return true
+  const texto = semAcento([g.empresa, g.nfNumero, g.clienteNome, g.clienteUf, g.canal ?? 'Balcão', g.mlLogistica, g.mlOrderId,
+    ...(g.itens ?? []).flatMap((i) => [i.sku, i.descricao]), ...extra].filter(Boolean).join(' '))
+  return semAcento(busca).split(/\s+/).filter(Boolean).every((palavra) => texto.includes(palavra))
+}
+
+const CAMPO_BUSCA = 'w-64 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm outline-none focus:ring-4 focus:ring-blue-100'
+const DICA_BUSCA = 'Buscar NF, cliente, empresa, UF, canal, produto…'
+
 function pct(v: number | null | undefined) {
   return `${(v ?? 0).toFixed(2).replace('.', ',')}%`
 }
@@ -262,7 +274,6 @@ function Abas({ aba, onTrocar }: { aba: NomeAba; onTrocar: (a: NomeAba) => void 
 function Vendas() {
   const qc = useQueryClient()
 
-  const { data: resumo } = useQuery({ queryKey: ['difal-resumo'], queryFn: () => difalApi.resumo() })
   // A importação roda no servidor em segundo plano; aqui só consultamos o andamento a cada 3 s
   const { data: importacao } = useQuery({
     queryKey: ['difal-importacao'],
@@ -326,31 +337,6 @@ function Vendas() {
         </div>
       )}
 
-      <div className="difal-escalonado grid gap-4 sm:grid-cols-3">
-        <Numero
-          icone="documento"
-          titulo="Guias que precisamos emitir"
-          valor={brl(resumo?.aPagar.valor)}
-          detalhe={`${resumo?.aPagar.notas ?? 0} nota(s) com DIFAL para pagar (balcão, lojas e Mercado Livre)`}
-          tom={(resumo?.aPagar.valor ?? 0) > 0 ? 'alerta' : 'ok'}
-        />
-        <Numero
-          icone="moedas"
-          titulo="Valor total dessas notas"
-          valor={brl(resumo?.aPagar.valorNotas)}
-          detalhe={resumo?.aPagar.valorNotas
-            ? `DIFAL médio: ${pct((resumo.aPagar.valor / resumo.aPagar.valorNotas) * 100)} do valor das notas`
-            : 'sem notas para pagar'}
-        />
-        <Numero
-          icone={(resumo?.divergentes.notas ?? 0) > 0 ? 'alerta' : 'ok'}
-          titulo="Cobrança do ML diferente do calculado"
-          valor={brl(resumo?.divergentes.valor)}
-          detalhe={`${resumo?.divergentes.notas ?? 0} nota(s) para conferir`}
-          tom={(resumo?.divergentes.notas ?? 0) > 0 ? 'alerta' : 'ok'}
-        />
-      </div>
-
       <GuiasPendentes />
 
 
@@ -393,18 +379,26 @@ function GuiasPendentes() {
     queryFn: difalApi.guiasPendentes,
   })
 
+  // divergências do ML (card do topo) vêm do resumo do servidor
+  const { data: resumo } = useQuery({ queryKey: ['difal-resumo'], queryFn: () => difalApi.resumo() })
   // por padrão só os estados em que já tivemos cobrança de DIFAL; os outros o José confere com a contabilidade
   const [soComCobranca, setSoComCobranca] = useState(true)
   // filtro de datas de emissão (vale para as listas e para a planilha); padrão: tudo
   const [de, setDe] = useState('')
   const [ate, setAte] = useState('')
+  const [busca, setBusca] = useState('')
   // a data da nota é o dia de calendário gravado (Brasília como UTC): os 10 primeiros caracteres
   const noPeriodo = (g: DifalGuiaPendente) => (!de || g.emitidaEm.slice(0, 10) >= de) && (!ate || g.emitidaEm.slice(0, 10) <= ate)
   const visiveis = (soComCobranca ? guias.filter((g) => g.estadoComCobranca) : guias).filter(noPeriodo)
+    .filter((g) => bateBusca(busca, g, [g.envio?.transportadora]))
   const escondidas = guias.filter(noPeriodo).length - visiveis.length
   const ufsComCobranca = [...new Set(guias.filter((g) => g.estadoComCobranca).map((g) => g.clienteUf))].sort().join(', ')
   // no prazo: entram em lote GNRE; atrasadas: vão para a contabilidade (sairiam sem multa e juros)
   const noPrazo = visiveis.filter((g) => !g.atrasada)
+  // cards do topo: o que ainda não tem guia na lista filtrada (no prazo e atrasadas)
+  const aEmitir = visiveis.filter((g) => !g.guiaGeradaEm)
+  const difalAEmitir = aEmitir.reduce((s, g) => s + g.difalCalculado, 0)
+  const valorNotasAEmitir = aEmitir.reduce((s, g) => s + g.valorNota, 0)
   const atrasadas = visiveis.filter((g) => g.atrasada)
   // seletor no topo: a mesma tabela mostra as do prazo ou as atrasadas
   const [lista, setLista] = useState<'prazo' | 'atrasadas'>('prazo')
@@ -464,7 +458,30 @@ function GuiasPendentes() {
 
   return (
     <>
+      <div className="difal-escalonado grid gap-4 sm:grid-cols-3">
+        <Numero
+          icone="documento"
+          titulo="Guias que precisamos emitir"
+          valor={brl(difalAEmitir)}
+          detalhe={`${aEmitir.length} nota(s) sem guia nesta lista (no prazo e atrasadas, com os filtros abaixo)`}
+          tom={difalAEmitir > 0 ? 'alerta' : 'ok'}
+        />
+        <Numero
+          icone="moedas"
+          titulo="Valor total dessas notas"
+          valor={brl(valorNotasAEmitir)}
+          detalhe={valorNotasAEmitir ? `DIFAL médio: ${pct((difalAEmitir / valorNotasAEmitir) * 100)} do valor das notas` : 'sem notas para pagar'}
+        />
+        <Numero
+          icone={(resumo?.divergentes.notas ?? 0) > 0 ? 'alerta' : 'ok'}
+          titulo="Cobrança do ML diferente do calculado"
+          valor={brl(resumo?.divergentes.valor)}
+          detalhe={`${resumo?.divergentes.notas ?? 0} nota(s) para conferir (todas, sem filtro)`}
+          tom={(resumo?.divergentes.notas ?? 0) > 0 ? 'alerta' : 'ok'}
+        />
+      </div>
     <div className="flex flex-wrap items-center gap-3">
+    <input type="search" value={busca} onChange={(e) => setBusca(e.target.value)} placeholder={DICA_BUSCA} className={CAMPO_BUSCA} />
     <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700">
       <span>Emitidas de</span>
       <input type="date" value={de} onChange={(e) => setDe(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1 text-sm outline-none focus:ring-4 focus:ring-blue-100" />
@@ -1230,6 +1247,7 @@ function GuiasEmitidas() {
   const [escolhidas, setEscolhidas] = useState<Set<string>>(new Set())
   const [dataPagamento, setDataPagamento] = useState(isoDia(new Date()))
   const [filtro, setFiltro] = useState<'todas' | 'nao_pagas' | 'pagas'>('todas')
+  const [busca, setBusca] = useState('')
   const [soComCobranca, setSoComCobranca] = useState(true)
   const [de, setDe] = useState('')
   const [ate, setAte] = useState('')
@@ -1250,6 +1268,7 @@ function GuiasEmitidas() {
     .filter((g) => !soComCobranca || g.estadoComCobranca)
     .filter((g) => (!de || g.geradaEm >= de) && (!ate || g.geradaEm <= ate))
     .filter((g) => filtro === 'todas' || (filtro === 'pagas' ? !!g.pagaEm : !g.pagaEm))
+    .filter((g) => bateBusca(busca, g, [g.loteId, g.linhaDigitavel]))
   const totalPago = visiveis.reduce((s, g) => s + (g.valorPago ?? 0), 0)
   // só as marcadas que estão na tela: trocar o filtro não pode deixar escondida uma guia marcada
   const marcadas = visiveis.filter((g) => escolhidas.has(g.id)).map((g) => g.id)
@@ -1279,6 +1298,7 @@ function GuiasEmitidas() {
       ))}
       {erro && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-800">{erro}</div>}
       <div className="flex flex-wrap items-center gap-3">
+        <input type="search" value={busca} onChange={(e) => setBusca(e.target.value)} placeholder={DICA_BUSCA} className={CAMPO_BUSCA} />
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700">
           <span>Geradas de</span>
           <input type="date" value={de} onChange={(e) => setDe(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1 text-sm" />
