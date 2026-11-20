@@ -46,6 +46,13 @@ export const ultimaExecucaoRotina = () => ultima
 
 let rodando = false
 
+/** último dia útil bancário antes de 'dia' (AAAA-MM-DD) */
+function diaUtilAnterior(dia: string): string {
+  let d = somarDias(dia, -1)
+  while (proximoDiaUtil(d) !== d) d = somarDias(d, -1)
+  return d
+}
+
 /** importa as notas dos últimos dias e o tipo de envio do ML; o que falhar entra no aviso */
 async function atualizarDados(prisma: PrismaClient, hoje: string, falhas: string[]) {
   try {
@@ -102,7 +109,12 @@ async function montarMensagem(prisma: PrismaClient, hoje: string, simulacao: boo
   // lista do dia: igual ao painel (no prazo, estados com cobrança), só o que está pronto e sem guia
   const pendentes = await listarGuiasPendentes(prisma)
   const doDia = pendentes.filter((g) => !g.atrasada && g.estadoComCobranca && g.pronta && !g.guiaGeradaEm)
-  const atrasadas = pendentes.filter((g) => g.atrasada && g.estadoComCobranca).length
+  const atrasadasTodas = pendentes.filter((g) => g.atrasada && g.estadoComCobranca)
+  // venceram no último dia útil e seguem sem guia: inclui as emitidas entre o aviso (16h) e o corte (17h),
+  // que nunca entraram num aviso (opção (a) do José, 20/11/2026)
+  const ontem = diaUtilAnterior(hoje)
+  const venceramOntem = atrasadasTodas.filter((g) => g.prazo === ontem)
+  const atrasadas = atrasadasTodas.length - venceramOntem.length
   const porEmpresa = (emp: string) => doDia.filter((g) => g.empresa === emp)
 
   const producao = ambienteGnre() === 'producao'
@@ -119,7 +131,10 @@ async function montarMensagem(prisma: PrismaClient, hoje: string, simulacao: boo
     `DIFAL ${hoje.split('-').reverse().slice(0, 2).join('/')}${producao ? '' : ' (portal em TESTE)'}: ${doDia.length} guia(s) para pagar, ${brl(somaDifal(doDia))}`,
     ...EMPRESAS.filter((e) => porEmpresa(e).length).map((e) => `${e}: ${porEmpresa(e).length} (${brl(somaDifal(porEmpresa(e)))})`),
     ...linhasPortal,
-    ...(atrasadas ? [`Atrasadas esperando decisão: ${atrasadas}`] : []),
+    ...(venceramOntem.length
+      ? [`Venceram em ${ontem.split('-').reverse().slice(0, 2).join('/')} e seguem sem guia: ${venceramOntem.length} (${brl(somaDifal(venceramOntem))}) · gere no painel, aba Atrasadas`]
+      : []),
+    ...(atrasadas ? [`Outras atrasadas esperando decisão: ${atrasadas}`] : []),
     ...falhas.map((f) => `Atenção: ${f}`),
     `Painel: ${PAINEL_DIFAL}`,
   ].join('\n')
