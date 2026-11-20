@@ -622,7 +622,7 @@ function LotesGnre() {
                   {l.guiasResultado.map((g, i) => (
                     <li key={i}>
                       <span className={g.situacaoGuia === '0' ? 'text-emerald-700' : 'text-red-700'}>{g.situacaoTexto}</span>
-                      {' · '}{g.identificadorGuia ?? g.ufFavorecida}
+                      {' · '}{g.identificadorGuia ? `NF ${g.identificadorGuia}` : g.ufFavorecida}
                       {g.valorGNRE && <> · R$ {g.valorGNRE}</>}
                       {g.dataLimitePagamento && <> · pagar até {g.dataLimitePagamento}</>}
                       {g.linhaDigitavel && <> · linha digitável <code className="select-all">{g.linhaDigitavel}</code></>}

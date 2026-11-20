@@ -142,7 +142,9 @@ export async function gerarLoteDasNotas(prisma: PrismaClient, ids: string[], hoj
         razaoSocial: n.clienteNome,
         municipio: n.municipioIbgeDestino!,
       },
-      identificadorGuia: `${n.empresa}-NF-${n.nfNumero}`,
+      // XSD dados_gnre_v2.00: identificadorGuia só aceita [0-9]{1,10}. O número da NF basta,
+      // porque cada lote é de uma empresa só.
+      identificadorGuia: n.nfNumero.replace(/\D/g, '').slice(-10),
     }
   })
 
