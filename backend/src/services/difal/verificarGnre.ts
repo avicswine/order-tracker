@@ -9,6 +9,7 @@
 import { writeFileSync } from 'fs'
 import { montarLoteGnre, dividirEmLotes, ErroMontagemGnre, textoGnre, type GuiaGnre, type EmitenteGnre } from './gnre'
 import { classificarCamposExtras, valorCampoExtra, prazoLegal, proximoDiaUtil } from './guias'
+import { rotuloLogistica } from './logisticaMl'
 import type { DifalNota } from '@prisma/client'
 
 // dados de exemplo — NÃO são de cliente real
@@ -124,6 +125,14 @@ caso('dia útil comum fica igual', proximoDiaUtil('2026-11-24') === '2026-11-24'
 caso('Sexta-feira Santa de 2027 (26/03) vai para segunda 29/03', proximoDiaUtil('2027-03-26') === '2027-03-29')
 caso('Carnaval 2027: segunda 08/02 vai para quarta 10/02', proximoDiaUtil('2027-02-08') === '2027-02-10')
 caso('Natal 2026 (sexta) vai para segunda 28/12', proximoDiaUtil('2026-12-25') === '2026-12-28')
+
+// tipo de envio do ML (logisticaMl.ts)
+caso('envio ML: fulfillment é FULL', rotuloLogistica('fulfillment', 'me2') === 'FULL')
+caso('envio ML: cross_docking é Coleta', rotuloLogistica('cross_docking', 'me2') === 'Coleta')
+caso('envio ML: modo me1 é ME1', rotuloLogistica('default', 'me1') === 'ME1')
+caso('envio ML: not_specified é A combinar', rotuloLogistica(undefined, 'not_specified') === 'A combinar')
+caso('envio ML: self_service é Flex', rotuloLogistica('self_service', 'me2') === 'Flex')
+caso('envio ML: desconhecido não é inventado', rotuloLogistica('novo_tipo', 'me2').startsWith('outro'))
 
 console.log(falhas === 0 ? '\nTodos os casos conferem.' : `\n${falhas} caso(s) com erro.`)
 process.exit(falhas === 0 ? 0 : 1)

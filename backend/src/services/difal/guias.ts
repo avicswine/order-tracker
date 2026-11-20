@@ -47,6 +47,9 @@ export interface GuiaPendente {
   estadoComCobranca: boolean
   /** a conta do DIFAL como foi feita na importação (tooltip no valor) */
   calculoDetalhe: unknown
+  /** plataforma da venda (canal do Bling) e, no ML, o tipo de envio */
+  canal: string | null
+  mlLogistica: string | null
 }
 
 export interface EnvioDaNota {
@@ -281,6 +284,8 @@ export async function listarGuiasPendentes(prisma: PrismaClient, empresa?: strin
       observacao: n.observacao,
       estadoComCobranca: UFS_COM_COBRANCA.includes(n.clienteUf),
       calculoDetalhe: n.calculoDetalhe,
+      canal: n.canalNome,
+      mlLogistica: n.mlLogistica,
       envio: envioPorPedido.get(numeroDoPedido(n.empresa, n.nfNumero)) ?? null,
     }
   })

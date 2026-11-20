@@ -494,7 +494,7 @@ function GuiasPendentes() {
       )}
       <table className="min-w-full text-sm">
         <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
-          <tr><th className="w-10 px-5 py-2"></th><th className="px-2 py-2">Nota / cliente</th><th className="px-2 py-2">Emissão</th><th className="px-2 py-2">Prazo</th><th className="px-2 py-2">UF</th><th className="px-2 py-2">Transportadora</th><th className="px-2 py-2">Status</th><th className="px-2 py-2">Envio</th><th className="px-2 py-2">Previsão</th><th className="px-2 py-2 text-right">DIFAL</th><th className="px-5 py-2">Situação</th></tr>
+          <tr><th className="w-10 px-5 py-2"></th><th className="px-2 py-2">Nota / cliente</th><th className="px-2 py-2">Emissão</th><th className="px-2 py-2">Prazo</th><th className="px-2 py-2">UF</th><th className="px-2 py-2">Canal</th><th className="px-2 py-2">Transportadora</th><th className="px-2 py-2">Status</th><th className="px-2 py-2">Envio</th><th className="px-2 py-2">Previsão</th><th className="px-2 py-2 text-right">DIFAL</th><th className="px-5 py-2">Situação</th></tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
           {noPrazo.map((g) => {
@@ -517,6 +517,7 @@ function GuiasPendentes() {
                 <td className="px-2 py-2.5 text-slate-500">{dataBr(g.emitidaEm)}</td>
                 <td className="px-2 py-2.5 text-xs text-slate-500">{g.ml ? 'pagar até' : 'vence'} {dataBr(g.prazo)}</td>
                 <td className="px-2 py-2.5 font-medium text-slate-700">{g.clienteUf}</td>
+                <CelulaCanal g={g} />
                 <CelulasEnvio envio={g.envio} />
                 <td className="px-2 py-2.5 text-right font-semibold tabular-nums text-slate-900">
                   <ComDica largura={460} altura={340} conteudo={<CalculoDaNota d={g.calculoDetalhe} total={g.difalCalculado} />}>
@@ -641,6 +642,7 @@ function GuiasAtrasadas({ notas }: { notas: DifalGuiaPendente[] }) {
                 <th className="px-2 py-2 text-left">Emissão</th>
                 <th className="px-2 py-2 text-left">Venceu em</th>
                 <th className="px-2 py-2 text-left">UF</th>
+                <th className="px-2 py-2 text-left">Canal</th>
                 <th className="px-2 py-2 text-left">Transportadora</th>
                 <th className="px-2 py-2 text-left">Status</th>
                 <th className="px-2 py-2 text-left">Envio</th>
@@ -655,6 +657,7 @@ function GuiasAtrasadas({ notas }: { notas: DifalGuiaPendente[] }) {
                   <td className="px-2 py-2 text-slate-500">{dataBr(g.emitidaEm)}</td>
                   <td className="px-2 py-2 text-rose-700">{dataBr(g.prazo)}</td>
                   <td className="px-2 py-2 font-medium text-slate-700">{g.clienteUf}</td>
+                  <CelulaCanal g={g} />
                   <CelulasEnvio envio={g.envio} />
                   <td className="px-5 py-2 text-right font-semibold tabular-nums">
                     <ComDica largura={460} altura={340} conteudo={<CalculoDaNota d={g.calculoDetalhe} total={g.difalCalculado} />}>
@@ -668,6 +671,30 @@ function GuiasAtrasadas({ notas }: { notas: DifalGuiaPendente[] }) {
         </div>
       )}
     </div>
+  )
+}
+
+// cores do selo do tipo de envio do ML
+const COR_LOGISTICA: Record<string, string> = {
+  FULL: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+  Coleta: 'bg-sky-50 text-sky-700 ring-sky-200',
+  'A combinar': 'bg-amber-50 text-amber-700 ring-amber-200',
+  ME1: 'bg-violet-50 text-violet-700 ring-violet-200',
+}
+
+// plataforma da venda e, no Mercado Livre, o tipo de envio
+function CelulaCanal({ g }: { g: DifalGuiaPendente }) {
+  return (
+    <td className="px-2 py-2.5 text-xs">
+      <span className="flex flex-col gap-1">
+        <span className="max-w-[140px] truncate text-slate-600" title={g.canal ?? undefined}>{g.canal ?? 'Balcão'}</span>
+        {g.ml && (
+          <span className={`w-fit rounded-md px-1.5 py-0.5 text-[11px] font-medium ring-1 ${COR_LOGISTICA[g.mlLogistica ?? ''] ?? 'bg-slate-50 text-slate-600 ring-slate-200'}`}>
+            {g.mlLogistica ?? 'envio ML: atualizar'}
+          </span>
+        )}
+      </span>
+    </td>
   )
 }
 

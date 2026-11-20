@@ -10,6 +10,7 @@ import { query, body, validationResult } from 'express-validator'
 import { prisma } from '../lib/prisma'
 import { Prisma } from '@prisma/client'
 import { importarNotas, type ResultadoImportacao } from '../services/difal/importar'
+import { preencherLogisticaMl } from '../services/difal/logisticaMl'
 import { semearAliquotas } from '../services/difal/aliquotas'
 import { listarGuiasPendentes, gerarLoteDasNotas, classificarCamposExtras, marcarComprovanteMlEnviado, filtroVendasMl } from '../services/difal/guias'
 import { ErroMontagemGnre } from '../services/difal/gnre'
@@ -174,6 +175,9 @@ router.post(
       try {
         await semearAliquotas(prisma)
         importacao.resultado = await importarNotas(prisma, opcoes)
+        // tipo de envio das vendas do ML que aparecem na lista (uma vez por venda; para no 429)
+        const logistica = await preencherLogisticaMl(prisma)
+        importacao.resultado[0]?.erros.push(...logistica.erros)
       } catch (e) {
         importacao.erro = (e as Error).message
         console.error('[DIFAL] importação falhou:', importacao.erro)

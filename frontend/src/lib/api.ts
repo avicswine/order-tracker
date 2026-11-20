@@ -240,6 +240,9 @@ export interface DifalGuiaPendente {
   estadoComCobranca: boolean
   /** a conta do DIFAL feita na importação (calculo.ts) */
   calculoDetalhe: DifalCalculoDetalhe | null
+  /** plataforma da venda e, no ML, o tipo de envio (FULL, Coleta, A combinar, ME1, Agência, Flex) */
+  canal: string | null
+  mlLogistica: string | null
 }
 
 /** espelho do 'detalhe' montado em backend/src/services/difal/calculo.ts */
