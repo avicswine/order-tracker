@@ -2,15 +2,14 @@ import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { difalApi } from '../lib/api'
 import type {
-  DifalNota, DifalResponsavel, DifalHistorico, DifalGuiaPendente, DifalFechamentoMes,
-  DifalLote, DifalAliquota, DifalReceitaUf, DifalVendaMl,
+  DifalHistorico, DifalGuiaPendente, DifalFechamentoMes,
+  DifalLote, DifalAliquota, DifalReceitaUf, DifalItemNota,
 } from '../lib/api'
 import './difal.css'
 
 // Ícones simples desenhados aqui mesmo (sem biblioteca nova)
 const ICONES = {
   documento: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M9 15h6M9 11h2',
-  sacola: 'M3 7h18l-2 13H5zM8 7a4 4 0 0 1 8 0',
   ok: 'M20 6 9 17l-5-5',
   alerta: 'M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z',
   atualizar: 'M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5',
@@ -27,11 +26,64 @@ function Icone({ nome, className = 'h-5 w-5' }: { nome: keyof typeof ICONES; cla
   )
 }
 
-// número da nota com o selo da empresa e, embaixo, o nome do cliente (ajuda a se organizar)
-function NotaCliente({ nf, empresa, cliente }: { nf: string; empresa: string; cliente: string }) {
+// quadro com os itens da NF, aberto ao passar o mouse no número da nota
+function ItensDaNota({ itens }: { itens: DifalItemNota[] | null | undefined }) {
+  if (!itens) return <p className="text-xs text-slate-500">Itens não guardados para esta nota (nota anterior à importação dos itens).</p>
+  if (itens.length === 0) return <p className="text-xs text-slate-500">A nota veio sem itens do Bling.</p>
+  const total = itens.reduce((s, i) => s + (i.valorTotal ?? 0), 0)
+  return (
+    <table className="w-full text-xs">
+      <thead className="text-left text-[11px] uppercase tracking-wide text-slate-500">
+        <tr><th className="py-1 pr-2">SKU</th><th className="py-1 pr-2">Descrição</th><th className="py-1 pr-2">NCM</th><th className="py-1 pr-2 text-right">Qtd</th><th className="py-1 pr-2 text-right">Valor</th><th className="py-1 text-right">Total</th></tr>
+      </thead>
+      <tbody className="divide-y divide-slate-100">
+        {itens.map((i, k) => (
+          <tr key={k}>
+            <td className="py-1 pr-2 font-medium text-slate-800">{i.sku ?? '—'}</td>
+            <td className="max-w-[260px] py-1 pr-2 text-slate-700">{i.descricao ?? '—'}</td>
+            <td className="py-1 pr-2 text-slate-500">{i.ncm ?? '—'}</td>
+            <td className="py-1 pr-2 text-right tabular-nums">{i.quantidade ?? '—'}{i.unidade ? ` ${i.unidade}` : ''}</td>
+            <td className="py-1 pr-2 text-right tabular-nums">{i.valorUnitario != null ? brl(i.valorUnitario) : '—'}</td>
+            <td className="py-1 text-right font-medium tabular-nums">{brl(i.valorTotal)}</td>
+          </tr>
+        ))}
+      </tbody>
+      <tfoot><tr><td colSpan={5} className="pt-1.5 text-right text-slate-500">Total dos itens</td><td className="pt-1.5 text-right font-semibold tabular-nums">{brl(total)}</td></tr></tfoot>
+    </table>
+  )
+}
+
+// Tooltip com os itens: flutua em posição fixa na tela (as listas ficam em caixas que cortariam um tooltip comum)
+function ComItens({ itens, children }: { itens?: DifalItemNota[] | null; children: React.ReactNode }) {
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
+  function abrir(e: React.MouseEvent<HTMLSpanElement>) {
+    const r = e.currentTarget.getBoundingClientRect()
+    // abre embaixo do número; se não couber embaixo, abre em cima
+    const embaixo = r.bottom + 8
+    setPos({ x: Math.min(r.left, window.innerWidth - 660), y: embaixo + 260 > window.innerHeight ? Math.max(8, r.top - 268) : embaixo })
+  }
+  return (
+    <span onMouseEnter={abrir} onMouseLeave={() => setPos(null)}>
+      {children}
+      {pos && (
+        <span
+          style={{ left: Math.max(8, pos.x), top: pos.y }}
+          className="difal-entrar pointer-events-none fixed z-50 block max-h-[260px] w-[640px] max-w-[90vw] overflow-hidden rounded-xl border border-slate-200 bg-white p-3 text-left font-normal shadow-xl"
+        >
+          <ItensDaNota itens={itens} />
+        </span>
+      )}
+    </span>
+  )
+}
+
+// número da nota com o selo da empresa e, embaixo, o nome do cliente; os itens aparecem ao passar o mouse
+function NotaCliente({ nf, empresa, cliente, itens }: { nf: string; empresa: string; cliente: string; itens?: DifalItemNota[] | null }) {
   return (
     <span className="flex flex-col">
-      <span className="whitespace-nowrap font-medium text-slate-900">NF {nf} <SeloEmpresa empresa={empresa} /></span>
+      <ComItens itens={itens}>
+        <span className="w-fit cursor-help whitespace-nowrap font-medium text-slate-900 underline decoration-dotted decoration-slate-300 underline-offset-4">NF {nf} <SeloEmpresa empresa={empresa} /></span>
+      </ComItens>
       <span className="max-w-[220px] truncate text-xs font-normal text-slate-500" title={cliente}>{cliente}</span>
     </span>
   )
@@ -67,29 +119,6 @@ function dataBr(iso: string) {
   // formatando em UTC, nota emitida de madrugada não aparece no dia anterior.
   const d = new Date(iso.length === 10 ? `${iso}T00:00:00Z` : iso)
   return d.toLocaleDateString('pt-BR', { timeZone: 'UTC' })
-}
-
-const RESPONSAVEL: Record<DifalResponsavel, { texto: string; cor: string; ajuda: string }> = {
-  NOSSO: {
-    texto: 'Nós pagamos',
-    cor: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200',
-    ajuda: 'Venda de balcão ou Loja Integrada para quem não tem inscrição estadual: a guia é nossa',
-  },
-  ML_PAGA: {
-    texto: 'Mercado Livre',
-    cor: 'bg-blue-50 text-blue-700 ring-1 ring-blue-200',
-    ajuda: 'O ML recolhe e depois cobra de nós no faturamento',
-  },
-  CLIENTE: {
-    texto: 'Cliente',
-    cor: 'bg-slate-100 text-slate-600',
-    ajuda: 'Destinatário com inscrição estadual apura o próprio DIFAL',
-  },
-  SEM_DIFAL: {
-    texto: 'Sem DIFAL',
-    cor: 'bg-slate-100 text-slate-500',
-    ajuda: 'Venda dentro do Rio Grande do Sul: não há diferencial',
-  },
 }
 
 function Numero({
@@ -159,17 +188,9 @@ function Abas({ aba, onTrocar }: { aba: NomeAba; onTrocar: (a: NomeAba) => void 
 
 // ---------------------------------------------------------------- Vendas de agora
 function Vendas() {
-  const [responsavel, setResponsavel] = useState('')
-  const [busca, setBusca] = useState('')
-  const [pagina, setPagina] = useState(1)
   const qc = useQueryClient()
 
   const { data: resumo } = useQuery({ queryKey: ['difal-resumo'], queryFn: () => difalApi.resumo() })
-  const { data: lista, isLoading } = useQuery({
-    queryKey: ['difal-notas', responsavel, busca, pagina],
-    queryFn: () =>
-      difalApi.listar({ responsavel: responsavel || undefined, busca: busca || undefined, pagina }),
-  })
   // A importação roda no servidor em segundo plano; aqui só consultamos o andamento a cada 3 s
   const { data: importacao } = useQuery({
     queryKey: ['difal-importacao'],
@@ -182,10 +203,8 @@ function Vendas() {
   const emAndamento = !!importacao?.emAndamento
   useEffect(() => {
     if (estavaImportando.current && !emAndamento) {
-      qc.invalidateQueries({ queryKey: ['difal-notas'] })
       qc.invalidateQueries({ queryKey: ['difal-resumo'] })
       qc.invalidateQueries({ queryKey: ['difal-guias-pendentes'] })
-      qc.invalidateQueries({ queryKey: ['difal-ml-barreira'] })
     }
     estavaImportando.current = emAndamento
   }, [emAndamento, qc])
@@ -201,9 +220,6 @@ function Vendas() {
     : null
   const errosImportacao = importacao?.resultado?.flatMap((r) => r.erros) ?? []
 
-  const notas = lista?.notas ?? []
-  const totalPaginas = lista ? Math.max(1, Math.ceil(lista.total / lista.porPagina)) : 1
-  const ml = resumo?.porResponsavel.find((r) => r.responsavel === 'ML_PAGA')
 
   return (
     <div className="space-y-5">
@@ -238,19 +254,13 @@ function Vendas() {
         </div>
       )}
 
-      <div className="difal-escalonado grid gap-4 sm:grid-cols-3">
+      <div className="difal-escalonado grid gap-4 sm:grid-cols-2">
         <Numero
           icone="documento"
           titulo="Guias que precisamos emitir"
           valor={brl(resumo?.aPagar.valor)}
-          detalhe={`${resumo?.aPagar.notas ?? 0} nota(s) de balcão ou Loja Integrada`}
+          detalhe={`${resumo?.aPagar.notas ?? 0} nota(s) com DIFAL para pagar (balcão, lojas e Mercado Livre)`}
           tom={(resumo?.aPagar.valor ?? 0) > 0 ? 'alerta' : 'ok'}
-        />
-        <Numero
-          icone="sacola"
-          titulo="O Mercado Livre recolhe"
-          valor={brl(ml?.calculado)}
-          detalhe={`${ml?.notas ?? 0} nota(s) · ele cobra de nós depois`}
         />
         <Numero
           icone={(resumo?.divergentes.notas ?? 0) > 0 ? 'alerta' : 'ok'}
@@ -263,116 +273,10 @@ function Vendas() {
 
       <GuiasPendentes />
 
-      <VendasMlBarreira />
-
       <LotesGnre />
 
       <FechamentoMensal />
 
-      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-3">
-        <select
-          value={responsavel}
-          onChange={(e) => { setResponsavel(e.target.value); setPagina(1) }}
-          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
-        >
-          <option value="">Todas as notas</option>
-          <option value="NOSSO">Só as que precisamos pagar</option>
-          <option value="ML_PAGA">Só as do Mercado Livre</option>
-          <option value="CLIENTE">Cliente é contribuinte</option>
-          <option value="SEM_DIFAL">Sem DIFAL</option>
-        </select>
-        <div className="relative min-w-[200px] flex-1">
-          <Icone nome="busca" className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-          <input
-            value={busca}
-            onChange={(e) => { setBusca(e.target.value); setPagina(1) }}
-            placeholder="Número da NF ou cliente"
-            className="w-full rounded-xl border border-slate-200 py-2 pl-9 pr-3 text-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
-          />
-        </div>
-        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600">{lista?.total ?? 0} notas</span>
-      </div>
-
-      {totalPaginas > 1 && (
-        <div className="flex items-center justify-end gap-2 text-sm text-slate-600">
-          <button onClick={() => setPagina((p) => Math.max(1, p - 1))} disabled={pagina <= 1} className="difal-btn rounded-lg border border-slate-200 bg-white px-3 py-1 hover:border-slate-300 disabled:opacity-40">
-            Anterior
-          </button>
-          <span>página {pagina} de {totalPaginas}</span>
-          <button onClick={() => setPagina((p) => Math.min(totalPaginas, p + 1))} disabled={pagina >= totalPaginas} className="difal-btn rounded-lg border border-slate-200 bg-white px-3 py-1 hover:border-slate-300 disabled:opacity-40">
-            Próxima
-          </button>
-        </div>
-      )}
-
-      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
-        <table className="min-w-full text-sm">
-          <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-            <tr>
-              <th className="px-3 py-2 text-left">NF</th>
-              <th className="px-3 py-2 text-left">Emissão</th>
-              <th className="px-3 py-2 text-left">Cliente</th>
-              <th className="px-3 py-2 text-left">UF</th>
-              <th className="px-3 py-2 text-left">Canal</th>
-              <th className="px-3 py-2 text-right">Valor da nota</th>
-              <th className="px-3 py-2 text-right">DIFAL</th>
-              <th className="px-3 py-2 text-left">Quem paga</th>
-            </tr>
-          </thead>
-          <tbody className="difal-escalonado divide-y divide-slate-100">
-            {isLoading && (
-              <tr>
-                <td colSpan={8} className="px-3 py-8 text-center text-gray-500">
-                  Carregando…
-                </td>
-              </tr>
-            )}
-            {!isLoading && notas.length === 0 && (
-              <tr>
-                <td colSpan={8} className="px-3 py-10 text-center">
-                  <p className="text-gray-600">Nenhuma nota importada ainda.</p>
-                  <p className="mt-1 text-sm text-gray-500">
-                    Clique em &ldquo;Atualizar do Bling&rdquo; para trazer as notas dos últimos 90 dias.
-                  </p>
-                </td>
-              </tr>
-            )}
-            {notas.map((n: DifalNota) => {
-              const r = RESPONSAVEL[n.responsavel]
-              return (
-                <tr key={n.id} className="transition-colors hover:bg-blue-50/40">
-                  <td className="px-3 py-2.5 whitespace-nowrap font-medium text-slate-900">
-                    {n.nfNumero} <SeloEmpresa empresa={n.empresa} />
-                  </td>
-                  <td className="px-3 py-2 text-gray-600">{dataBr(n.emitidaEm)}</td>
-                  <td className="max-w-[220px] truncate px-3 py-2 text-gray-700" title={n.clienteNome}>
-                    {n.clienteNome}
-                    {n.clienteTemIe && <span className="ml-1 text-xs text-gray-400">IE</span>}
-                  </td>
-                  <td className="px-3 py-2 text-gray-600">{n.clienteUf}</td>
-                  <td
-                    className="max-w-[140px] truncate px-3 py-2 text-gray-600"
-                    title={n.canalNome ?? undefined}
-                  >
-                    {n.canalNome ?? '—'}
-                  </td>
-                  <td className="px-3 py-2 text-right tabular-nums text-gray-700">
-                    {brl(n.valorNota)}
-                  </td>
-                  <td className="px-3 py-2 text-right font-medium tabular-nums text-gray-900">
-                    {brl(n.difalCalculado)}
-                  </td>
-                  <td className="px-3 py-2">
-                    <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${r.cor}`} title={r.ajuda}>
-                      {r.texto}
-                    </span>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
     </div>
   )
 }
@@ -424,9 +328,16 @@ function GuiasPendentes() {
       setAviso(`Lote ${lote.loteId} gerado: ${lote.guias} guia(s), ${brl(lote.total)}. O arquivo foi baixado.`)
       setEscolhidas(new Set())
       qc.invalidateQueries({ queryKey: ['difal-guias-pendentes'] })
-      qc.invalidateQueries({ queryKey: ['difal-notas'] })
+      qc.invalidateQueries({ queryKey: ['difal-resumo'] })
+      qc.invalidateQueries({ queryKey: ['difal-lotes'] })
     },
-    onError: async (e) => setErroTexto(await erroDoLote(e)),
+    onError: async (e) => setErroTexto(`Não deu para montar o lote: ${await erroDoLote(e)}`),
+  })
+
+  const marcar = useMutation({
+    mutationFn: difalApi.marcarComprovanteMl,
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['difal-guias-pendentes'] }); qc.invalidateQueries({ queryKey: ['difal-fechamento'] }) },
+    onError: (e) => setErroTexto(`Comprovante: ${mensagemErro(e)}`),
   })
 
   function alternar(g: DifalGuiaPendente) {
@@ -453,8 +364,8 @@ function GuiasPendentes() {
         <div>
           <p className="font-semibold text-slate-900">Guias para emitir agora (no prazo)</p>
           <p className="text-xs text-slate-500">
-            {noPrazo.length} nota(s) no prazo · {prontas.length} com todos os dados para a guia (GNRE).
-            Um lote por empresa, até 50 guias. Gere e pague no mesmo dia.
+            {noPrazo.length} nota(s) no prazo · {prontas.length} prontas para a guia (GNRE). Um lote por empresa, até 50 guias.
+            Vendas do Mercado Livre: depois de pagar, anexe o comprovante na venda do ML e clique em "Comprovante enviado".
           </p>
         </div>
         <button
@@ -468,7 +379,7 @@ function GuiasPendentes() {
       {aviso && <div className="difal-entrar border-b border-emerald-100 bg-emerald-50 px-5 py-2 text-sm text-emerald-900">{aviso}</div>}
       {erroTexto && (
         <div className="difal-entrar border-b border-red-100 bg-red-50 px-5 py-2 text-sm text-red-800">
-          Não deu para montar o lote: {erroTexto}
+          {erroTexto}
         </div>
       )}
       <table className="min-w-full text-sm">
@@ -481,29 +392,52 @@ function GuiasPendentes() {
             return (
               <tr key={g.id} className={`transition-colors ${g.pronta ? 'hover:bg-slate-50' : 'bg-slate-50/60'}`}>
                 <td className="px-5 py-2.5">
-                  <input
+                  {!g.guiaGeradaEm && <input
                     type="checkbox"
                     checked={escolhidas.has(g.id)}
                     disabled={bloqueada}
                     onChange={() => alternar(g)}
                     title={bloqueada && g.pronta ? 'Lote de uma empresa só' : undefined}
                     className="h-4 w-4 accent-blue-600"
-                  />
+                  />}
                 </td>
                 <td className="px-2 py-2.5">
-                  <NotaCliente nf={g.nfNumero} empresa={g.empresa} cliente={g.clienteNome} />
+                  <NotaCliente nf={g.nfNumero} empresa={g.empresa} cliente={g.clienteNome} itens={g.itens} />
                 </td>
                 <td className="px-2 py-2.5 text-slate-500">{dataBr(g.emitidaEm)}</td>
-                <td className="px-2 py-2.5 text-xs text-slate-500">vence {dataBr(g.prazo)}</td>
+                <td className="px-2 py-2.5 text-xs text-slate-500">{g.ml ? 'pagar até' : 'vence'} {dataBr(g.prazo)}</td>
                 <td className="px-2 py-2.5 font-medium text-slate-700">{g.clienteUf}</td>
                 <td className="px-2 py-2.5"><SeloEnvio envio={g.envio} /></td>
                 <td className="px-2 py-2.5 text-right font-semibold tabular-nums text-slate-900">{brl(g.difalCalculado)}</td>
                 <td className="px-5 py-2.5 text-xs">
-                  {g.pronta ? (
-                    <span className="rounded-full bg-emerald-50 px-2.5 py-1 font-medium text-emerald-700">● pronta</span>
-                  ) : (
-                    <span className="rounded-full bg-amber-50 px-2.5 py-1 font-medium text-amber-700">● falta: {g.faltando.join('; ')}</span>
-                  )}
+                  <span className="flex flex-wrap items-center gap-2">
+                    {g.situacao === 'DIVERGENTE' ? (
+                      <span title={g.observacao ?? undefined} className="rounded-full bg-rose-50 px-2.5 py-1 font-medium text-rose-700">● nota divergente (cancelada?) — conferir</span>
+                    ) : g.guiaGeradaEm && !g.guiaAceita ? (
+                      <span className="rounded-full bg-blue-50 px-2.5 py-1 font-medium text-blue-700">guia gerada · envie ao portal e consulte</span>
+                    ) : g.guiaGeradaEm ? (
+                      <>
+                        <span className="rounded-full bg-emerald-50 px-2.5 py-1 font-medium text-emerald-700">guia aceita · pagar e anexar</span>
+                        <button
+                          onClick={() => { setErroTexto(null); if (window.confirm(`Confirma que o comprovante da NF ${g.nfNumero} foi anexado na venda do ML?`)) marcar.mutate(g.id) }}
+                          disabled={marcar.isPending}
+                          className="difal-btn rounded-lg bg-emerald-600 px-3 py-1.5 font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                        >
+                          Comprovante enviado
+                        </button>
+                      </>
+                    ) : g.pronta ? (
+                      <span className="rounded-full bg-emerald-50 px-2.5 py-1 font-medium text-emerald-700">● pronta</span>
+                    ) : (
+                      <span className="rounded-full bg-amber-50 px-2.5 py-1 font-medium text-amber-700">● falta: {g.faltando.join('; ')}</span>
+                    )}
+                    {g.ml && g.mlOrderId && (
+                      <a href={linkComprovanteMl(g.mlOrderId)} target="_blank" rel="noreferrer" title={`venda ML ${g.mlOrderId}`}
+                        className="difal-btn rounded-lg border border-yellow-300 bg-yellow-50 px-2.5 py-1 font-medium text-yellow-800 hover:bg-yellow-100">
+                        Comprovante no ML ↗
+                      </a>
+                    )}
+                  </span>
                 </td>
               </tr>
             )
@@ -520,138 +454,6 @@ function GuiasPendentes() {
 // Tela "Envie o comprovante de pagamento do DIFAL" da venda no ML (endereço enviado pelo José em 20/11/2026)
 function linkComprovanteMl(mlOrderId: string): string {
   return `https://vendedores.mercadolivre.com.br/emissor/informar-documento?orders_ids=${encodeURIComponent(mlOrderId)}`
-}
-
-// Vendas do ML nos estados em que o ML pagava na barreira: pagamos nós logo após a venda e o José anexa o
-// comprovante na venda do ML (não há API oficial para isso). Decisão do José em 20/11/2026.
-function VendasMlBarreira() {
-  const qc = useQueryClient()
-  const [escolhidas, setEscolhidas] = useState<Set<string>>(new Set())
-  const [aviso, setAviso] = useState<string | null>(null)
-  const [erroTexto, setErroTexto] = useState<string | null>(null)
-  const { data, isLoading } = useQuery({ queryKey: ['difal-ml-barreira'], queryFn: difalApi.vendasMlBarreira })
-  const vendas = data?.vendas ?? []
-  const ufs = (data?.ufs ?? []).join(', ') // lista vem do servidor (UFS_BARREIRA_ML), num lugar só
-  const recarregar = () => {
-    qc.invalidateQueries({ queryKey: ['difal-ml-barreira'] })
-    qc.invalidateQueries({ queryKey: ['difal-lotes'] })
-    qc.invalidateQueries({ queryKey: ['difal-fechamento'] })
-  }
-  const gerar = useMutation({
-    mutationFn: () => difalApi.gerarLote([...escolhidas]),
-    onSuccess: (lote) => {
-      baixarArquivo(lote.arquivo, lote.nome)
-      setAviso(`Lote ${lote.loteId} gerado: ${lote.guias} guia(s), ${brl(lote.total)}. Envie ao portal em "Lotes GNRE gerados".`)
-      setEscolhidas(new Set())
-      recarregar()
-    },
-    onError: async (e) => setErroTexto(await erroDoLote(e)),
-  })
-  const marcar = useMutation({
-    mutationFn: difalApi.marcarComprovanteMl,
-    onSuccess: recarregar,
-    onError: (e) => setErroTexto(mensagemErro(e)),
-  })
-  const empresaEscolhida = vendas.find((v) => escolhidas.has(v.id))?.empresa
-
-  function alternar(v: DifalVendaMl) {
-    setEscolhidas((atual) => {
-      const novo = new Set(atual)
-      if (novo.has(v.id)) novo.delete(v.id)
-      else novo.add(v.id)
-      return novo
-    })
-  }
-
-  if (isLoading || vendas.length === 0) return null
-
-  return (
-    <div className="overflow-hidden rounded-2xl border border-yellow-200 bg-white">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
-        <div className="flex items-start gap-3">
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-yellow-50 text-yellow-600"><Icone nome="sacola" /></span>
-          <div>
-            <p className="font-semibold text-slate-900">Vendas do ML: pagar antes da barreira</p>
-            <p className="text-xs text-slate-500">
-              {vendas.length} venda(s) para {ufs}, com nota de até 7 dias. Gere a guia, pague no PIX e anexe o
-              comprovante na venda do ML ("Enviar comprovante"); depois clique em "Comprovante enviado".
-            </p>
-          </div>
-        </div>
-        <button
-          onClick={() => { setAviso(null); setErroTexto(null); gerar.mutate() }}
-          disabled={escolhidas.size === 0 || gerar.isPending}
-          className="difal-btn rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-40"
-        >
-          {gerar.isPending ? 'Montando lote…' : `Gerar guias (${escolhidas.size})`}
-        </button>
-      </div>
-      {aviso && <div className="difal-entrar border-b border-emerald-100 bg-emerald-50 px-5 py-2 text-sm text-emerald-900">{aviso}</div>}
-      {erroTexto && (
-        <div className="difal-entrar flex items-center justify-between border-b border-red-100 bg-red-50 px-5 py-2 text-sm text-red-800">
-          <span>{erroTexto}</span>
-          <button onClick={() => setErroTexto(null)} className="text-xs underline">fechar</button>
-        </div>
-      )}
-      <table className="min-w-full text-sm">
-        <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
-          <tr><th className="w-10 px-5 py-2"></th><th className="px-2 py-2">Nota / cliente</th><th className="px-2 py-2">Emissão</th><th className="px-2 py-2">UF</th><th className="px-2 py-2 text-right">DIFAL</th><th className="px-2 py-2">Venda no ML</th><th className="px-5 py-2 text-right">Situação</th></tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100">
-          {vendas.map((v) => {
-            const bloqueada = !v.pronta || (empresaEscolhida !== undefined && v.empresa !== empresaEscolhida && !escolhidas.has(v.id))
-            return (
-              <tr key={v.id} className="transition-colors hover:bg-slate-50">
-                <td className="px-5 py-2.5">
-                  {!v.guiaGeradaEm && (
-                    <input type="checkbox" checked={escolhidas.has(v.id)} disabled={bloqueada} onChange={() => alternar(v)}
-                      title={bloqueada && v.pronta ? 'Lote de uma empresa só' : undefined} className="h-4 w-4 accent-blue-600" />
-                  )}
-                </td>
-                <td className="px-2 py-2.5"><NotaCliente nf={v.nfNumero} empresa={v.empresa} cliente={v.clienteNome} /></td>
-                <td className="px-2 py-2.5 text-slate-500">{dataBr(v.emitidaEm)}</td>
-                <td className="px-2 py-2.5 font-medium text-slate-700">{v.clienteUf}</td>
-                <td className="px-2 py-2.5 text-right font-semibold tabular-nums text-slate-900">{brl(v.difalCalculado)}</td>
-                <td className="px-2 py-2.5 text-xs text-slate-500">
-                  {v.mlOrderId ? (
-                    <span className="inline-flex flex-wrap items-center gap-2">
-                      venda ML {v.mlOrderId}
-                      <a href={linkComprovanteMl(v.mlOrderId)} target="_blank" rel="noreferrer"
-                        className="difal-btn rounded-lg border border-yellow-300 bg-yellow-50 px-3 py-1.5 font-medium text-yellow-800 hover:bg-yellow-100">
-                        Enviar comprovante no ML ↗
-                      </a>
-                    </span>
-                  ) : 'sem número da venda'}
-                </td>
-                <td className="px-5 py-2.5 text-right text-xs">
-                  {v.situacao === 'DIVERGENTE' ? (
-                    <span title={v.observacao ?? undefined} className="rounded-full bg-rose-50 px-2.5 py-1 font-medium text-rose-700">● nota divergente (cancelada?) — conferir</span>
-                  ) : v.guiaGeradaEm && !v.guiaAceita ? (
-                    <span className="rounded-full bg-blue-50 px-2.5 py-1 font-medium text-blue-700">guia gerada · envie ao portal e consulte em "Lotes GNRE"</span>
-                  ) : v.guiaGeradaEm ? (
-                    <span className="inline-flex items-center gap-2">
-                      <span className="rounded-full bg-emerald-50 px-2.5 py-1 font-medium text-emerald-700">guia aceita · pagar e anexar</span>
-                      <button
-                        onClick={() => { setErroTexto(null); if (window.confirm(`Confirma que o comprovante da NF ${v.nfNumero} foi anexado na venda do ML?`)) marcar.mutate(v.id) }}
-                        disabled={marcar.isPending}
-                        className="difal-btn rounded-lg bg-emerald-600 px-3 py-1.5 font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
-                      >
-                        Comprovante enviado
-                      </button>
-                    </span>
-                  ) : v.pronta ? (
-                    <span className="rounded-full bg-emerald-50 px-2.5 py-1 font-medium text-emerald-700">● pronta</span>
-                  ) : (
-                    <span className="rounded-full bg-amber-50 px-2.5 py-1 font-medium text-amber-700">● falta: {v.faltando.join('; ')}</span>
-                  )}
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </div>
-  )
 }
 
 // Notas que passaram do prazo: não vão para lote (sairiam sem multa e juros); a contabilidade regulariza.
@@ -709,7 +511,7 @@ function GuiasAtrasadas({ notas }: { notas: DifalGuiaPendente[] }) {
             <tbody className="divide-y divide-slate-100">
               {notas.map((g) => (
                 <tr key={g.id} className="transition-colors hover:bg-rose-50/40">
-                  <td className="px-5 py-2"><NotaCliente nf={g.nfNumero} empresa={g.empresa} cliente={g.clienteNome} /></td>
+                  <td className="px-5 py-2"><NotaCliente nf={g.nfNumero} empresa={g.empresa} cliente={g.clienteNome} itens={g.itens} /></td>
                   <td className="px-2 py-2 text-slate-500">{dataBr(g.emitidaEm)}</td>
                   <td className="px-2 py-2 text-rose-700">{dataBr(g.prazo)}</td>
                   <td className="px-2 py-2 font-medium text-slate-700">{g.clienteUf}</td>
@@ -905,7 +707,7 @@ function LotesGnre() {
   const enviar = useMutation({ mutationFn: difalApi.enviarLote, onSuccess: recarregar, onError: (e) => setErro(mensagemErro(e)) })
   const consultar = useMutation({
     mutationFn: difalApi.consultarLote,
-    onSuccess: () => { recarregar(); qc.invalidateQueries({ queryKey: ['difal-ml-barreira'] }) }, // guia aceita libera o "Comprovante enviado"
+    onSuccess: () => { recarregar(); qc.invalidateQueries({ queryKey: ['difal-guias-pendentes'] }) }, // guia aceita libera o "Comprovante enviado"
     onError: (e) => setErro(mensagemErro(e)),
   })
   const desfazer = useMutation({
@@ -913,7 +715,6 @@ function LotesGnre() {
     onSuccess: () => {
       recarregar()
       qc.invalidateQueries({ queryKey: ['difal-guias-pendentes'] })
-      qc.invalidateQueries({ queryKey: ['difal-ml-barreira'] })
     },
     onError: (e) => setErro(mensagemErro(e)),
   })

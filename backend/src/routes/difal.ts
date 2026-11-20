@@ -8,10 +8,10 @@
 import { Router, Request, Response } from 'express'
 import { query, body, validationResult } from 'express-validator'
 import { prisma } from '../lib/prisma'
-import { DifalResponsavel, DifalSituacao, Prisma } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import { importarNotas, type ResultadoImportacao } from '../services/difal/importar'
 import { semearAliquotas } from '../services/difal/aliquotas'
-import { listarGuiasPendentes, gerarLoteDasNotas, classificarCamposExtras, listarVendasMlBarreira, marcarComprovanteMlEnviado, UFS_BARREIRA_ML } from '../services/difal/guias'
+import { listarGuiasPendentes, gerarLoteDasNotas, classificarCamposExtras, marcarComprovanteMlEnviado, filtroVendasMl } from '../services/difal/guias'
 import { ErroMontagemGnre } from '../services/difal/gnre'
 import { sincronizarCobrancasMl, fechamentoMensal } from '../services/difal/cobrancasMl'
 import {
@@ -30,65 +30,6 @@ const COM_DIFAL: Prisma.DifalNotaWhereInput = {
   OR: [{ difalCalculado: { gt: 0 } }, { situacao: 'DIVERGENTE' }, { difalCobradoMl: { gt: 0 } }],
 }
 
-// GET /difal — lista as notas do monitor
-router.get(
-  '/',
-  [
-    query('responsavel').optional().isIn(Object.values(DifalResponsavel)),
-    query('situacao').optional().isIn(Object.values(DifalSituacao)),
-    query('empresa').optional().trim(),
-    query('uf').optional().trim().isLength({ min: 2, max: 2 }),
-    query('desde').optional().isISO8601(),
-    query('ate').optional().isISO8601(),
-    query('busca').optional().trim(),
-    query('pagina').optional().isInt({ min: 1 }),
-  ],
-  async (req: Request, res: Response) => {
-    const erros = validationResult(req)
-    if (!erros.isEmpty()) return res.status(400).json({ errors: erros.array() })
-
-    const { responsavel, situacao, empresa, uf, desde, ate, busca } = req.query
-    const pagina = Number(req.query.pagina ?? 1)
-    const porPagina = 100
-
-    const where: Prisma.DifalNotaWhereInput = { AND: [COM_DIFAL] }
-    if (responsavel) where.responsavel = responsavel as DifalResponsavel
-    if (situacao) where.situacao = situacao as DifalSituacao
-    if (empresa) where.empresa = String(empresa).toUpperCase()
-    if (uf) where.clienteUf = String(uf).toUpperCase()
-    if (desde || ate) {
-      where.emitidaEm = {}
-      if (desde) where.emitidaEm.gte = new Date(String(desde))
-      if (ate) where.emitidaEm.lte = new Date(String(ate))
-    }
-    if (busca) {
-      const t = String(busca)
-      where.OR = [
-        { nfNumero: { contains: t } },
-        { clienteNome: { contains: t, mode: 'insensitive' } },
-      ]
-    }
-
-    try {
-    const [notas, total] = await Promise.all([
-      prisma.difalNota.findMany({
-        where,
-        orderBy: { emitidaEm: 'desc' },
-        skip: (pagina - 1) * porPagina,
-        take: porPagina,
-      }),
-      prisma.difalNota.count({ where }),
-    ])
-
-    // LGPD: o documento do destinatário existe só para montar a guia; não vai para a tela
-    const semDocumento = notas.map(({ documentoDestinatario: _doc, clienteIe: _ie, ...resto }) => resto)
-    res.json({ notas: semDocumento, total, pagina, porPagina })
-    } catch (e) {
-      res.status(500).json({ erro: (e as Error).message })
-    }
-  }
-)
-
 // GET /difal/resumo — os números do topo da tela
 router.get('/resumo', [query('desde').optional().isISO8601()], async (req: Request, res: Response) => {
   const erros = validationResult(req)
@@ -105,7 +46,8 @@ router.get('/resumo', [query('desde').optional().isISO8601()], async (req: Reque
   })
 
   const aPagar = await prisma.difalNota.aggregate({
-    where: { ...where, responsavel: 'NOSSO', situacao: { in: ['PENDENTE', 'ATRASADO'] } },
+    // nós pagamos todas: as nossas em aberto e as do ML na janela de 7 dias ainda sem guia
+    where: { ...where, OR: [{ responsavel: 'NOSSO', situacao: { in: ['PENDENTE', 'ATRASADO'] } }, { ...filtroVendasMl(), guiaGeradaEm: null }] },
     _count: { _all: true },
     _sum: { difalCalculado: true },
   })
@@ -247,15 +189,6 @@ router.post(
 // GET /difal/importar/status — andamento e resultado da última importação
 router.get('/importar/status', (_req: Request, res: Response) => {
   res.json(importacao)
-})
-
-// GET /difal/ml-barreira — vendas do ML nos estados que cobram na barreira: pagar nós e anexar o comprovante no ML
-router.get('/ml-barreira', async (_req: Request, res: Response) => {
-  try {
-    res.json({ ufs: UFS_BARREIRA_ML, vendas: await listarVendasMlBarreira(prisma) })
-  } catch (e) {
-    res.status(500).json({ erro: (e as Error).message })
-  }
 })
 
 // POST /difal/notas/:id/comprovante-ml — José anexou o comprovante na venda do ML

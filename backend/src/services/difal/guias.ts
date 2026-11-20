@@ -9,7 +9,7 @@
  * Nada é enviado ao portal aqui. O envio depende do certificado e-CNPJ e da
  * habilitação do webservice, que ainda estão em andamento.
  */
-import type { PrismaClient, DifalNota, DifalAliquota, DifalEmitente } from '@prisma/client'
+import type { PrismaClient, DifalNota, DifalAliquota, DifalEmitente, Prisma } from '@prisma/client'
 import { montarLoteGnre, ErroMontagemGnre, LIMITE_GUIAS_POR_LOTE, type GuiaGnre } from './gnre'
 import { ambienteGnre, lerResultadoLote } from './portalGnre'
 import { dataBR, somarDias } from '../separacao/datas'
@@ -19,6 +19,8 @@ export interface GuiaPendente {
   empresa: string
   nfNumero: string
   clienteNome: string
+  /** itens da NF (tooltip); null se a nota ainda não foi relida depois da coluna existir */
+  itens: unknown
   emitidaEm: Date
   clienteUf: string
   difalCalculado: number
@@ -32,6 +34,15 @@ export interface GuiaPendente {
   atrasada: boolean
   /** envio da nota no order-tracker; null quando a nota não está lá (retirada, Mercado Envios, Shopee…) */
   envio: EnvioDaNota | null
+  /** venda do Mercado Livre: depois de pagar, anexar o comprovante na venda do ML */
+  ml: boolean
+  mlOrderId: string | null
+  /** venda do ML com guia já gerada, esperando pagamento e comprovante */
+  guiaGeradaEm: Date | null
+  /** a guia foi processada com sucesso pelo portal (libera 'Comprovante enviado') */
+  guiaAceita: boolean
+  situacao: string
+  observacao: string | null
 }
 
 export interface EnvioDaNota {
@@ -144,71 +155,11 @@ function oQueFalta(nota: DifalNota, aliquota: DifalAliquota | undefined, emitent
 
 const SITUACOES_ABERTAS = ['PENDENTE', 'ATRASADO'] as const
 
-export interface VendaMlBarreira {
-  id: string
-  empresa: string
-  nfNumero: string
-  clienteNome: string
-  emitidaEm: Date
-  clienteUf: string
-  difalCalculado: number
-  mlOrderId: string | null
-  guiaGeradaEm: Date | null
-  guiaLoteId: string | null
-  /** a guia desta nota foi processada com sucesso pelo portal (só então dá para pagar e marcar o comprovante) */
-  guiaAceita: boolean
-  /** DIVERGENTE = nota cancelada ou com problema depois da importação: não marcar comprovante */
-  situacao: string
-  observacao: string | null
-  /** pode entrar em lote agora (sem guia, dentro da janela e com todos os dados) */
-  pronta: boolean
-  faltando: string[]
-}
-
 /** situação (0 = processada) da guia desta nota no resultado do lote; null se o lote não foi enviado/consultado */
 function situacaoDaGuia(nota: { nfNumero: string }, resultadoXml: string | null | undefined): string | null {
   if (!resultadoXml) return null
   const id = nota.nfNumero.replace(/\D/g, '').slice(-10) // mesmo identificadorGuia da montagem do lote
   return lerResultadoLote(resultadoXml).guias.find((g) => g.identificadorGuia === id)?.situacaoGuia ?? null
-}
-
-/** Vendas do ML nos estados da barreira: sem guia e na janela, ou com guia gerada e comprovante ainda não enviado ao ML. */
-export async function listarVendasMlBarreira(prisma: PrismaClient): Promise<VendaMlBarreira[]> {
-  const hojeBr = dataBR()
-  const limite = new Date(`${somarDias(hojeBr, -JANELA_ML_DIAS)}T00:00:00Z`) // emitidaEm guarda Brasília como UTC
-  const [notas, aliquotas, emitentes] = await Promise.all([
-    prisma.difalNota.findMany({
-      where: {
-        responsavel: 'ML_PAGA',
-        difalCalculado: { gt: 0 },
-        clienteUf: { in: UFS_BARREIRA_ML },
-        comprovanteMlEnviadoEm: null,
-        OR: [{ emitidaEm: { gte: limite }, guiaGeradaEm: null }, { guiaGeradaEm: { not: null } }],
-      },
-      orderBy: { emitidaEm: 'desc' },
-    }),
-    prisma.difalAliquota.findMany(),
-    prisma.difalEmitente.findMany(),
-  ])
-  const porUf = new Map(aliquotas.map((a) => [a.uf, a]))
-  const porEmpresa = new Map(emitentes.map((e) => [e.empresa, e]))
-  const lotes = await prisma.difalLoteGnre.findMany({
-    where: { id: { in: notas.map((n) => n.guiaLoteId).filter((x): x is string => !!x) } },
-    select: { id: true, resultadoXml: true },
-  })
-  const resultadoPorLote = new Map(lotes.map((l) => [l.id, l.resultadoXml]))
-  return notas.map((n) => {
-    const faltando = n.guiaGeradaEm ? [] : oQueFalta(n, porUf.get(n.clienteUf), porEmpresa.get(n.empresa))
-    // sem o número da venda não há onde anexar o comprovante: pagaríamos nós e o ML também, na barreira
-    if (!n.guiaGeradaEm && !n.mlOrderId) faltando.push('número da venda no ML (para anexar o comprovante)')
-    return {
-      id: n.id, empresa: n.empresa, nfNumero: n.nfNumero, clienteNome: n.clienteNome, emitidaEm: n.emitidaEm, clienteUf: n.clienteUf,
-      difalCalculado: n.difalCalculado, mlOrderId: n.mlOrderId, guiaGeradaEm: n.guiaGeradaEm, guiaLoteId: n.guiaLoteId,
-      guiaAceita: situacaoDaGuia(n, n.guiaLoteId ? resultadoPorLote.get(n.guiaLoteId) : null) === '0',
-      situacao: n.situacao, observacao: n.observacao,
-      pronta: !n.guiaGeradaEm && faltando.length === 0, faltando,
-    }
-  })
 }
 
 /** José anexou o comprovante na venda do ML: a venda sai da lista e deixa de contar como 'ML cobra' no fechamento. */
@@ -225,15 +176,31 @@ export async function marcarComprovanteMlEnviado(prisma: PrismaClient, id: strin
   await prisma.difalNota.update({ where: { id }, data: { comprovanteMlEnviadoEm: new Date() } })
 }
 
+/** Vendas do ML que pagamos nós: sem guia e com nota de até 7 dias, ou com guia gerada e comprovante ainda não enviado */
+export function filtroVendasMl(): Prisma.DifalNotaWhereInput {
+  const limite = new Date(`${somarDias(dataBR(), -JANELA_ML_DIAS)}T00:00:00Z`) // emitidaEm guarda Brasília como UTC
+  return {
+    responsavel: 'ML_PAGA',
+    comprovanteMlEnviadoEm: null,
+    OR: [
+      // sem guia: só aberta (divergente = erro de cálculo ou nota cancelada: não gerar guia) e com DIFAL
+      { emitidaEm: { gte: limite }, guiaGeradaEm: null, situacao: { in: [...SITUACOES_ABERTAS] }, difalCalculado: { gt: 0 } },
+      { guiaGeradaEm: { not: null } },
+    ],
+  }
+}
+
 export async function listarGuiasPendentes(prisma: PrismaClient, empresa?: string): Promise<GuiaPendente[]> {
   const [notas, aliquotas, emitentes] = await Promise.all([
     prisma.difalNota.findMany({
       where: {
-        responsavel: 'NOSSO',
-        situacao: { in: [...SITUACOES_ABERTAS] },
         difalCalculado: { gt: 0 },
-        guiaGeradaEm: null,
         ...(empresa && { empresa }),
+        // nós pagamos todas (decisão do José, 20/11/2026): as nossas em aberto e as do ML na janela de 7 dias
+        OR: [
+          { responsavel: 'NOSSO', situacao: { in: [...SITUACOES_ABERTAS] }, guiaGeradaEm: null },
+          filtroVendasMl(),
+        ],
       },
       orderBy: { emitidaEm: 'desc' }, // mais recentes primeiro (pedido do José, 20/11/2026)
     }),
@@ -259,22 +226,42 @@ export async function listarGuiasPendentes(prisma: PrismaClient, empresa?: strin
   const porUf = new Map(aliquotas.map((a) => [a.uf, a]))
   const porEmpresa = new Map(emitentes.map((e) => [e.empresa, e]))
   const hoje = dataBR()
+  // resultado do portal das guias já geradas (vendas do ML esperando comprovante)
+  const lotes = await prisma.difalLoteGnre.findMany({
+    where: { id: { in: notas.map((n) => n.guiaLoteId).filter((x): x is string => !!x) } },
+    select: { id: true, resultadoXml: true },
+  })
+  const resultadoPorLote = new Map(lotes.map((l) => [l.id, l.resultadoXml]))
 
   return notas.map((n) => {
-    const faltando = oQueFalta(n, porUf.get(n.clienteUf), porEmpresa.get(n.empresa))
-    const prazo = prazoLegal(porUf.get(n.clienteUf)?.vencimentoRegra ?? REGRA_PADRAO, n.emitidaEm)
+    const ml = n.responsavel === 'ML_PAGA'
+    const faltando = n.guiaGeradaEm ? [] : oQueFalta(n, porUf.get(n.clienteUf), porEmpresa.get(n.empresa))
+    // sem o número da venda não há onde anexar o comprovante: pagaríamos nós e o ML também
+    if (ml && !n.guiaGeradaEm && !n.mlOrderId) faltando.push('número da venda no ML (para anexar o comprovante)')
+    // venda do ML: o prazo prático é o fim da janela de 7 dias (antes de chegar à barreira)
+    const prazo = ml
+      ? somarDias(aaaaMmDd(n.emitidaEm), JANELA_ML_DIAS)
+      : prazoLegal(porUf.get(n.clienteUf)?.vencimentoRegra ?? REGRA_PADRAO, n.emitidaEm)
     return {
       id: n.id,
       empresa: n.empresa,
       nfNumero: n.nfNumero,
       clienteNome: n.clienteNome,
+      itens: n.itens,
       emitidaEm: n.emitidaEm,
       clienteUf: n.clienteUf,
       difalCalculado: n.difalCalculado,
-      pronta: faltando.length === 0,
+      pronta: !n.guiaGeradaEm && faltando.length === 0,
       faltando,
       prazo,
-      atrasada: prazo < hoje,
+      // venda do ML fora da janela nem entra na lista (o ML pode já ter pago na barreira)
+      atrasada: !ml && prazo < hoje,
+      ml,
+      mlOrderId: n.mlOrderId,
+      guiaGeradaEm: n.guiaGeradaEm,
+      guiaAceita: situacaoDaGuia(n, n.guiaLoteId ? resultadoPorLote.get(n.guiaLoteId) : null) === '0',
+      situacao: n.situacao,
+      observacao: n.observacao,
       envio: envioPorPedido.get(numeroDoPedido(n.empresa, n.nfNumero)) ?? null,
     }
   })
@@ -317,16 +304,12 @@ export function proximoDiaUtil(dataIso: string): string {
   }
 }
 
-/**
- * Estados em que o Mercado Livre pagou DIFAL na barreira fiscal (ZIPs de comprovantes do ML, dez/2025–nov/2026):
- * nesses, pagamos nós a guia logo após a venda e anexamos o comprovante na venda do ML.
- */
-export const UFS_BARREIRA_ML = ['CE', 'PB', 'RN', 'PI', 'TO', 'AL', 'AC', 'AM']
 /** venda do ML entra se a nota tem até 7 dias (decisão do José, 20/11/2026, até a contabilidade responder) */
 const JANELA_ML_DIAS = 7
 
+// nós pagamos o DIFAL das vendas do ML em todos os estados (decisão do José, 20/11/2026), dentro da janela
 function vendaMlNaJanela(nota: DifalNota, hojeBr: string): boolean {
-  return nota.responsavel === 'ML_PAGA' && UFS_BARREIRA_ML.includes(nota.clienteUf)
+  return nota.responsavel === 'ML_PAGA' && nota.situacao !== 'DIVERGENTE'
     && aaaaMmDd(nota.emitidaEm) >= somarDias(hojeBr, -JANELA_ML_DIAS)
 }
 
@@ -371,7 +354,7 @@ export async function gerarLoteDasNotas(prisma: PrismaClient, ids: string[], hoj
   if (jaGerada) throw new ErroMontagemGnre(`a nota ${jaGerada.nfNumero} já teve guia gerada (lote ${jaGerada.guiaLoteId})`)
   const hojeBr = dataBR(hoje) // dia de hoje em Brasília (o servidor roda em UTC)
   const naoNossa = notas.find((n) => !(n.difalCalculado > 0) || !(n.responsavel === 'NOSSO' || vendaMlNaJanela(n, hojeBr)))
-  if (naoNossa) throw new ErroMontagemGnre(`a nota ${naoNossa.nfNumero} não é uma guia nossa (venda do ML só nos estados da barreira e com até ${JANELA_ML_DIAS} dias)`)
+  if (naoNossa) throw new ErroMontagemGnre(`a nota ${naoNossa.nfNumero} não é uma guia nossa (venda do ML só com até ${JANELA_ML_DIAS} dias)`)
   const semVenda = notas.find((n) => n.responsavel === 'ML_PAGA' && !n.mlOrderId)
   if (semVenda) throw new ErroMontagemGnre(`a nota ${semVenda.nfNumero} não tem o número da venda no ML: não haveria onde anexar o comprovante`)
 

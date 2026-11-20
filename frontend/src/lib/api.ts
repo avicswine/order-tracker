@@ -155,32 +155,6 @@ export interface MlConversa {
 export type DifalResponsavel = 'ML_PAGA' | 'NOSSO' | 'CLIENTE' | 'SEM_DIFAL'
 export type DifalSituacao = 'PENDENTE' | 'CONFERIDO' | 'DIVERGENTE' | 'PAGO' | 'ATRASADO'
 
-export interface DifalNota {
-  id: string
-  empresa: string
-  nfNumero: string
-  nfChave: string | null
-  emitidaEm: string
-  clienteNome: string
-  clienteUf: string
-  clienteTemIe: boolean
-  valorProdutos: number
-  valorFrete: number
-  valorNota: number
-  valorComReducao: number
-  valorSemReducao: number
-  canalNome: string | null
-  canalTipo: string | null
-  difalCalculado: number
-  difalMetodo: string | null
-  difalCobradoMl: number | null
-  difalPagoGuia: number | null
-  responsavel: DifalResponsavel
-  situacao: DifalSituacao
-  divergencia: number | null
-  calculoDetalhe: Record<string, unknown> | null
-}
-
 export interface DifalImportacaoStatus {
   emAndamento: boolean
   iniciadaEm: string | null
@@ -191,24 +165,17 @@ export interface DifalImportacaoStatus {
   erro: string | null
 }
 
-export interface DifalVendaMl {
-  id: string
-  empresa: string
-  nfNumero: string
-  clienteNome: string
-  emitidaEm: string
-  clienteUf: string
-  difalCalculado: number
-  mlOrderId: string | null
-  guiaGeradaEm: string | null
-  guiaLoteId: string | null
-  /** guia processada com sucesso pelo portal: só então pagar e marcar o comprovante */
-  guiaAceita: boolean
-  situacao: string
-  observacao: string | null
-  pronta: boolean
-  faltando: string[]
+/** item da NF guardado na importação (tooltip no número da nota) */
+export interface DifalItemNota {
+  sku: string | null
+  descricao: string | null
+  ncm: string | null
+  quantidade: number | null
+  unidade: string | null
+  valorUnitario: number | null
+  valorTotal: number
 }
+
 
 export interface DifalResumo {
   porResponsavel: {
@@ -240,6 +207,7 @@ export interface DifalGuiaPendente {
   empresa: string
   nfNumero: string
   clienteNome: string
+  itens: DifalItemNota[] | null
   emitidaEm: string
   clienteUf: string
   difalCalculado: number
@@ -258,6 +226,14 @@ export interface DifalGuiaPendente {
     entregueEm: string | null
     ultimoRastreio: string | null
   } | null
+  /** venda do ML: depois de pagar, anexar o comprovante na venda do ML */
+  ml: boolean
+  mlOrderId: string | null
+  guiaGeradaEm: string | null
+  /** guia processada pelo portal: libera 'Comprovante enviado' */
+  guiaAceita: boolean
+  situacao: string
+  observacao: string | null
 }
 
 
@@ -383,18 +359,6 @@ export interface DifalLote {
 }
 
 export const difalApi = {
-  listar: (params?: {
-    responsavel?: string
-    situacao?: string
-    empresa?: string
-    uf?: string
-    desde?: string
-    busca?: string
-    pagina?: number
-  }) =>
-    api
-      .get<{ notas: DifalNota[]; total: number; pagina: number; porPagina: number }>('/difal', { params })
-      .then((r) => r.data),
   resumo: (params?: { desde?: string }) =>
     api.get<DifalResumo>('/difal/resumo', { params }).then((r) => r.data),
   aliquotas: () => api.get<DifalAliquota[]>('/difal/aliquotas').then((r) => r.data),
@@ -422,7 +386,6 @@ export const difalApi = {
   fechamentoMensal: () => api.get<DifalFechamentoMes[]>('/difal/fechamento-mensal').then((r) => r.data),
   sincronizarCobrancasMl: () =>
     api.post<DifalSincronizacaoMl[]>('/difal/cobrancas-ml/sincronizar', { meses: 2 }).then((r) => r.data),
-  vendasMlBarreira: () => api.get<{ ufs: string[]; vendas: DifalVendaMl[] }>('/difal/ml-barreira').then((r) => r.data),
   marcarComprovanteMl: (id: string) => api.post<{ ok: boolean }>(`/difal/notas/${id}/comprovante-ml`).then((r) => r.data),
   guiasPendentes: () => api.get<DifalGuiaPendente[]>('/difal/guias-pendentes').then((r) => r.data),
   // devolve o XML do lote GNRE como arquivo para baixar
