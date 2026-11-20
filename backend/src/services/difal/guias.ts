@@ -45,6 +45,8 @@ export interface GuiaPendente {
   observacao: string | null
   /** estado em que já tivemos cobrança de DIFAL (UFS_COM_COBRANCA): a tela mostra só esses por padrão */
   estadoComCobranca: boolean
+  /** a conta do DIFAL como foi feita na importação (tooltip no valor) */
+  calculoDetalhe: unknown
 }
 
 export interface EnvioDaNota {
@@ -272,6 +274,7 @@ export async function listarGuiasPendentes(prisma: PrismaClient, empresa?: strin
       situacao: n.situacao,
       observacao: n.observacao,
       estadoComCobranca: UFS_COM_COBRANCA.includes(n.clienteUf),
+      calculoDetalhe: n.calculoDetalhe,
       envio: envioPorPedido.get(numeroDoPedido(n.empresa, n.nfNumero)) ?? null,
     }
   })

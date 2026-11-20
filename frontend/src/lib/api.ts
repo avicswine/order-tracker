@@ -236,6 +236,31 @@ export interface DifalGuiaPendente {
   observacao: string | null
   /** estado em que já tivemos cobrança de DIFAL */
   estadoComCobranca: boolean
+  /** a conta do DIFAL feita na importação (calculo.ts) */
+  calculoDetalhe: DifalCalculoDetalhe | null
+}
+
+/** espelho do 'detalhe' montado em backend/src/services/difal/calculo.ts */
+export interface DifalCalculoDetalhe {
+  uf?: string
+  aliquotaInterna?: number
+  fcp?: number
+  interestadual?: number
+  freteRateado?: number
+  motivo?: string
+  erro?: string
+  comReducao?: {
+    valor: number
+    difal: number
+    metodo?: 'carga' | 'prop'
+    explicacao?: string
+    cargaTotal?: number
+    cargaOrigem?: number
+    cargaDevida?: number
+    baseReduzida?: number
+    diferencaAliquotas?: number
+  }
+  semReducao?: { valor: number; difal: number; aliquotaCheia: number }
 }
 
 

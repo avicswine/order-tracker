@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { difalApi } from '../lib/api'
 import type {
   DifalHistorico, DifalGuiaPendente, DifalFechamentoMes,
-  DifalLote, DifalAliquota, DifalReceitaUf, DifalItemNota,
+  DifalLote, DifalAliquota, DifalReceitaUf, DifalItemNota, DifalCalculoDetalhe,
 } from '../lib/api'
 import './difal.css'
 
@@ -54,26 +54,83 @@ function ItensDaNota({ itens }: { itens: DifalItemNota[] | null | undefined }) {
 }
 
 // Tooltip com os itens: flutua em posição fixa na tela (as listas ficam em caixas que cortariam um tooltip comum)
-function ComItens({ itens, children }: { itens?: DifalItemNota[] | null; children: React.ReactNode }) {
+function ComDica({ conteudo, largura = 640, altura = 260, children }: { conteudo: React.ReactNode; largura?: number; altura?: number; children: React.ReactNode }) {
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
   function abrir(e: React.MouseEvent<HTMLSpanElement>) {
     const r = e.currentTarget.getBoundingClientRect()
-    // abre embaixo do número; se não couber embaixo, abre em cima
+    // abre embaixo; se não couber embaixo, abre em cima; e não passa da borda direita
     const embaixo = r.bottom + 8
-    setPos({ x: Math.min(r.left, window.innerWidth - 660), y: embaixo + 260 > window.innerHeight ? Math.max(8, r.top - 268) : embaixo })
+    setPos({ x: Math.min(r.left, window.innerWidth - largura - 20), y: embaixo + altura > window.innerHeight ? Math.max(8, r.top - altura - 8) : embaixo })
   }
   return (
     <span onMouseEnter={abrir} onMouseLeave={() => setPos(null)}>
       {children}
       {pos && (
         <span
-          style={{ left: Math.max(8, pos.x), top: pos.y }}
-          className="difal-entrar pointer-events-none fixed z-50 block max-h-[260px] w-[640px] max-w-[90vw] overflow-hidden rounded-xl border border-slate-200 bg-white p-3 text-left font-normal shadow-xl"
+          style={{ left: Math.max(8, pos.x), top: pos.y, width: largura, maxHeight: altura }}
+          className="difal-entrar pointer-events-none fixed z-50 block max-w-[90vw] overflow-hidden rounded-xl border border-slate-200 bg-white p-3 text-left font-normal shadow-xl"
         >
-          <ItensDaNota itens={itens} />
+          {conteudo}
         </span>
       )}
     </span>
+  )
+}
+
+function ComItens({ itens, children }: { itens?: DifalItemNota[] | null; children: React.ReactNode }) {
+  return <ComDica conteudo={<ItensDaNota itens={itens} />}>{children}</ComDica>
+}
+
+const pctBr = (v: number | undefined) => `${(v ?? 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`
+
+// A conta do DIFAL explicada passo a passo, com os números gravados na importação (calculo.ts)
+function CalculoDaNota({ d, total }: { d: DifalCalculoDetalhe | null | undefined; total: number }) {
+  if (!d) return <p className="text-xs text-slate-500">Cálculo não guardado para esta nota.</p>
+  if (d.erro) return <p className="text-xs text-rose-700">Não deu para calcular: {d.erro}</p>
+  if (d.motivo) return <p className="text-xs text-slate-600">{d.motivo}</p>
+  const com = d.comReducao
+  const sem = d.semReducao
+  const interna = (d.aliquotaInterna ?? 0) + (d.fcp ?? 0)
+  const linha = 'flex justify-between gap-4'
+  return (
+    <div className="space-y-2.5 text-xs text-slate-700">
+      <p className="text-sm font-semibold text-slate-900">Como chegamos em {brl(total)}</p>
+      <p className="text-slate-500">
+        {d.uf}: alíquota interna {pctBr(d.aliquotaInterna)}{d.fcp ? ` + fundo de pobreza ${pctBr(d.fcp)}` : ''}. Do RS para {d.uf} a nota sai com {pctBr(d.interestadual)} (interestadual).
+        {d.freteRateado ? ` O frete de ${brl(d.freteRateado)} entra na base, dividido entre as partes na proporção dos produtos.` : ''}
+      </p>
+      {com && com.valor > 0 && (
+        <div className="rounded-lg bg-slate-50 p-2.5">
+          <p className="mb-1 font-medium text-slate-900">1. Itens NCM 8436 (com redução do Convênio 52/91)</p>
+          <div className={linha}><span>Base (produtos + frete rateado)</span><span className="tabular-nums">{brl(com.valor)}</span></div>
+          {com.metodo === 'prop' ? (
+            <>
+              <div className={linha}><span>Base reduzida: {brl(com.valor)} × (5,6% ÷ {pctBr(d.aliquotaInterna)})</span><span className="tabular-nums">{brl(com.baseReduzida)}</span></div>
+              <div className={linha}><span>Diferença de alíquotas: {pctBr(d.aliquotaInterna)} − {pctBr(d.interestadual)}</span><span className="tabular-nums">{pctBr(com.diferencaAliquotas)}</span></div>
+              <div className={`${linha} font-medium text-slate-900`}><span>{brl(com.baseReduzida)} × {pctBr(com.diferencaAliquotas)}</span><span className="tabular-nums">{brl(com.difal)}</span></div>
+              <p className="mt-1 text-[11px] text-slate-500">Método do fisco de {d.uf}: base reduzida vezes a diferença de alíquotas.</p>
+            </>
+          ) : (
+            <>
+              <div className={linha}><span>Carga total do Convênio 52/91 − carga já recolhida no RS: {pctBr(com.cargaTotal)} − {pctBr(com.cargaOrigem)}</span><span className="tabular-nums">{pctBr(com.cargaDevida)}</span></div>
+              <div className={`${linha} font-medium text-slate-900`}><span>{brl(com.valor)} × {pctBr(com.cargaDevida)}</span><span className="tabular-nums">{brl(com.difal)}</span></div>
+              {!com.cargaDevida && <p className="mt-1 text-[11px] text-slate-500">A origem já recolheu toda a carga: não sobra DIFAL para estes itens.</p>}
+            </>
+          )}
+        </div>
+      )}
+      {sem && sem.valor > 0 && (
+        <div className="rounded-lg bg-slate-50 p-2.5">
+          <p className="mb-1 font-medium text-slate-900">{com && com.valor > 0 ? '2. ' : ''}Demais itens (sem redução)</p>
+          <div className={linha}><span>Base (produtos + frete rateado)</span><span className="tabular-nums">{brl(sem.valor)}</span></div>
+          <div className={linha}><span>Alíquota cheia: {pctBr(interna)} − {pctBr(d.interestadual)}</span><span className="tabular-nums">{pctBr(sem.aliquotaCheia)}</span></div>
+          <div className={`${linha} font-medium text-slate-900`}><span>{brl(sem.valor)} × {pctBr(sem.aliquotaCheia)}</span><span className="tabular-nums">{brl(sem.difal)}</span></div>
+        </div>
+      )}
+      <div className={`${linha} border-t border-slate-200 pt-2 text-sm font-semibold text-slate-900`}>
+        <span>DIFAL{com && com.valor > 0 && sem && sem.valor > 0 ? ' (1 + 2)' : ''}</span><span className="tabular-nums">{brl(total)}</span>
+      </div>
+    </div>
   )
 }
 
@@ -420,7 +477,11 @@ function GuiasPendentes() {
                 <td className="px-2 py-2.5 text-xs text-slate-500">{g.ml ? 'pagar até' : 'vence'} {dataBr(g.prazo)}</td>
                 <td className="px-2 py-2.5 font-medium text-slate-700">{g.clienteUf}</td>
                 <td className="px-2 py-2.5"><SeloEnvio envio={g.envio} /></td>
-                <td className="px-2 py-2.5 text-right font-semibold tabular-nums text-slate-900">{brl(g.difalCalculado)}</td>
+                <td className="px-2 py-2.5 text-right font-semibold tabular-nums text-slate-900">
+                  <ComDica largura={460} altura={340} conteudo={<CalculoDaNota d={g.calculoDetalhe} total={g.difalCalculado} />}>
+                    <span className="cursor-help underline decoration-dotted decoration-slate-300 underline-offset-4">{brl(g.difalCalculado)}</span>
+                  </ComDica>
+                </td>
                 <td className="px-5 py-2.5 text-xs">
                   <span className="flex flex-wrap items-center gap-2">
                     {g.situacao === 'DIVERGENTE' ? (
@@ -528,7 +589,11 @@ function GuiasAtrasadas({ notas }: { notas: DifalGuiaPendente[] }) {
                   <td className="px-2 py-2 text-rose-700">{dataBr(g.prazo)}</td>
                   <td className="px-2 py-2 font-medium text-slate-700">{g.clienteUf}</td>
                   <td className="px-2 py-2"><SeloEnvio envio={g.envio} /></td>
-                  <td className="px-5 py-2 text-right font-semibold tabular-nums">{brl(g.difalCalculado)}</td>
+                  <td className="px-5 py-2 text-right font-semibold tabular-nums">
+                    <ComDica largura={460} altura={340} conteudo={<CalculoDaNota d={g.calculoDetalhe} total={g.difalCalculado} />}>
+                      <span className="cursor-help underline decoration-dotted decoration-slate-300 underline-offset-4">{brl(g.difalCalculado)}</span>
+                    </ComDica>
+                  </td>
                 </tr>
               ))}
             </tbody>
