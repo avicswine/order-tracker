@@ -189,6 +189,7 @@ export interface DifalGuiaEmitida {
   ml: boolean
   mlLogistica: string | null
   mlOrderId: string | null
+  valorNota: number
   difalCalculado: number
   calculoDetalhe: DifalCalculoDetalhe | null
   itens: DifalItemNota[] | null
@@ -238,6 +239,7 @@ export interface DifalGuiaPendente {
   itens: DifalItemNota[] | null
   emitidaEm: string
   clienteUf: string
+  valorNota: number
   difalCalculado: number
   pronta: boolean
   faltando: string[]

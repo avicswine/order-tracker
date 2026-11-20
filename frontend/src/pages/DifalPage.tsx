@@ -508,7 +508,7 @@ function GuiasPendentes() {
       </div>
       <table className="min-w-full text-sm">
         <thead className="bg-gradient-to-r from-indigo-50 to-sky-50 text-left text-xs uppercase tracking-wide text-indigo-900/60">
-          <tr><th className="w-10 px-5 py-2"></th><th className="px-2 py-2">Nota / cliente</th><th className="px-2 py-2">Emissão</th><th className="px-2 py-2">Prazo</th><th className="px-2 py-2">UF</th><th className="px-2 py-2">Canal</th><th className="px-2 py-2">Transportadora</th><th className="px-2 py-2">Status</th><th className="px-2 py-2">Envio</th><th className="px-2 py-2">Previsão</th><th className="px-2 py-2 text-right">DIFAL</th><th className="px-5 py-2">Situação</th></tr>
+          <tr><th className="w-10 px-5 py-2"></th><th className="px-2 py-2">Nota / cliente</th><th className="px-2 py-2">Emissão</th><th className="px-2 py-2">Prazo</th><th className="px-2 py-2">UF</th><th className="px-2 py-2">Canal</th><th className="px-2 py-2">Transportadora</th><th className="px-2 py-2">Status</th><th className="px-2 py-2">Envio</th><th className="px-2 py-2">Previsão</th><th className="px-2 py-2 text-right">Valor da NF</th><th className="px-2 py-2 text-right">DIFAL</th><th className="px-5 py-2">Situação</th></tr>
         </thead>
         <tbody className="difal-linhas divide-y divide-slate-100">
           {noPrazo.map((g) => {
@@ -533,6 +533,7 @@ function GuiasPendentes() {
                 <td className="px-2 py-2.5"><span className="rounded-md bg-indigo-50 px-1.5 py-0.5 text-xs font-semibold text-indigo-700 ring-1 ring-indigo-100">{g.clienteUf}</span></td>
                 <CelulaCanal g={g} />
                 <CelulasEnvio envio={g.envio} />
+                <td className="px-2 py-2.5 text-right tabular-nums text-slate-600">{brl(g.valorNota)}</td>
                 <td className="px-2 py-2.5 text-right font-semibold tabular-nums text-indigo-700">
                   <ComDica largura={460} altura={340} conteudo={<CalculoDaNota d={g.calculoDetalhe} total={g.difalCalculado} />}>
                     <span className="cursor-help underline decoration-dotted decoration-slate-300 underline-offset-4">{brl(g.difalCalculado)}</span>
@@ -701,6 +702,7 @@ function GuiasAtrasadas({ notas, escolhidas, alternar, empresaEscolhida, marcarE
                 <th className="px-2 py-2 text-left">Status</th>
                 <th className="px-2 py-2 text-left">Envio</th>
                 <th className="px-2 py-2 text-left">Previsão</th>
+                <th className="px-2 py-2 text-right">Valor da NF</th>
                 <th className="px-5 py-2 text-right">DIFAL</th>
               </tr>
             </thead>
@@ -718,6 +720,7 @@ function GuiasAtrasadas({ notas, escolhidas, alternar, empresaEscolhida, marcarE
                   <td className="px-2 py-2"><span className="rounded-md bg-rose-50 px-1.5 py-0.5 text-xs font-semibold text-rose-700 ring-1 ring-rose-100">{g.clienteUf}</span></td>
                   <CelulaCanal g={g} />
                   <CelulasEnvio envio={g.envio} />
+                  <td className="px-2 py-2 text-right tabular-nums text-slate-600">{brl(g.valorNota)}</td>
                   <td className="px-5 py-2 text-right font-semibold tabular-nums text-rose-700">
                     <ComDica largura={460} altura={340} conteudo={<CalculoDaNota d={g.calculoDetalhe} total={g.difalCalculado} />}>
                       <span className="cursor-help underline decoration-dotted decoration-slate-300 underline-offset-4">{brl(g.difalCalculado)}</span>
@@ -1350,7 +1353,7 @@ function GuiasEmitidas() {
         <div className="max-h-[560px] overflow-auto">
         <table className="min-w-full text-sm">
           <thead className="sticky top-0 bg-gradient-to-r from-violet-50 to-indigo-50 text-left text-xs uppercase tracking-wide text-violet-900/60">
-            <tr><th className="w-10 px-5 py-2"></th><th className="px-2 py-2">Nota / cliente</th><th className="px-2 py-2">UF</th><th className="px-2 py-2">Canal</th><th className="px-2 py-2 text-right">DIFAL</th><th className="px-2 py-2">Gerada</th><th className="px-2 py-2">Portal</th><th className="px-2 py-2">Pagamento</th><th className="px-5 py-2">Código</th></tr>
+            <tr><th className="w-10 px-5 py-2"></th><th className="px-2 py-2">Nota / cliente</th><th className="px-2 py-2">UF</th><th className="px-2 py-2">Canal</th><th className="px-2 py-2 text-right">Valor da NF</th><th className="px-2 py-2 text-right">DIFAL</th><th className="px-2 py-2">Gerada</th><th className="px-2 py-2">Portal</th><th className="px-2 py-2">Pagamento</th><th className="px-5 py-2">Código</th></tr>
           </thead>
           <tbody className="difal-linhas divide-y divide-slate-100">
             {visiveis.map((g) => {
@@ -1366,6 +1369,7 @@ function GuiasEmitidas() {
                       {g.ml && g.mlLogistica && <span className={`w-fit rounded-md px-1.5 py-0.5 text-[11px] font-medium ring-1 ${COR_LOGISTICA[g.mlLogistica] ?? 'bg-slate-50 text-slate-600 ring-slate-200'}`}>{g.mlLogistica}</span>}
                     </span>
                   </td>
+                  <td className="px-2 py-2.5 text-right tabular-nums text-slate-600">{brl(g.valorNota)}</td>
                   <td className="px-2 py-2.5 text-right font-semibold tabular-nums text-violet-700">
                     <ComDica largura={460} altura={340} conteudo={<CalculoDaNota d={g.calculoDetalhe} total={g.difalCalculado} />}>
                       <span className="cursor-help underline decoration-dotted decoration-slate-300 underline-offset-4">{brl(g.difalCalculado)}</span>

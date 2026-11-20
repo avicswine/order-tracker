@@ -23,6 +23,8 @@ export interface GuiaPendente {
   itens: unknown
   emitidaEm: Date
   clienteUf: string
+  /** valor total da NF */
+  valorNota: number
   difalCalculado: number
   /** tudo pronto para entrar no lote */
   pronta: boolean
@@ -270,6 +272,7 @@ export async function listarGuiasPendentes(prisma: PrismaClient, empresa?: strin
       itens: n.itens,
       emitidaEm: n.emitidaEm,
       clienteUf: n.clienteUf,
+      valorNota: n.valorNota,
       difalCalculado: n.difalCalculado,
       pronta: !n.guiaGeradaEm && faltando.length === 0,
       faltando,

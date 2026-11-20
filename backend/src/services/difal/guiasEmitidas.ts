@@ -22,6 +22,7 @@ export interface GuiaEmitida {
   ml: boolean
   mlLogistica: string | null
   mlOrderId: string | null
+  valorNota: number
   difalCalculado: number
   calculoDetalhe: unknown
   itens: unknown
@@ -64,7 +65,7 @@ export async function listarGuiasEmitidas(prisma: PrismaClient): Promise<{ guias
     return {
       id: n.id, empresa: n.empresa, nfNumero: n.nfNumero, clienteNome: n.clienteNome, clienteUf: n.clienteUf,
       estadoComCobranca: UFS_COM_COBRANCA.includes(n.clienteUf), canal: n.canalNome, ml, mlLogistica: n.mlLogistica,
-      mlOrderId: n.mlOrderId, difalCalculado: n.difalCalculado, calculoDetalhe: n.calculoDetalhe, itens: n.itens,
+      mlOrderId: n.mlOrderId, valorNota: n.valorNota, difalCalculado: n.difalCalculado, calculoDetalhe: n.calculoDetalhe, itens: n.itens,
       emitidaEm: n.emitidaEm, loteId: n.guiaLoteId!, ambiente: lote?.ambiente ?? null, geradaEm,
       enviadaEm: lote?.enviadoEm ?? null, situacaoPortal: g?.situacaoGuia ?? null, linhaDigitavel: g?.linhaDigitavel ?? null,
       atrasada: !ml && prazoLegal(regraPorUf.get(n.clienteUf) ?? 'saida', n.emitidaEm) < geradaEm,
