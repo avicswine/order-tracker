@@ -85,7 +85,8 @@ async function enviarLotesDoDia(prisma: PrismaClient, hoje: string, doDia: GuiaP
         const resumo = Object.entries(conta).map(([s, n]) => `${n} ${SITUACAO_GUIA[s]?.toLowerCase() ?? `situação ${s}`}`).join(', ')
         linhas.push(`${emp}: lote ${lote.loteId} · ${resumo || r.situacao.descricao}`)
       } catch (e) {
-        linhas.push(`${emp}: falhou (${(e as Error).message})`)
+        // só o começo da mensagem: erro do portal/banco pode trazer dados da nota (LGPD)
+        linhas.push(`${emp}: falhou (${String((e as Error).message).split('\n')[0].slice(0, 200)})`)
       }
     }
   }
@@ -147,7 +148,9 @@ export async function rodarRotinaDifal(prisma: PrismaClient, { simulacao, agenda
   try {
     const mensagem = await montarMensagem(prisma, hoje, false)
     const enviadaWhatsapp = await avisarWhatsapp(mensagem)
-    ultima = { em: new Date(), ok: true, enviadaWhatsapp, resumo: mensagem.split('\n')[0] }
+    // falha do Bling, do ML ou de um lote aparece no texto como 'Atenção:' ou 'falhou (': o painel não pode mostrar 'ok'
+    const problemas = mensagem.split('\n').filter((l) => /^Atenção:|: falhou \(/.test(l))
+    ultima = { em: new Date(), ok: !problemas.length, enviadaWhatsapp, resumo: problemas.length ? problemas.join(' · ') : mensagem.split('\n')[0] }
     console.log(`[DIFAL rotina] ${enviadaWhatsapp ? 'WhatsApp enviado' : 'sem WhatsApp (número vazio ou falha)'}\n${mensagem}`)
     return { mensagem, enviadaWhatsapp }
   } catch (e) {

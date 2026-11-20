@@ -1382,7 +1382,7 @@ function GuiasEmitidas() {
                       {g.pagaEm
                         ? <span className="w-fit rounded-full bg-emerald-50 px-2 py-0.5 font-medium text-emerald-700 ring-1 ring-emerald-200">paga em {dataBr(g.pagaEm)}</span>
                         : <span className="w-fit rounded-full bg-slate-50 px-2 py-0.5 text-slate-500 ring-1 ring-slate-200">não paga</span>}
-                      {g.atrasada && <span className="w-fit rounded-full bg-rose-50 px-2 py-0.5 font-medium text-rose-700 ring-1 ring-rose-200">atrasada · sem multa e juros</span>}
+                      {g.atrasada && <span className="w-fit rounded-full bg-rose-50 px-2 py-0.5 font-medium text-rose-700 ring-1 ring-rose-200" title="guia gerada depois do dia em que o DIFAL vencia (regra do mesmo dia); saiu só com o imposto">gerada depois do prazo</span>}
                       {g.ml && <span className="w-fit rounded-full bg-yellow-50 px-2 py-0.5 text-yellow-800 ring-1 ring-yellow-200">{g.comprovanteMlEnviadoEm ? `comprovante no ML ${dataBr(g.comprovanteMlEnviadoEm)}` : 'comprovante no ML: falta'}</span>}
                     </span>
                   </td>

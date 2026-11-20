@@ -49,10 +49,10 @@ router.get('/resumo', [query('desde').optional().isISO8601()], async (req: Reque
   })
 
   const aPagar = await prisma.difalNota.aggregate({
-    // nós pagamos todas: as nossas em aberto e as do ML na janela de 7 dias ainda sem guia
+    // nós pagamos todas: as nossas em aberto e as do ML dos últimos 30 dias ainda sem guia
     where: { ...where, OR: [{ responsavel: 'NOSSO', situacao: { in: ['PENDENTE', 'ATRASADO'] } }, { ...filtroVendasMl(), guiaGeradaEm: null }] },
     _count: { _all: true },
-    _sum: { difalCalculado: true, valorNota: true },
+    _sum: { difalCalculado: true },
   })
 
   const divergentes = await prisma.difalNota.aggregate({
@@ -69,7 +69,7 @@ router.get('/resumo', [query('desde').optional().isISO8601()], async (req: Reque
       cobradoMl: r._sum.difalCobradoMl ?? 0,
       pagoGuia: r._sum.difalPagoGuia ?? 0,
     })),
-    aPagar: { notas: aPagar._count._all, valor: aPagar._sum.difalCalculado ?? 0, valorNotas: aPagar._sum.valorNota ?? 0 },
+    aPagar: { notas: aPagar._count._all, valor: aPagar._sum.difalCalculado ?? 0 },
     divergentes: { notas: divergentes._count._all, valor: divergentes._sum.divergencia ?? 0 },
   })
   } catch (e) {

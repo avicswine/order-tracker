@@ -1,7 +1,7 @@
 /**
  * Tipo de envio das vendas do Mercado Livre na lista de guias do DIFAL (FULL, Coleta, A combinar, ME1...).
  * Pedido do José em 20/11/2026. Só leitura no ML, uma vez por venda e só nas vendas que aparecem na lista
- * (DIFAL > 0, nota de até 7 dias): a conta do ML já foi bloqueada, então chamadas são poucas e param no 429.
+ * (DIFAL > 0, nota de até 30 dias): a conta do ML já foi bloqueada, então chamadas são poucas e param no 429.
  *
  * Valores do ML como o projeto já usa (cmvsync/ml_client.py:438 e :1450; services/mlEnvios.ts:247):
  *   logistic_type: fulfillment (Full), cross_docking (Coleta), drop_off/xd_drop_off/places (agência), self_service (Flex)
