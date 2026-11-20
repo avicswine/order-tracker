@@ -1,6 +1,6 @@
 # STATUS — Order Tracker
 
-Última atualização: 2026-11-19 (monitor de DIFAL em produção no Railway; Portal GNRE funcionando em homologação; aguardando habilitação para enviar lote)
+Última atualização: 2026-11-20 (DIFAL: primeira guia GNRE aceita em homologação; campos extras por UF; atrasadas vão para a contabilidade; visual novo; desenvolvimento passa a ser testado no PC)
 
 ## Regra de trabalho (definida por José em 2026-11-07)
 
@@ -10,50 +10,67 @@ que é inferência, nunca apresentar como fato. O motivo: na sessão de 07/11 tr
 afirmações minhas sobre políticas do ML caíram quando a fonte foi cobrada, gerando
 retrabalho e custo.
 
-## Monitor de DIFAL — ESTADO ATUAL (2026-11-19, tudo na `main` e em produção)
+## Monitor de DIFAL — ESTADO ATUAL (2026-11-20, tudo na `main` e em produção)
 
-PRs mergeados: #2 (monitor), #3 (auditoria do histórico), #4 (certificado por arquivo + cliente conforme WSDL),
-#5 (TLS 1.2), #6 (cadeia ICP-Brasil junto do certificado — causa real do erro no Railway).
+PRs mergeados: #2 a #6 (monitor, auditoria, portal GNRE, TLS, cadeia ICP-Brasil), #8 (importação em segundo plano),
+#9 a #13 e #15 (formato do lote GNRE até a guia ser aceita), #12 (desfazer lote invalidado), #14 (esconde DIFAL zero),
+#16 (visual novo), #17 (atrasadas para a contabilidade).
+
+### Como trabalhar (decisão do José, 20/11/2026)
+
+**Desenvolver e testar no PC; Railway só depois de pronto (PR + "pode" do José).**
+- Banco local recebe **só as tabelas `difal_*`** copiadas da produção: `backend/src/_copia_difal_local.ts`
+  (PROD_DATABASE_URL = `DATABASE_PUBLIC_URL` do serviço Postgres-PsBX). Não versionado.
+- **Nunca usar no PC os tokens do Bling/ML de produção**: renovar no PC derruba o token do Railway.
+  "Atualizar do Bling" não funciona no PC.
+- Subir: backend `npm run dev` (3001) e frontend `npx vite --port 5174`; abrir **http://localhost:5174**.
+  Login local em `backend/.env.acesso-local`. O portal GNRE de homologação funciona do PC (certificados no `.env`).
 
 ### O que já existe
 
 | parte | onde | estado |
 |---|---|---|
-| Tabelas `difal_notas`, `difal_aliquotas`, `difal_emitentes`, `difal_cobrancas_ml`, `difal_lotes_gnre` | `backend/prisma/schema.prisma` + 4 migrações `202611*` | aplicadas em produção |
-| Cálculo (carga/prop, redução NCM 8436, quem paga) | `backend/src/services/difal/calculo.ts` | 8 casos em `verificar.ts` passam |
-| Importação do Bling (AVIC e AGRO; EQUI fora) + leitura do XML | `importar.ts`, `xmlNota.ts` | situações 5, 6 e 7; nota cancelada depois vira SEM_DIFAL |
-| Histórico auditado (94 guias, principal/multa/juros conferidos) | `dados/historico-guias.json` | CE 8389/8604 com campos trocados na guia; 5 TO e AL 9358 incluídas em 19/11 |
-| Gerador do lote GNRE, layout 2.00 | `gnre.ts` | 20 casos em `verificarGnre.ts`; validação formal XSD pendente |
-| Guias pendentes, lote, envio, resultado, PDF | `guias.ts`, `portalGnre.ts`, rotas `guias/*`, `lotes/*`, `portal/*` | lote só envia no ambiente em que foi gerado |
-| Fechamento mensal CDIFAL (ML cobrou × calculamos) | `cobrancasMl.ts` | só leitura na API de faturamento do ML |
-| Cliente do Portal GNRE | `portalGnre.ts` + `dados/cadeiaIcpBrasilRfb.ts` | **funciona em produção** (ConfigUF real); 23 casos em `verificarPortalGnre.ts` |
-| Tela | `frontend/src/pages/DifalPage.tsx` — abas Vendas, "O que já pagamos", Configuração | em produção em `/difal` |
+| Tabelas `difal_notas`, `difal_aliquotas`, `difal_emitentes`, `difal_cobrancas_ml`, `difal_lotes_gnre` | `backend/prisma/schema.prisma` + 5 migrações `202611*` | em produção (a última acrescenta `difal_aliquotas.camposExtrasGnre`) |
+| Cálculo (carga/prop, redução NCM 8436, quem paga) | `services/difal/calculo.ts` | 8 casos em `verificar.ts` |
+| Importação do Bling (AVIC e AGRO; EQUI fora) | `importar.ts`, rota em segundo plano + `GET /difal/importar/status` | 90 dias levam minutos; erro 504 do Bling em algumas notas: repetir |
+| Painel | `frontend/src/pages/DifalPage.tsx` + `difal.css` | esconde DIFAL zero (menos divergentes/cobradas pelo ML); visual novo |
+| Guias no prazo × atrasadas | `guias.ts` (`prazoLegal`) | atrasadas não entram em lote; "Baixar lista" (CSV sem nome/CPF) para a contabilidade |
+| Lote GNRE (layout 2.00) | `gnre.ts`, `guias.ts`, `portalGnre.ts` | conferido campo a campo contra os XSD oficiais; `verificarGnre.ts` e `verificarPortalGnre.ts` |
+| Configuração por UF | `difal_aliquotas`: receita, `tipoDocOrigemGnre`, `camposExtrasGnre` | gravada lendo o GnreConfigUF (`backend/src/_grava_config_gnre.ts`, não versionado) |
+| Histórico auditado | `dados/historico-guias.json` | 94 guias; pago a mais R$ 6.677,44 |
 
-### Portal GNRE — situação
+### Portal GNRE — o que já se sabe (testado em homologação)
 
-- `GNRE_AMBIENTE=homologacao`; certificado A1 da AVIC no Railway (`GNRE_PFX_BASE64_AVIC` + senha). **Vence 15/01/2027.**
-- O `.pfx` da AVIC vem sem a cadeia das ACs; por isso o portal recusava a conexão vinda do Railway
-  ("SSL alert 42"). A cadeia pública (AC REDE IDEIA RFB → AC RFB v4 → Raiz v5) está embutida em
-  `dados/cadeiaIcpBrasilRfb.ts`. Reproduz no PC com `NODE_OPTIONS=--no-use-system-ca`.
-- Receita **100102** marcada por José em todos os estados disponíveis (19/11). SP e ES: "UF não
-  habilitada neste ambiente" (homologação). SP não importa (DIFAL 0); ES reconferir em produção.
-- BA exige período de referência na 100102 — o gerador já manda mês/ano (`guias.ts`).
+- `GNRE_AMBIENTE=homologacao`. Certificados A1: **AVIC vence 15/01/2027**, **AGRO vence 09/06/2027**
+  (AGRO ainda sem as variáveis `GNRE_PFX_BASE64_AGRO`/`GNRE_PFX_SENHA_AGRO` no Railway; no PC funciona).
+- **Primeira guia aceita: 20/11/2026** (PI, NF 12962). Também aceitas: PB, RJ, SC, GO, RO, MS.
+  PR e BA deram 703 (sistema do estado fora do ar em homologação); MA exige "produto" (trava a nota).
+- Regras que custaram tentativas (manual GNRE v2.17 + XSD + GnreConfigUF):
+  resposta do envio é `processarResponse`; `identificadorGuia` só dígitos (número da NF); razão social/endereço
+  ≤ 60 caracteres latinos; documento de origem no tipo que a UF aceita (10 número, 22 chave NF-e, 24 chave DF-e,
+  ou nenhum em MS/PB); `dataPagamento` obrigatória (= hoje em Brasília); emitente **só com CNPJ** (IE só se inscrito
+  na UF favorecida, regra 202); campos extras obrigatórios por UF (chave da NF-e, data de emissão no RJ,
+  observação "DIFAL NF <n>" no TO).
+- O `.pfx` da AVIC vem sem a cadeia: a cadeia ICP-Brasil está embutida em `dados/cadeiaIcpBrasilRfb.ts`.
+- `emitidaEm` guarda o horário de Brasília **como se fosse UTC** (Bling manda sem fuso): usar as partes UTC.
+- SP e ES: "UF não habilitada" em homologação. SP tem DIFAL só em produto sem NCM 8436.
 
 ### O que falta (em ordem)
 
-1. Aprovação da **habilitação em homologação** (pedida por José no portal) → primeiro lote de teste
-   (não se paga) → confirmar `GnreLoteRecepcao` e `GnreResultadoLote` com resposta real.
-2. AGRO: habilitação + `GNRE_PFX_BASE64_AGRO`/`GNRE_PFX_SENHA_AGRO` (conferir se o pfx dela traz a cadeia).
-3. Pedido de produção no portal → `GNRE_AMBIENTE=producao` → primeira guia real com **uma** nota só.
-4. Validação formal do XML do lote contra o XSD (sem lxml na máquina).
-5. Pergunta ao suporte do ML sobre recolher o DIFAL por conta própria (José adiou).
+1. **Contabilidade** (José leva a planilha de atrasadas): como regularizar as atrasadas (multa/juros) e se alguma já
+   foi paga à mão; se pagar 1–5 dias após a emissão, antes da entrega, gera multa; categoria de "produto" do MA.
+2. **Habilitação de produção** no portal GNRE (AVIC e AGRO) → `GNRE_AMBIENTE=producao` → primeira guia real com
+   **uma** nota só, paga pelo José, conferida no portal.
+3. AGRO no Railway: variáveis do certificado.
+4. Ideia em aberto (depende da contabilidade): usar o rastreio de entregas do order-tracker para separar atrasadas
+   ainda em trânsito (pagar já) das já entregues.
+5. ES e SP: reconsultar em produção.
 
 ### Como conferir
 
-- `/difal` → "Atualizar do Bling" → tabela com notas dos últimos 90 dias e "Quem paga".
-- Bloco âmbar lista as guias nossas pendentes e **o que falta** em cada.
+- `/difal`: cartões do topo, "Guias para emitir agora (no prazo)", "Atrasadas: com a contabilidade" (Baixar lista),
+  "Lotes GNRE gerados" (cartões verde/vermelho), fechamento mensal, tabela de notas.
 - Configuração → "Buscar receitas no portal" em uma UF → lista de receitas (prova de que o portal responde).
-- Selecionar notas prontas → "Gerar lote" → aparece em "Lotes GNRE" com Enviar/Consultar/XML/PDF/Desfazer.
 - `npx tsx src/services/difal/verificar.ts`, `verificarGnre.ts` e `verificarPortalGnre.ts` no backend.
 
 ### Regras aprendidas na planilha fiscal do ML (16–17/11/2026)
