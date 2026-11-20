@@ -140,6 +140,7 @@ export async function gerarLoteDasNotas(prisma: PrismaClient, ids: string[], hoj
       documentoOrigem: documentoOrigem(n, a.tipoDocOrigemGnre)!,
       tipoDocumentoOrigem: a.tipoDocOrigemGnre,
       dataVencimento: vencimento(a.vencimentoRegra, n.emitidaEm, hoje),
+      dataPagamento: aaaaMmDd(hoje),
       valorPrincipal: n.difalCalculado,
       referencia: {
         mes: String(n.emitidaEm.getUTCMonth() + 1).padStart(2, '0'),
