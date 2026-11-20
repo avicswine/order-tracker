@@ -326,13 +326,21 @@ function Vendas() {
         </div>
       )}
 
-      <div className="difal-escalonado grid gap-4 sm:grid-cols-2">
+      <div className="difal-escalonado grid gap-4 sm:grid-cols-3">
         <Numero
           icone="documento"
           titulo="Guias que precisamos emitir"
           valor={brl(resumo?.aPagar.valor)}
           detalhe={`${resumo?.aPagar.notas ?? 0} nota(s) com DIFAL para pagar (balcão, lojas e Mercado Livre)`}
           tom={(resumo?.aPagar.valor ?? 0) > 0 ? 'alerta' : 'ok'}
+        />
+        <Numero
+          icone="moedas"
+          titulo="Valor total dessas notas"
+          valor={brl(resumo?.aPagar.valorNotas)}
+          detalhe={resumo?.aPagar.valorNotas
+            ? `DIFAL médio: ${pct((resumo.aPagar.valor / resumo.aPagar.valorNotas) * 100)} do valor das notas`
+            : 'sem notas para pagar'}
         />
         <Numero
           icone={(resumo?.divergentes.notas ?? 0) > 0 ? 'alerta' : 'ok'}

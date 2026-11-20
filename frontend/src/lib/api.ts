@@ -214,7 +214,7 @@ export interface DifalResumo {
     cobradoMl: number
     pagoGuia: number
   }[]
-  aPagar: { notas: number; valor: number }
+  aPagar: { notas: number; valor: number; valorNotas: number }
   divergentes: { notas: number; valor: number }
 }
 
