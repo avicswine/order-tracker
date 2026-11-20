@@ -7,7 +7,7 @@
  * em /tmp para validação formal contra o schema, quando houver validador.
  */
 import { writeFileSync } from 'fs'
-import { montarLoteGnre, dividirEmLotes, ErroMontagemGnre, type GuiaGnre, type EmitenteGnre } from './gnre'
+import { montarLoteGnre, dividirEmLotes, ErroMontagemGnre, textoGnre, type GuiaGnre, type EmitenteGnre } from './gnre'
 
 // dados de exemplo — NÃO são de cliente real
 const emitente: EmitenteGnre = {
@@ -27,7 +27,7 @@ const guiaPiaui: GuiaGnre = {
   valorPrincipal: 15, // R$ 1.000 x 1,5%
   referencia: { mes: '11', ano: '2026' },
   destinatario: { documento: '123.456.789-09', razaoSocial: 'Consumidor Exemplo', municipio: '11001' },
-  identificadorGuia: 'AVIC-NF-13439',
+  identificadorGuia: '13439',
 }
 
 const PADRAO_DATA = /^\d{4}-\d{2}-\d{2}$/
@@ -59,7 +59,7 @@ caso('todos os valores respeitam TDec_1502', [...pega('valor'), ...pega('valorGN
 caso('CPF do destinatário com 11 dígitos', pega('CPF')[0] === '12345678909', pega('CPF')[0])
 caso('documento de origem é NF-e (tipo 10)', xml.includes('<documentoOrigem tipo="10">13439</documentoOrigem>'))
 caso('nenhum campo do layout 1.00 (c01_, c02_...)', !/<c\d{2}_/.test(xml))
-caso('identificadorGuia presente para casar a resposta', pega('identificadorGuia')[0] === 'AVIC-NF-13439')
+caso('identificadorGuia presente para casar a resposta', pega('identificadorGuia')[0] === '13439')
 
 // recusas que devem acontecer
 function recusa(nome: string, fn: () => void) {
@@ -78,5 +78,13 @@ caso('120 guias viram 3 lotes (50+50+20)', lotes.length === 3 && lotes[2].length
 
 writeFileSync('/tmp/lote_gnre_exemplo.xml', xml, 'utf-8')
 console.log(`\nXML de exemplo gravado em /tmp/lote_gnre_exemplo.xml (${xml.length} bytes)`)
+// texto livre no formato TString do XSD (até 60, sem espaço nas pontas, só U+0020..U+00FF)
+caso('texto: espaços repetidos e nas pontas saem', textoGnre('  João  da Silva  ') === 'João da Silva')
+caso('texto: aspas e travessão tipográficos viram simples', textoGnre('Agro \u201CBom\u201D \u2013 Ltda') === 'Agro "Bom" - Ltda')
+caso('texto: emoji sai sem deixar espaço duplo', textoGnre('Fazenda \u{1F437} Feliz') === 'Fazenda Feliz')
+caso('texto: corta em 60 caracteres', textoGnre('X'.repeat(70))?.length === 60)
+caso('texto: só espaços vira ausente', textoGnre('   ') === undefined)
+caso('identificadorGuia só com dígitos (XSD [0-9]{1,10})', /^[0-9]{1,10}$/.test(pega('identificadorGuia')[0] ?? ''))
+
 console.log(falhas === 0 ? '\nTodos os casos conferem.' : `\n${falhas} caso(s) com erro.`)
 process.exit(falhas === 0 ? 0 : 1)

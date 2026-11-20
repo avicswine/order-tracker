@@ -86,10 +86,34 @@ export interface GuiaGnre {
 
 export class ErroMontagemGnre extends Error {}
 
+/** XSD dados_gnre_v2.00: razaoSocial e endereco têm maxLength 60 */
+const TAMANHO_MAX_TEXTO = 60
+
 export function escapar(v: string): string {
   return String(v).replace(/[<>&'"]/g, (c) =>
     ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' })[c] as string
   )
+}
+
+/**
+ * Texto livre (razão social, endereço) no formato TString do XSD: até 60 caracteres, sem espaço
+ * nas pontas e só caracteres de U+0020 a U+00FF (latim comum, com acentos). Aspas e travessões
+ * tipográficos viram os simples; o que mais estiver fora da faixa sai.
+ */
+export function textoGnre(v: string | undefined): string | undefined {
+  if (v === undefined) return undefined
+  const limpo = String(v)
+    .normalize('NFC')
+    .replace(/[\u2018\u2019\u201A\u2032]/g, "'")
+    .replace(/[\u201C\u201D\u201E\u2033]/g, '"')
+    .replace(/[\u2013\u2014\u2212]/g, '-')
+    .replace(/\s/g, ' ')
+    .replace(/[^\u0020-\u00FF]/g, '')
+    .replace(/ {2,}/g, ' ')
+    .trim()
+    .slice(0, TAMANHO_MAX_TEXTO)
+    .trim()
+  return limpo || undefined
 }
 
 function digitos(v: string | undefined): string {
@@ -184,8 +208,8 @@ function montarGuia(g: GuiaGnre, emitente: EmitenteGnre): string {
     tag('CNPJ', digitos(emitente.cnpj), '          ') +
     tag('IE', digitos(emitente.inscricaoEstadual) || undefined, '          ') +
     `        </identificacao>\n` +
-    tag('razaoSocial', emitente.razaoSocial, '        ') +
-    tag('endereco', emitente.endereco, '        ') +
+    tag('razaoSocial', textoGnre(emitente.razaoSocial), '        ') +
+    tag('endereco', textoGnre(emitente.endereco), '        ') +
     tag('municipio', emitente.municipio, '        ') +
     tag('uf', emitente.uf, '        ') +
     tag('cep', digitos(emitente.cep), '        ') +
@@ -203,7 +227,7 @@ function montarGuia(g: GuiaGnre, emitente: EmitenteGnre): string {
     `            <identificacao>\n` +
     tag(tipoDoc, doc, '              ') +
     `            </identificacao>\n` +
-    tag('razaoSocial', g.destinatario.razaoSocial, '            ') +
+    tag('razaoSocial', textoGnre(g.destinatario.razaoSocial), '            ') +
     tag('municipio', g.destinatario.municipio, '            ') +
     `          </contribuinteDestinatario>\n` +
     extras +
