@@ -11,6 +11,7 @@ import type {
  * 10 = número da nota; 22 = chave da NF-e; 24 = chave do DF-e (as duas últimas usam a chave de 44 dígitos).
  */
 function tipoDocPreferido(r: DifalReceitaUf): string | undefined {
+  if (!r.exigeDocumentoOrigem) return '' // a UF não exige: a guia vai sem documento de origem
   const aceitos = r.tiposDocumentosOrigem.map((t) => t.codigo)
   return ['10', '22', '24'].find((t) => aceitos.includes(t))
 }

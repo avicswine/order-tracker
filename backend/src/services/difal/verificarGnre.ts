@@ -86,5 +86,9 @@ caso('texto: corta em 60 caracteres', textoGnre('X'.repeat(70))?.length === 60)
 caso('texto: só espaços vira ausente', textoGnre('   ') === undefined)
 caso('identificadorGuia só com dígitos (XSD [0-9]{1,10})', /^[0-9]{1,10}$/.test(pega('identificadorGuia')[0] ?? ''))
 
+// UF que não exige documento de origem (ex.: MS e PB na 100102): a guia vai sem o elemento
+const xmlSemDoc = montarLoteGnre([{ ...guiaPiaui, ufFavorecida: 'MS', documentoOrigem: undefined, tipoDocumentoOrigem: undefined }], emitente)
+caso('guia sem documento de origem não leva <documentoOrigem>', !xmlSemDoc.includes('<documentoOrigem'))
+
 console.log(falhas === 0 ? '\nTodos os casos conferem.' : `\n${falhas} caso(s) com erro.`)
 process.exit(falhas === 0 ? 0 : 1)

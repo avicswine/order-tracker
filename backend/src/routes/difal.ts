@@ -147,7 +147,7 @@ router.put(
     body('nota').optional().trim(),
     body('codigoReceitaGnre').optional().trim().matches(/^\d{6}$/).withMessage('código de receita tem 6 dígitos'),
     body('vencimentoRegra').optional().isIn(['saida', 'dia15']),
-    body('tipoDocOrigemGnre').optional().trim().matches(/^\d{2}$/).withMessage('tipo de documento de origem tem 2 dígitos'),
+    body('tipoDocOrigemGnre').optional().trim().matches(/^(\d{2})?$/).withMessage('tipo de documento de origem tem 2 dígitos (ou vazio, se a UF não exige)'),
   ],
   async (req: Request, res: Response) => {
     const erros = validationResult(req)
