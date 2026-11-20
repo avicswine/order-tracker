@@ -50,6 +50,8 @@ export interface GuiaPendente {
 }
 
 export interface EnvioDaNota {
+  /** id do pedido no order-tracker: abre a janela 'Detalhes do Pedido' */
+  pedidoId: string
   situacao: 'PENDING' | 'IN_TRANSIT' | 'DELIVERED' | 'CANCELLED'
   transportadora: string | null
   enviadoEm: Date | null
@@ -224,11 +226,12 @@ export async function listarGuiasPendentes(prisma: PrismaClient, empresa?: strin
   const pedidos = await prisma.order.findMany({
     where: { orderNumber: { in: notas.map((n) => numeroDoPedido(n.empresa, n.nfNumero)) } },
     select: {
-      orderNumber: true, status: true, shippedAt: true, estimatedDelivery: true, deliveredAt: true,
+      id: true, orderNumber: true, status: true, shippedAt: true, estimatedDelivery: true, deliveredAt: true,
       lastTracking: true, hasOccurrence: true, carrier: { select: { name: true } },
     },
   })
   const envioPorPedido = new Map(pedidos.map((p) => [p.orderNumber, {
+    pedidoId: p.id,
     situacao: p.status,
     transportadora: p.carrier?.name ?? null,
     enviadoEm: p.shippedAt,

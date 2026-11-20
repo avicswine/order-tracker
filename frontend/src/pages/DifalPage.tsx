@@ -7,6 +7,9 @@ import type {
 } from '../lib/api'
 import './difal.css'
 import { StatusBadge } from '../components/ui/Badge'
+import { OrderDetailModal } from '../components/orders/OrderDetailModal'
+import { ordersApi } from '../lib/api'
+import type { Order } from '../types'
 
 // Ícones simples desenhados aqui mesmo (sem biblioteca nova)
 const ICONES = {
@@ -610,6 +613,17 @@ function GuiasAtrasadas({ notas }: { notas: DifalGuiaPendente[] }) {
 
 // Envio da nota como na tela de Pedidos: transportadora, status (mesmo selo), data de envio e previsão/entrega
 function CelulasEnvio({ envio }: { envio: DifalGuiaPendente['envio'] }) {
+  // clicar no status abre a mesma janela 'Detalhes do Pedido' da tela de Pedidos
+  const [pedido, setPedido] = useState<Order | null>(null)
+  const [abrindo, setAbrindo] = useState(false)
+  async function abrir(id: string) {
+    setAbrindo(true)
+    try {
+      setPedido(await ordersApi.get(id))
+    } finally {
+      setAbrindo(false)
+    }
+  }
   if (!envio) {
     return (
       <td colSpan={4} className="px-2 py-2.5 text-xs text-slate-400" title="Nota não está no order-tracker (retirada, Mercado Envios, Shopee…)">sem rastreio</td>
@@ -618,8 +632,16 @@ function CelulasEnvio({ envio }: { envio: DifalGuiaPendente['envio'] }) {
   return (
     <>
       <td className="max-w-[180px] truncate px-2 py-2.5 text-xs text-slate-600" title={envio.transportadora ?? undefined}>{envio.transportadora ?? '—'}</td>
-      <td className="px-2 py-2.5" title={envio.ultimoRastreio ?? undefined}>
-        <StatusBadge status={envio.situacao} hasOccurrence={envio.temOcorrencia} lastTracking={envio.ultimoRastreio} />
+      <td className="px-2 py-2.5">
+        <button
+          onClick={() => abrir(envio.pedidoId)}
+          disabled={abrindo}
+          title={`${envio.ultimoRastreio ?? ''}${envio.ultimoRastreio ? ' · ' : ''}clique para ver o pedido`}
+          className="difal-btn rounded-full disabled:opacity-50"
+        >
+          <StatusBadge status={envio.situacao} hasOccurrence={envio.temOcorrencia} lastTracking={envio.ultimoRastreio} />
+        </button>
+        {pedido && <OrderDetailModal order={pedido} onClose={() => setPedido(null)} />}
       </td>
       <td className="px-2 py-2.5 text-xs text-slate-600">{envio.enviadoEm ? dataBr(envio.enviadoEm) : '—'}</td>
       <td className="px-2 py-2.5 text-xs text-slate-600">

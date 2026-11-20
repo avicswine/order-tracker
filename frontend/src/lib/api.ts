@@ -219,6 +219,7 @@ export interface DifalGuiaPendente {
   atrasada: boolean
   /** envio no order-tracker; null = nota não está lá (retirada, Mercado Envios, Shopee…) */
   envio: {
+    pedidoId: string
     situacao: 'PENDING' | 'IN_TRANSIT' | 'DELIVERED' | 'CANCELLED'
     transportadora: string | null
     enviadoEm: string | null
