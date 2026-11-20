@@ -159,7 +159,6 @@ export async function gerarLoteDasNotas(prisma: PrismaClient, ids: string[], hoj
 
   const xml = montarLoteGnre(guias, {
     cnpj: emitente.cnpj,
-    inscricaoEstadual: emitente.inscricaoEstadual ?? undefined,
     razaoSocial: emitente.razaoSocial,
     endereco: emitente.endereco,
     municipio: emitente.municipioIbge,

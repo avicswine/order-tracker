@@ -43,7 +43,6 @@ export const LIMITE_ITENS_POR_GUIA = 100
 
 export interface EmitenteGnre {
   cnpj: string
-  inscricaoEstadual?: string
   razaoSocial: string
   endereco: string
   /** código IBGE do município com 5 dígitos (sem a UF) */
@@ -205,10 +204,11 @@ function montarGuia(g: GuiaGnre, emitente: EmitenteGnre): string {
     `    <TDadosGNRE versao="2.00">\n` +
     tag('ufFavorecida', g.ufFavorecida, '      ') +
     tag('tipoGnre', TIPO_GNRE.simples, '      ') +
+    // Só o CNPJ: a IE vai apenas se o emitente for inscrito na UF favorecida (manual, regra 202).
+    // A guia por operação é de quem não é inscrito no destino; a IE do RS é recusada pela UF (erro 700).
     `      <contribuinteEmitente>\n` +
     `        <identificacao>\n` +
     tag('CNPJ', digitos(emitente.cnpj), '          ') +
-    tag('IE', digitos(emitente.inscricaoEstadual) || undefined, '          ') +
     `        </identificacao>\n` +
     tag('razaoSocial', textoGnre(emitente.razaoSocial), '        ') +
     tag('endereco', textoGnre(emitente.endereco), '        ') +
