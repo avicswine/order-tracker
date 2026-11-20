@@ -409,12 +409,23 @@ router.post('/lotes/:id/enviar', async (req: Request, res: Response) => {
   }
 })
 
-// POST /difal/lotes/:id/desfazer — apaga um lote que ainda não foi ao portal e devolve as notas à fila
+// Situações da guia que garantem que ela NÃO vale para pagamento (manual GNRE): 1 = invalidada pelo
+// Portal, 2 = invalidada pela UF. Erro de comunicação (3) e pendência (4) ficam de fora: a guia ainda pode valer.
+const GUIA_INVALIDADA = new Set(['1', '2'])
+
+// POST /difal/lotes/:id/desfazer — apaga o lote e devolve as notas à fila. Vale para lote que ainda não foi ao
+// portal, ou que foi e teve TODAS as guias invalidadas (senão a nota ficaria presa num lote recusado).
 router.post('/lotes/:id/desfazer', async (req: Request, res: Response) => {
   try {
-    const lote = await prisma.difalLoteGnre.findUnique({ where: { id: String(req.params.id) }, select: { id: true, numeroRecibo: true } })
+    const lote = await prisma.difalLoteGnre.findUnique({ where: { id: String(req.params.id) }, select: { id: true, numeroRecibo: true, resultadoXml: true } })
     if (!lote) return res.status(404).json({ erro: 'lote não encontrado' })
-    if (lote.numeroRecibo) return res.status(409).json({ erro: `lote já enviado ao portal (recibo ${lote.numeroRecibo}); não dá para desfazer` })
+    if (lote.numeroRecibo) {
+      const guias = lote.resultadoXml ? lerResultadoLote(lote.resultadoXml).guias : []
+      const todasInvalidadas = guias.length > 0 && guias.every((g) => GUIA_INVALIDADA.has(g.situacaoGuia))
+      if (!todasInvalidadas) {
+        return res.status(409).json({ erro: `lote já enviado ao portal (recibo ${lote.numeroRecibo}) e nem todas as guias foram invalidadas; não dá para desfazer` })
+      }
+    }
     const [notas] = await prisma.$transaction([
       prisma.difalNota.updateMany({ where: { guiaLoteId: lote.id }, data: { guiaGeradaEm: null, guiaLoteId: null } }),
       prisma.difalLoteGnre.delete({ where: { id: lote.id } }),
