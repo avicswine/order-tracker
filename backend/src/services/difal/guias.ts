@@ -182,7 +182,11 @@ export function filtroVendasMl(): Prisma.DifalNotaWhereInput {
   return {
     responsavel: 'ML_PAGA',
     comprovanteMlEnviadoEm: null,
-    OR: [{ emitidaEm: { gte: limite }, guiaGeradaEm: null }, { guiaGeradaEm: { not: null } }],
+    OR: [
+      // sem guia: só aberta (divergente = erro de cálculo ou nota cancelada: não gerar guia) e com DIFAL
+      { emitidaEm: { gte: limite }, guiaGeradaEm: null, situacao: { in: [...SITUACOES_ABERTAS] }, difalCalculado: { gt: 0 } },
+      { guiaGeradaEm: { not: null } },
+    ],
   }
 }
 
@@ -305,7 +309,8 @@ const JANELA_ML_DIAS = 7
 
 // nós pagamos o DIFAL das vendas do ML em todos os estados (decisão do José, 20/11/2026), dentro da janela
 function vendaMlNaJanela(nota: DifalNota, hojeBr: string): boolean {
-  return nota.responsavel === 'ML_PAGA' && aaaaMmDd(nota.emitidaEm) >= somarDias(hojeBr, -JANELA_ML_DIAS)
+  return nota.responsavel === 'ML_PAGA' && nota.situacao !== 'DIVERGENTE'
+    && aaaaMmDd(nota.emitidaEm) >= somarDias(hojeBr, -JANELA_ML_DIAS)
 }
 
 /**

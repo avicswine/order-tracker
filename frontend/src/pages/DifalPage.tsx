@@ -10,7 +10,6 @@ import './difal.css'
 // Ícones simples desenhados aqui mesmo (sem biblioteca nova)
 const ICONES = {
   documento: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M9 15h6M9 11h2',
-  sacola: 'M3 7h18l-2 13H5zM8 7a4 4 0 0 1 8 0',
   ok: 'M20 6 9 17l-5-5',
   alerta: 'M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z',
   atualizar: 'M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5',
@@ -29,7 +28,7 @@ function Icone({ nome, className = 'h-5 w-5' }: { nome: keyof typeof ICONES; cla
 
 // quadro com os itens da NF, aberto ao passar o mouse no número da nota
 function ItensDaNota({ itens }: { itens: DifalItemNota[] | null | undefined }) {
-  if (!itens) return <p className="text-xs text-slate-500">Itens ainda não carregados: clique em "Atualizar do Bling".</p>
+  if (!itens) return <p className="text-xs text-slate-500">Itens não guardados para esta nota (nota anterior à importação dos itens).</p>
   if (itens.length === 0) return <p className="text-xs text-slate-500">A nota veio sem itens do Bling.</p>
   const total = itens.reduce((s, i) => s + (i.valorTotal ?? 0), 0)
   return (
@@ -470,15 +469,16 @@ function GuiasPendentes() {
       setAviso(`Lote ${lote.loteId} gerado: ${lote.guias} guia(s), ${brl(lote.total)}. O arquivo foi baixado.`)
       setEscolhidas(new Set())
       qc.invalidateQueries({ queryKey: ['difal-guias-pendentes'] })
-      qc.invalidateQueries({ queryKey: ['difal-notas'] })
+      qc.invalidateQueries({ queryKey: ['difal-resumo'] })
+      qc.invalidateQueries({ queryKey: ['difal-lotes'] })
     },
-    onError: async (e) => setErroTexto(await erroDoLote(e)),
+    onError: async (e) => setErroTexto(`Não deu para montar o lote: ${await erroDoLote(e)}`),
   })
 
   const marcar = useMutation({
     mutationFn: difalApi.marcarComprovanteMl,
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['difal-guias-pendentes'] }); qc.invalidateQueries({ queryKey: ['difal-fechamento'] }) },
-    onError: (e) => setErroTexto(mensagemErro(e)),
+    onError: (e) => setErroTexto(`Comprovante: ${mensagemErro(e)}`),
   })
 
   function alternar(g: DifalGuiaPendente) {
@@ -520,7 +520,7 @@ function GuiasPendentes() {
       {aviso && <div className="difal-entrar border-b border-emerald-100 bg-emerald-50 px-5 py-2 text-sm text-emerald-900">{aviso}</div>}
       {erroTexto && (
         <div className="difal-entrar border-b border-red-100 bg-red-50 px-5 py-2 text-sm text-red-800">
-          Não deu para montar o lote: {erroTexto}
+          {erroTexto}
         </div>
       )}
       <table className="min-w-full text-sm">
