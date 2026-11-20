@@ -79,7 +79,15 @@ export async function preencherLogisticaMl(prisma: PrismaClient): Promise<{ lida
   const acessos = new Map<string, Awaited<ReturnType<typeof mlAuth>>>()
   for (const n of notas) {
     const conta = n.empresa.toLowerCase() as MlCompany
-    if (!acessos.has(conta)) acessos.set(conta, await mlAuth(conta))
+    if (!acessos.has(conta)) {
+      try {
+        acessos.set(conta, await mlAuth(conta))
+      } catch (e) {
+        // sem acesso ao ML desta conta (ex.: renovação do token falhou): segue sem o tipo de envio, sem derrubar a importação
+        res.erros.push(`tipo de envio ML (${conta}): ${String((e as Error).message).split('\n')[0]}`)
+        acessos.set(conta, null as unknown as Awaited<ReturnType<typeof mlAuth>>)
+      }
+    }
     const acesso = acessos.get(conta)
     if (!acesso) continue // conta do ML sem token (ex.: no PC): fica para quando houver
     try {
