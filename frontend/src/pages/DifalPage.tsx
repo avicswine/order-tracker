@@ -378,8 +378,13 @@ function GuiasPendentes() {
 
   // por padrão só os estados em que já tivemos cobrança de DIFAL; os outros o José confere com a contabilidade
   const [soComCobranca, setSoComCobranca] = useState(true)
-  const visiveis = soComCobranca ? guias.filter((g) => g.estadoComCobranca) : guias
-  const escondidas = guias.length - visiveis.length
+  // filtro de datas de emissão (vale para as listas e para a planilha); padrão: tudo
+  const [de, setDe] = useState('')
+  const [ate, setAte] = useState('')
+  // a data da nota é o dia de calendário gravado (Brasília como UTC): os 10 primeiros caracteres
+  const noPeriodo = (g: DifalGuiaPendente) => (!de || g.emitidaEm.slice(0, 10) >= de) && (!ate || g.emitidaEm.slice(0, 10) <= ate)
+  const visiveis = (soComCobranca ? guias.filter((g) => g.estadoComCobranca) : guias).filter(noPeriodo)
+  const escondidas = guias.filter(noPeriodo).length - visiveis.length
   const ufsComCobranca = [...new Set(guias.filter((g) => g.estadoComCobranca).map((g) => g.clienteUf))].sort().join(', ')
   // no prazo: entram em lote GNRE; atrasadas: vão para a contabilidade (sairiam sem multa e juros)
   const noPrazo = visiveis.filter((g) => !g.atrasada)
@@ -419,6 +424,21 @@ function GuiasPendentes() {
 
   return (
     <>
+    <div className="flex flex-wrap items-center gap-3">
+    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700">
+      <span>Emitidas de</span>
+      <input type="date" value={de} onChange={(e) => setDe(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1 text-sm outline-none focus:ring-4 focus:ring-blue-100" />
+      <span>até</span>
+      <input type="date" value={ate} onChange={(e) => setAte(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1 text-sm outline-none focus:ring-4 focus:ring-blue-100" />
+      <span className="ml-1 inline-flex rounded-lg bg-slate-100 p-0.5 text-xs">
+        {atalhosPeriodo().map(([rotulo, d, a]) => (
+          <button key={rotulo} onClick={() => { setDe(d); setAte(a) }}
+            className={`rounded-md px-2.5 py-1 transition-colors ${de === d && ate === a ? 'bg-white font-medium text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>
+            {rotulo}
+          </button>
+        ))}
+      </span>
+    </div>
     <label className="flex w-fit cursor-pointer select-none items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700">
       <input type="checkbox" checked={soComCobranca} onChange={(e) => setSoComCobranca(e.target.checked)} className="h-4 w-4 accent-blue-600" />
       <span>
@@ -426,6 +446,7 @@ function GuiasPendentes() {
         {soComCobranca && escondidas > 0 && <span className="ml-2 text-xs text-slate-400">· {escondidas} nota(s) de outros estados escondidas</span>}
       </span>
     </label>
+    </div>
     {noPrazo.length === 0 ? (
       <div className="difal-entrar flex items-center gap-3 rounded-2xl border border-emerald-200 bg-white p-4 text-sm text-emerald-900">
         <span className="grid h-8 w-8 place-items-center rounded-xl bg-emerald-50 text-emerald-600"><Icone nome="ok" className="h-4 w-4" /></span>
@@ -531,6 +552,26 @@ function GuiasPendentes() {
 // Tela "Envie o comprovante de pagamento do DIFAL" da venda no ML (endereço enviado pelo José em 20/11/2026)
 function linkComprovanteMl(mlOrderId: string): string {
   return `https://vendedores.mercadolivre.com.br/emissor/informar-documento?orders_ids=${encodeURIComponent(mlOrderId)}`
+}
+
+function isoDia(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/** atalhos do filtro de datas: [rótulo, de, até] ('' = sem limite) */
+function atalhosPeriodo(): [string, string, string][] {
+  const hoje = new Date()
+  const menos = (dias: number) => isoDia(new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() - dias))
+  const inicioMes = isoDia(new Date(hoje.getFullYear(), hoje.getMonth(), 1))
+  const inicioMesPassado = isoDia(new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1))
+  const fimMesPassado = isoDia(new Date(hoje.getFullYear(), hoje.getMonth(), 0))
+  return [
+    ['7 dias', menos(6), ''],
+    ['30 dias', menos(29), ''],
+    ['Este mês', inicioMes, ''],
+    ['Mês passado', inicioMesPassado, fimMesPassado],
+    ['Tudo', '', ''],
+  ]
 }
 
 // Notas que passaram do prazo: não vão para lote (sairiam sem multa e juros); a contabilidade regulariza.
