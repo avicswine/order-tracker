@@ -229,6 +229,15 @@ export interface DifalGuiaPendente {
   prazo: string
   /** passou do prazo: vai para a contabilidade, não para lote */
   atrasada: boolean
+  /** envio no order-tracker; null = nota não está lá (retirada, Mercado Envios, Shopee…) */
+  envio: {
+    situacao: 'PENDING' | 'IN_TRANSIT' | 'DELIVERED' | 'CANCELLED'
+    transportadora: string | null
+    enviadoEm: string | null
+    previsao: string | null
+    entregueEm: string | null
+    ultimoRastreio: string | null
+  } | null
 }
 
 

@@ -480,6 +480,7 @@ function GuiasPendentes() {
                 <td className="px-2 py-2.5 text-slate-500">{dataBr(g.emitidaEm)}</td>
                 <td className="px-2 py-2.5 text-xs text-slate-500">vence {dataBr(g.prazo)}</td>
                 <td className="px-2 py-2.5 font-medium text-slate-700">{g.clienteUf}</td>
+                <td className="px-2 py-2.5"><SeloEnvio envio={g.envio} /></td>
                 <td className="px-2 py-2.5 text-right font-semibold tabular-nums text-slate-900">{brl(g.difalCalculado)}</td>
                 <td className="px-5 py-2.5 text-xs">
                   {g.pronta ? (
@@ -507,8 +508,11 @@ function GuiasAtrasadas({ notas }: { notas: DifalGuiaPendente[] }) {
 
   // planilha para a contabilidade: só dados da nota, sem nome nem CPF do cliente (LGPD)
   function baixarLista() {
-    const linhas = [['Empresa', 'NF', 'Emissão', 'UF', 'Prazo', 'DIFAL (R$)'].join(';')].concat(
-      notas.map((g) => [g.empresa, g.nfNumero, dataBr(g.emitidaEm), g.clienteUf, dataBr(g.prazo), g.difalCalculado.toFixed(2).replace('.', ',')].join(';'))
+    const linhas = [['Empresa', 'NF', 'Emissão', 'UF', 'Prazo', 'DIFAL (R$)', 'Envio', 'Transportadora', 'Entregue em'].join(';')].concat(
+      notas.map((g) => [
+        g.empresa, g.nfNumero, dataBr(g.emitidaEm), g.clienteUf, dataBr(g.prazo), g.difalCalculado.toFixed(2).replace('.', ','),
+        envioTexto(g.envio), g.envio?.transportadora ?? '', g.envio?.entregueEm ? dataBr(g.envio.entregueEm) : '',
+      ].map((v) => String(v).replace(/;/g, ',')).join(';'))
     )
     // BOM para o Excel abrir com acentos certos; ';' e vírgula decimal no padrão brasileiro
     const arquivo = new Blob(['\ufeff' + linhas.join('\r\n')], { type: 'text/csv;charset=utf-8' })
@@ -545,6 +549,7 @@ function GuiasAtrasadas({ notas }: { notas: DifalGuiaPendente[] }) {
                 <th className="px-2 py-2 text-left">Emissão</th>
                 <th className="px-2 py-2 text-left">Venceu em</th>
                 <th className="px-2 py-2 text-left">UF</th>
+                <th className="px-2 py-2 text-left">Envio</th>
                 <th className="px-5 py-2 text-right">DIFAL</th>
               </tr>
             </thead>
@@ -555,6 +560,7 @@ function GuiasAtrasadas({ notas }: { notas: DifalGuiaPendente[] }) {
                   <td className="px-2 py-2 text-slate-500">{dataBr(g.emitidaEm)}</td>
                   <td className="px-2 py-2 text-rose-700">{dataBr(g.prazo)}</td>
                   <td className="px-2 py-2 font-medium text-slate-700">{g.clienteUf}</td>
+                  <td className="px-2 py-2"><SeloEnvio envio={g.envio} /></td>
                   <td className="px-5 py-2 text-right font-semibold tabular-nums">{brl(g.difalCalculado)}</td>
                 </tr>
               ))}
@@ -563,6 +569,38 @@ function GuiasAtrasadas({ notas }: { notas: DifalGuiaPendente[] }) {
         </div>
       )}
     </div>
+  )
+}
+
+// Situação do envio vinda do order-tracker
+const SITUACAO_ENVIO: Record<string, { texto: string; cor: string }> = {
+  PENDING: { texto: 'aguardando coleta', cor: 'bg-slate-100 text-slate-600' },
+  IN_TRANSIT: { texto: 'em trânsito', cor: 'bg-blue-50 text-blue-700' },
+  DELIVERED: { texto: 'entregue', cor: 'bg-emerald-50 text-emerald-700' },
+  CANCELLED: { texto: 'cancelado', cor: 'bg-rose-50 text-rose-700' },
+}
+
+function envioTexto(e: DifalGuiaPendente['envio']): string {
+  return e ? SITUACAO_ENVIO[e.situacao]?.texto ?? e.situacao : 'sem rastreio'
+}
+
+// entrega no cliente, ou a previsão, ou a data de envio — o que houver de mais útil
+function envioDatas(e: DifalGuiaPendente['envio']): string {
+  if (!e) return ''
+  if (e.entregueEm) return `entregue ${dataBr(e.entregueEm)}`
+  if (e.previsao) return `previsão ${dataBr(e.previsao)}`
+  if (e.enviadoEm) return `enviado ${dataBr(e.enviadoEm)}`
+  return ''
+}
+
+function SeloEnvio({ envio }: { envio: DifalGuiaPendente['envio'] }) {
+  const cor = envio ? SITUACAO_ENVIO[envio.situacao]?.cor ?? 'bg-slate-100 text-slate-600' : 'bg-slate-50 text-slate-400'
+  const dica = envio ? [envio.transportadora, envio.ultimoRastreio].filter(Boolean).join(' · ') : 'Nota não está no order-tracker (retirada, Mercado Envios, Shopee…)'
+  return (
+    <span title={dica} className="inline-flex flex-col gap-0.5">
+      <span className={`w-fit rounded-full px-2 py-0.5 text-[11px] font-medium ${cor}`}>{envioTexto(envio)}</span>
+      {envio && <span className="text-[11px] text-slate-500">{[envio.transportadora, envioDatas(envio)].filter(Boolean).join(' · ')}</span>}
+    </span>
   )
 }
 
