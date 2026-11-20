@@ -486,6 +486,8 @@ model DifalNota {
   // rastro da guia gerada a partir desta nota
   guiaGeradaEm    DateTime?
   guiaLoteId      String?   // identificador do lote GNRE em que a guia saiu
+  // venda do ML em que nós pagamos a guia e o José anexou o comprovante na venda do ML
+  comprovanteMlEnviadoEm DateTime?
 
   criadoEm        DateTime @default(now())
   atualizadoEm    DateTime @updatedAt

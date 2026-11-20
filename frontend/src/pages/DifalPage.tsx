@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { difalApi } from '../lib/api'
 import type {
   DifalNota, DifalResponsavel, DifalHistorico, DifalGuiaPendente, DifalFechamentoMes,
-  DifalLote, DifalAliquota, DifalReceitaUf,
+  DifalLote, DifalAliquota, DifalReceitaUf, DifalVendaMl,
 } from '../lib/api'
 import './difal.css'
 
@@ -175,6 +175,7 @@ function Vendas() {
       qc.invalidateQueries({ queryKey: ['difal-notas'] })
       qc.invalidateQueries({ queryKey: ['difal-resumo'] })
       qc.invalidateQueries({ queryKey: ['difal-guias-pendentes'] })
+      qc.invalidateQueries({ queryKey: ['difal-ml-barreira'] })
     }
     estavaImportando.current = emAndamento
   }, [emAndamento, qc])
@@ -251,6 +252,8 @@ function Vendas() {
       </div>
 
       <GuiasPendentes />
+
+      <VendasMlBarreira />
 
       <LotesGnre />
 
@@ -498,6 +501,140 @@ function GuiasPendentes() {
     )}
     {atrasadas.length > 0 && <GuiasAtrasadas notas={atrasadas} />}
     </>
+  )
+}
+
+// Tela "Envie o comprovante de pagamento do DIFAL" da venda no ML (endereço enviado pelo José em 20/11/2026)
+function linkComprovanteMl(mlOrderId: string): string {
+  return `https://vendedores.mercadolivre.com.br/emissor/informar-documento?orders_ids=${encodeURIComponent(mlOrderId)}`
+}
+
+// Vendas do ML nos estados em que o ML pagava na barreira: pagamos nós logo após a venda e o José anexa o
+// comprovante na venda do ML (não há API oficial para isso). Decisão do José em 20/11/2026.
+function VendasMlBarreira() {
+  const qc = useQueryClient()
+  const [escolhidas, setEscolhidas] = useState<Set<string>>(new Set())
+  const [aviso, setAviso] = useState<string | null>(null)
+  const [erroTexto, setErroTexto] = useState<string | null>(null)
+  const { data, isLoading } = useQuery({ queryKey: ['difal-ml-barreira'], queryFn: difalApi.vendasMlBarreira })
+  const vendas = data?.vendas ?? []
+  const ufs = (data?.ufs ?? []).join(', ') // lista vem do servidor (UFS_BARREIRA_ML), num lugar só
+  const recarregar = () => {
+    qc.invalidateQueries({ queryKey: ['difal-ml-barreira'] })
+    qc.invalidateQueries({ queryKey: ['difal-lotes'] })
+    qc.invalidateQueries({ queryKey: ['difal-fechamento'] })
+  }
+  const gerar = useMutation({
+    mutationFn: () => difalApi.gerarLote([...escolhidas]),
+    onSuccess: (lote) => {
+      baixarArquivo(lote.arquivo, lote.nome)
+      setAviso(`Lote ${lote.loteId} gerado: ${lote.guias} guia(s), ${brl(lote.total)}. Envie ao portal em "Lotes GNRE gerados".`)
+      setEscolhidas(new Set())
+      recarregar()
+    },
+    onError: async (e) => setErroTexto(await erroDoLote(e)),
+  })
+  const marcar = useMutation({
+    mutationFn: difalApi.marcarComprovanteMl,
+    onSuccess: recarregar,
+    onError: (e) => setErroTexto(mensagemErro(e)),
+  })
+  const empresaEscolhida = vendas.find((v) => escolhidas.has(v.id))?.empresa
+
+  function alternar(v: DifalVendaMl) {
+    setEscolhidas((atual) => {
+      const novo = new Set(atual)
+      if (novo.has(v.id)) novo.delete(v.id)
+      else novo.add(v.id)
+      return novo
+    })
+  }
+
+  if (isLoading || vendas.length === 0) return null
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-yellow-200 bg-white">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+        <div className="flex items-start gap-3">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-yellow-50 text-yellow-600"><Icone nome="sacola" /></span>
+          <div>
+            <p className="font-semibold text-slate-900">Vendas do ML: pagar antes da barreira</p>
+            <p className="text-xs text-slate-500">
+              {vendas.length} venda(s) para {ufs}, com nota de até 7 dias. Gere a guia, pague no PIX e anexe o
+              comprovante na venda do ML ("Enviar comprovante"); depois clique em "Comprovante enviado".
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={() => { setAviso(null); setErroTexto(null); gerar.mutate() }}
+          disabled={escolhidas.size === 0 || gerar.isPending}
+          className="difal-btn rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-40"
+        >
+          {gerar.isPending ? 'Montando lote…' : `Gerar guias (${escolhidas.size})`}
+        </button>
+      </div>
+      {aviso && <div className="difal-entrar border-b border-emerald-100 bg-emerald-50 px-5 py-2 text-sm text-emerald-900">{aviso}</div>}
+      {erroTexto && (
+        <div className="difal-entrar flex items-center justify-between border-b border-red-100 bg-red-50 px-5 py-2 text-sm text-red-800">
+          <span>{erroTexto}</span>
+          <button onClick={() => setErroTexto(null)} className="text-xs underline">fechar</button>
+        </div>
+      )}
+      <table className="min-w-full text-sm">
+        <tbody className="divide-y divide-slate-100">
+          {vendas.map((v) => {
+            const bloqueada = !v.pronta || (empresaEscolhida !== undefined && v.empresa !== empresaEscolhida && !escolhidas.has(v.id))
+            return (
+              <tr key={v.id} className="transition-colors hover:bg-slate-50">
+                <td className="px-5 py-2.5">
+                  {!v.guiaGeradaEm && (
+                    <input type="checkbox" checked={escolhidas.has(v.id)} disabled={bloqueada} onChange={() => alternar(v)}
+                      title={bloqueada && v.pronta ? 'Lote de uma empresa só' : undefined} className="h-4 w-4 accent-blue-600" />
+                  )}
+                </td>
+                <td className="whitespace-nowrap px-2 py-2.5 font-medium text-slate-900">NF {v.nfNumero} <SeloEmpresa empresa={v.empresa} /></td>
+                <td className="px-2 py-2.5 text-slate-500">{dataBr(v.emitidaEm)}</td>
+                <td className="px-2 py-2.5 font-medium text-slate-700">{v.clienteUf}</td>
+                <td className="px-2 py-2.5 text-right font-semibold tabular-nums text-slate-900">{brl(v.difalCalculado)}</td>
+                <td className="px-2 py-2.5 text-xs text-slate-500">
+                  {v.mlOrderId ? (
+                    <span className="inline-flex flex-wrap items-center gap-2">
+                      venda ML {v.mlOrderId}
+                      <a href={linkComprovanteMl(v.mlOrderId)} target="_blank" rel="noreferrer"
+                        className="difal-btn rounded-lg border border-yellow-300 bg-yellow-50 px-3 py-1.5 font-medium text-yellow-800 hover:bg-yellow-100">
+                        Enviar comprovante no ML ↗
+                      </a>
+                    </span>
+                  ) : 'sem número da venda'}
+                </td>
+                <td className="px-5 py-2.5 text-right text-xs">
+                  {v.situacao === 'DIVERGENTE' ? (
+                    <span title={v.observacao ?? undefined} className="rounded-full bg-rose-50 px-2.5 py-1 font-medium text-rose-700">● nota divergente (cancelada?) — conferir</span>
+                  ) : v.guiaGeradaEm && !v.guiaAceita ? (
+                    <span className="rounded-full bg-blue-50 px-2.5 py-1 font-medium text-blue-700">guia gerada · envie ao portal e consulte em "Lotes GNRE"</span>
+                  ) : v.guiaGeradaEm ? (
+                    <span className="inline-flex items-center gap-2">
+                      <span className="rounded-full bg-emerald-50 px-2.5 py-1 font-medium text-emerald-700">guia aceita · pagar e anexar</span>
+                      <button
+                        onClick={() => { setErroTexto(null); if (window.confirm(`Confirma que o comprovante da NF ${v.nfNumero} foi anexado na venda do ML?`)) marcar.mutate(v.id) }}
+                        disabled={marcar.isPending}
+                        className="difal-btn rounded-lg bg-emerald-600 px-3 py-1.5 font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                      >
+                        Comprovante enviado
+                      </button>
+                    </span>
+                  ) : v.pronta ? (
+                    <span className="rounded-full bg-emerald-50 px-2.5 py-1 font-medium text-emerald-700">● pronta</span>
+                  ) : (
+                    <span className="rounded-full bg-amber-50 px-2.5 py-1 font-medium text-amber-700">● falta: {v.faltando.join('; ')}</span>
+                  )}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
   )
 }
 
@@ -750,10 +887,18 @@ function LotesGnre() {
   const recarregar = () => qc.invalidateQueries({ queryKey: ['difal-lotes'] })
 
   const enviar = useMutation({ mutationFn: difalApi.enviarLote, onSuccess: recarregar, onError: (e) => setErro(mensagemErro(e)) })
-  const consultar = useMutation({ mutationFn: difalApi.consultarLote, onSuccess: recarregar, onError: (e) => setErro(mensagemErro(e)) })
+  const consultar = useMutation({
+    mutationFn: difalApi.consultarLote,
+    onSuccess: () => { recarregar(); qc.invalidateQueries({ queryKey: ['difal-ml-barreira'] }) }, // guia aceita libera o "Comprovante enviado"
+    onError: (e) => setErro(mensagemErro(e)),
+  })
   const desfazer = useMutation({
     mutationFn: difalApi.desfazerLote,
-    onSuccess: () => { recarregar(); qc.invalidateQueries({ queryKey: ['difal-guias-pendentes'] }) },
+    onSuccess: () => {
+      recarregar()
+      qc.invalidateQueries({ queryKey: ['difal-guias-pendentes'] })
+      qc.invalidateQueries({ queryKey: ['difal-ml-barreira'] })
+    },
     onError: (e) => setErro(mensagemErro(e)),
   })
   const xml = useMutation({ mutationFn: difalApi.baixarXmlLote, onSuccess: (r) => baixarArquivo(r.arquivo, r.nome) })

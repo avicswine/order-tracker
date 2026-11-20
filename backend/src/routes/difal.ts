@@ -11,7 +11,7 @@ import { prisma } from '../lib/prisma'
 import { DifalResponsavel, DifalSituacao, Prisma } from '@prisma/client'
 import { importarNotas, type ResultadoImportacao } from '../services/difal/importar'
 import { semearAliquotas } from '../services/difal/aliquotas'
-import { listarGuiasPendentes, gerarLoteDasNotas, classificarCamposExtras } from '../services/difal/guias'
+import { listarGuiasPendentes, gerarLoteDasNotas, classificarCamposExtras, listarVendasMlBarreira, marcarComprovanteMlEnviado, UFS_BARREIRA_ML } from '../services/difal/guias'
 import { ErroMontagemGnre } from '../services/difal/gnre'
 import { sincronizarCobrancasMl, fechamentoMensal } from '../services/difal/cobrancasMl'
 import {
@@ -249,6 +249,26 @@ router.get('/importar/status', (_req: Request, res: Response) => {
   res.json(importacao)
 })
 
+// GET /difal/ml-barreira — vendas do ML nos estados que cobram na barreira: pagar nós e anexar o comprovante no ML
+router.get('/ml-barreira', async (_req: Request, res: Response) => {
+  try {
+    res.json({ ufs: UFS_BARREIRA_ML, vendas: await listarVendasMlBarreira(prisma) })
+  } catch (e) {
+    res.status(500).json({ erro: (e as Error).message })
+  }
+})
+
+// POST /difal/notas/:id/comprovante-ml — José anexou o comprovante na venda do ML
+router.post('/notas/:id/comprovante-ml', async (req: Request, res: Response) => {
+  try {
+    await marcarComprovanteMlEnviado(prisma, String(req.params.id))
+    res.json({ ok: true })
+  } catch (e) {
+    if (e instanceof ErroMontagemGnre) return res.status(422).json({ erro: e.message })
+    res.status(500).json({ erro: (e as Error).message })
+  }
+})
+
 // GET /difal/guias-pendentes — notas que precisam de guia nossa e o que falta em cada uma
 router.get('/guias-pendentes', [query('empresa').optional().trim()], async (req: Request, res: Response) => {
   const erros = validationResult(req)
@@ -445,6 +465,11 @@ router.post('/lotes/:id/desfazer', async (req: Request, res: Response) => {
       if (!todasInvalidadas) {
         return res.status(409).json({ erro: `lote já enviado ao portal (recibo ${lote.numeroRecibo}) e nem todas as guias foram invalidadas; não dá para desfazer` })
       }
+    }
+    // comprovante já anexado na venda do ML: desfazer deixaria a venda sem guia e fora de todas as listas
+    const comComprovante = await prisma.difalNota.findFirst({ where: { guiaLoteId: lote.id, comprovanteMlEnviadoEm: { not: null } }, select: { nfNumero: true } })
+    if (comComprovante) {
+      return res.status(409).json({ erro: `a NF ${comComprovante.nfNumero} deste lote já teve o comprovante enviado ao ML; não dá para desfazer` })
     }
     const [notas] = await prisma.$transaction([
       prisma.difalNota.updateMany({ where: { guiaLoteId: lote.id }, data: { guiaGeradaEm: null, guiaLoteId: null } }),

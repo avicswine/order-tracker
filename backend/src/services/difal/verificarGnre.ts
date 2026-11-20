@@ -8,7 +8,7 @@
  */
 import { writeFileSync } from 'fs'
 import { montarLoteGnre, dividirEmLotes, ErroMontagemGnre, textoGnre, type GuiaGnre, type EmitenteGnre } from './gnre'
-import { classificarCamposExtras, valorCampoExtra, prazoLegal } from './guias'
+import { classificarCamposExtras, valorCampoExtra, prazoLegal, proximoDiaUtil } from './guias'
 import type { DifalNota } from '@prisma/client'
 
 // dados de exemplo — NÃO são de cliente real
@@ -116,6 +116,14 @@ caso('chave da NF-e vai inteira', valorCampoExtra({ codigo: '107', titulo: 'Chav
 caso('prazo "na saída" é o dia da nota, mesmo emitida de madrugada', prazoLegal('saida', new Date('2026-11-19T01:30:00Z')) === '2026-11-19')
 caso('prazo "dia 15" é o dia 15 do mês seguinte', prazoLegal('dia15', new Date('2026-11-30T23:00:00Z')) === '2026-12-15')
 caso('prazo "dia 15" de dezembro vira janeiro do ano seguinte', prazoLegal('dia15', new Date('2026-12-10T10:00:00Z')) === '2027-01-15')
+
+// data de pagamento em dia útil bancário (o CE recusou 20/11/2026, Consciência Negra)
+caso('20/11 (Consciência Negra) vai para 23/11 (pula o fim de semana)', proximoDiaUtil('2026-11-20') === '2026-11-23')
+caso('sábado vai para segunda', proximoDiaUtil('2026-11-21') === '2026-11-23')
+caso('dia útil comum fica igual', proximoDiaUtil('2026-11-24') === '2026-11-24')
+caso('Sexta-feira Santa de 2027 (26/03) vai para segunda 29/03', proximoDiaUtil('2027-03-26') === '2027-03-29')
+caso('Carnaval 2027: segunda 08/02 vai para quarta 10/02', proximoDiaUtil('2027-02-08') === '2027-02-10')
+caso('Natal 2026 (sexta) vai para segunda 28/12', proximoDiaUtil('2026-12-25') === '2026-12-28')
 
 console.log(falhas === 0 ? '\nTodos os casos conferem.' : `\n${falhas} caso(s) com erro.`)
 process.exit(falhas === 0 ? 0 : 1)
