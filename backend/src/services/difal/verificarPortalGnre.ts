@@ -21,6 +21,7 @@ caso('versaoDados 2.00 para o lote', env.includes('<versaoDados>2.00</versaoDado
 caso('declaração <?xml?> do lote removida de dentro do Body', (env.match(/<\?xml/g) ?? []).length === 1)
 caso('soapAction do ConfigUF conforme o WSDL', soapAction('configUf') === 'http://www.gnre.pe.gov.br/webservice/GnreConfigUF/consultar')
 caso('resposta em gnreRespostaMsg (nome do WSDL) também é lida', lerRecibo(extrairRetorno('<e><Body><gnreRespostaMsg>&lt;TRetLote_GNRE&gt;&lt;situacaoRecepcao&gt;&lt;codigo&gt;100&lt;/codigo&gt;&lt;descricao&gt;ok&lt;/descricao&gt;&lt;/situacaoRecepcao&gt;&lt;/TRetLote_GNRE&gt;</gnreRespostaMsg></Body></e>')).situacao.codigo === '100')
+caso('resposta do envio em processarResponse (nome do GnreLoteRecepcao.wsdl) é lida', lerRecibo(extrairRetorno('<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope"><soap:Body><processarResponse xmlns="http://www.gnre.pe.gov.br/webservice/GnreLoteRecepcao">&lt;TRetLote_GNRE&gt;&lt;situacaoRecepcao&gt;&lt;codigo&gt;100&lt;/codigo&gt;&lt;descricao&gt;ok&lt;/descricao&gt;&lt;/situacaoRecepcao&gt;&lt;recibo&gt;&lt;numero&gt;555&lt;/numero&gt;&lt;/recibo&gt;&lt;/TRetLote_GNRE&gt;</processarResponse></soap:Body></soap:Envelope>')).recibo?.numero === '555')
 caso('configUf usa versaoDados 1.00', montarEnvelope('configUf', '<x/>').includes('<versaoDados>1.00</versaoDados>'))
 
 // retorno escapado dentro do envelope

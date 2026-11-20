@@ -12,6 +12,7 @@
 import type { PrismaClient, DifalNota, DifalAliquota, DifalEmitente } from '@prisma/client'
 import { montarLoteGnre, ErroMontagemGnre, LIMITE_GUIAS_POR_LOTE, type GuiaGnre } from './gnre'
 import { ambienteGnre } from './portalGnre'
+import { dataBR } from '../separacao/datas'
 
 export interface GuiaPendente {
   id: string
@@ -24,6 +25,78 @@ export interface GuiaPendente {
   pronta: boolean
   /** o que ainda falta, em linguagem simples */
   faltando: string[]
+  /** último dia para pagar sem multa/juros (AAAA-MM-DD), pela regra de vencimento da UF */
+  prazo: string
+  /** passou do prazo: não vai para lote GNRE, vai para a contabilidade (decisão do José, 20/11/2026) */
+  atrasada: boolean
+}
+
+/** Tipos de documento de origem que usam a chave de 44 dígitos (GnreConfigUF): 22 = chave da NF-e, 24 = chave do DF-e */
+const TIPOS_DOC_COM_CHAVE = new Set(['22', '24'])
+
+/** Campo extra obrigatório de uma UF, já com o que o sistema põe nele. */
+export interface CampoExtraUf {
+  codigo: string
+  titulo: string
+  conteudo: 'chaveNfe' | 'dataEmissao' | 'observacao' | 'desconhecido'
+}
+
+/**
+ * Lê os campos adicionais OBRIGATÓRIOS do GnreConfigUF e decide o que vai em cada um, pelo título e tipo.
+ * O que não for reconhecido fica 'desconhecido' e trava a nota ("falta"), em vez de ir errado ao portal.
+ */
+export function classificarCamposExtras(
+  campos: { codigo: string; titulo: string; tipo: string; obrigatorio: boolean }[],
+  exigeProduto = false
+): CampoExtraUf[] {
+  // 'produto' é uma categoria escolhida numa lista da UF (ex.: MA, 89 opções): decisão fiscal, ainda não definida.
+  const produto: CampoExtraUf[] = exigeProduto
+    ? [{ codigo: 'produto', titulo: 'categoria de produto exigida pela UF (definir com a contabilidade)', conteudo: 'desconhecido' }]
+    : []
+  return produto.concat(campos
+    .filter((c) => c.obrigatorio)
+    .map((c) => {
+      const titulo = c.titulo.toLowerCase()
+      const conteudo: CampoExtraUf['conteudo'] = titulo.includes('chave')
+        ? 'chaveNfe'
+        : c.tipo === 'D' && titulo.includes('emiss')
+          ? 'dataEmissao'
+          : titulo.includes('observa')
+            ? 'observacao'
+            : 'desconhecido'
+      return { codigo: c.codigo, titulo: c.titulo, conteudo }
+    }))
+}
+
+/** Observação pedida pelo TO (até 15 caracteres): definido pelo José em 20/11/2026 */
+const TAMANHO_OBSERVACAO = 15
+
+export function valorCampoExtra(c: CampoExtraUf, nota: DifalNota): string | null {
+  if (c.conteudo === 'chaveNfe') return nota.nfChave
+  // emitidaEm guarda o horário de Brasília como se fosse UTC (o Bling manda a data sem fuso e o importador
+  // faz new Date no servidor em UTC): as partes UTC dão o dia da nota, como na referência e no vencimento.
+  if (c.conteudo === 'dataEmissao') return aaaaMmDd(nota.emitidaEm)
+  if (c.conteudo === 'observacao') {
+    const numero = nota.nfNumero.replace(/^0+/, '')
+    // sem cortar o número: se 'DIFAL NF ' não couber, fica só 'NF '; se nem assim, a nota trava (null)
+    return [`DIFAL NF ${numero}`, `NF ${numero}`].find((t) => t.length <= TAMANHO_OBSERVACAO) ?? null
+  }
+  return null
+}
+
+function camposExtrasDaUf(aliquota: DifalAliquota): CampoExtraUf[] {
+  return Array.isArray(aliquota.camposExtrasGnre) ? (aliquota.camposExtrasGnre as unknown as CampoExtraUf[]) : []
+}
+
+/** tipoDocOrigemGnre vazio = a UF não exige documento de origem para a receita (GnreConfigUF) */
+const SEM_DOCUMENTO_ORIGEM = ''
+/** tipos que o sistema sabe preencher: nenhum, número da nota (10), chave da NF-e (22) ou do DF-e (24) */
+const TIPOS_DOC_SUPORTADOS = new Set([SEM_DOCUMENTO_ORIGEM, '10', '22', '24'])
+/** XSD dados_gnre_v2.00: camposExtras tem no máximo 3 campoExtra */
+const LIMITE_CAMPOS_EXTRAS = 3
+
+function documentoOrigem(nota: DifalNota, tipo: string): string | null {
+  return TIPOS_DOC_COM_CHAVE.has(tipo) ? nota.nfChave : nota.nfNumero
 }
 
 function oQueFalta(nota: DifalNota, aliquota: DifalAliquota | undefined, emitente: DifalEmitente | undefined): string[] {
@@ -32,6 +105,23 @@ function oQueFalta(nota: DifalNota, aliquota: DifalAliquota | undefined, emitent
   if (!nota.documentoDestinatario) f.push('CPF/CNPJ do destinatário (reimportar a nota para ler o XML)')
   if (!aliquota?.codigoReceitaGnre) f.push(`código de receita GNRE de ${nota.clienteUf} (vem do GnreConfigUF)`)
   if (!emitente) f.push(`dados do emitente ${nota.empresa} (reimportar uma nota da empresa)`)
+  if (aliquota && aliquota.tipoDocOrigemGnre !== SEM_DOCUMENTO_ORIGEM && !documentoOrigem(nota, aliquota.tipoDocOrigemGnre)) {
+    f.push('chave de acesso da NF-e (reimportar a nota)')
+  }
+  if (aliquota?.codigoReceitaGnre && aliquota.camposExtrasGnre === null) {
+    // receita escolhida antes de existir esta coluna: sem saber os campos extras, não dá para montar a guia
+    f.push(`reconfigurar a receita de ${nota.clienteUf} (Configuração: "usar ${aliquota.codigoReceitaGnre}" de novo)`)
+  }
+  if (aliquota && !TIPOS_DOC_SUPORTADOS.has(aliquota.tipoDocOrigemGnre)) {
+    f.push(`documento de origem tipo ${aliquota.tipoDocOrigemGnre} exigido por ${nota.clienteUf}, que o sistema não preenche`)
+  }
+  if (aliquota && camposExtrasDaUf(aliquota).length > LIMITE_CAMPOS_EXTRAS) {
+    f.push(`${nota.clienteUf} exige mais de ${LIMITE_CAMPOS_EXTRAS} campos extras (o portal aceita até ${LIMITE_CAMPOS_EXTRAS})`)
+  }
+  for (const c of aliquota ? camposExtrasDaUf(aliquota) : []) {
+    if (c.conteudo === 'desconhecido') f.push(`campo extra "${c.titulo}" (código ${c.codigo}) que o sistema não sabe preencher`)
+    else if (!valorCampoExtra(c, nota)) f.push(`${c.titulo} para o campo extra ${c.codigo} (reimportar a nota)`)
+  }
   return f
 }
 
@@ -54,9 +144,11 @@ export async function listarGuiasPendentes(prisma: PrismaClient, empresa?: strin
   ])
   const porUf = new Map(aliquotas.map((a) => [a.uf, a]))
   const porEmpresa = new Map(emitentes.map((e) => [e.empresa, e]))
+  const hoje = dataBR()
 
   return notas.map((n) => {
     const faltando = oQueFalta(n, porUf.get(n.clienteUf), porEmpresa.get(n.empresa))
+    const prazo = prazoLegal(porUf.get(n.clienteUf)?.vencimentoRegra ?? REGRA_PADRAO, n.emitidaEm)
     return {
       id: n.id,
       empresa: n.empresa,
@@ -66,6 +158,8 @@ export async function listarGuiasPendentes(prisma: PrismaClient, empresa?: strin
       difalCalculado: n.difalCalculado,
       pronta: faltando.length === 0,
       faltando,
+      prazo,
+      atrasada: prazo < hoje,
     }
   })
 }
@@ -74,16 +168,19 @@ function aaaaMmDd(d: Date): string {
   return d.toISOString().slice(0, 10)
 }
 
+const REGRA_PADRAO = 'saida'
+
 /**
- * Vencimento conforme a regra da UF:
- *  - "saida": a guia deveria acompanhar a mercadoria; como a nota já saiu, vence hoje.
+ * Prazo legal para pagar sem multa e juros, pela regra da UF:
+ *  - "saida": a guia acompanha a mercadoria: o prazo é o dia da nota.
  *  - "dia15": até o dia 15 do mês seguinte ao da emissão.
+ * emitidaEm guarda o horário de Brasília como se fosse UTC: as partes UTC dão o dia da nota.
  */
-function vencimento(regra: string, emitidaEm: Date, hoje: Date): string {
+export function prazoLegal(regra: string, emitidaEm: Date): string {
   if (regra === 'dia15') {
     return aaaaMmDd(new Date(Date.UTC(emitidaEm.getUTCFullYear(), emitidaEm.getUTCMonth() + 1, 15)))
   }
-  return aaaaMmDd(hoje)
+  return aaaaMmDd(emitidaEm)
 }
 
 export interface LoteGerado {
@@ -122,16 +219,26 @@ export async function gerarLoteDasNotas(prisma: PrismaClient, ids: string[], hoj
   if (!emitente) throw new ErroMontagemGnre(`dados do emitente ${empresa} ainda não foram lidos de nenhuma nota`)
   const porUf = new Map(aliquotas.map((a) => [a.uf, a]))
 
+  const hojeBr = dataBR(hoje) // dia de hoje em Brasília (o servidor roda em UTC)
   const guias: GuiaGnre[] = notas.map((n) => {
     const faltando = oQueFalta(n, porUf.get(n.clienteUf), emitente)
     if (faltando.length) throw new ErroMontagemGnre(`nota ${n.nfNumero}: falta ${faltando.join('; ')}`)
     const a = porUf.get(n.clienteUf)!
+    const prazo = prazoLegal(a.vencimentoRegra, n.emitidaEm)
+    // guia atrasada sairia sem multa e juros: vai para a contabilidade, não para lote
+    if (prazo < hojeBr) {
+      throw new ErroMontagemGnre(`nota ${n.nfNumero} passou do prazo (vencia em ${prazo.split('-').reverse().join('/')}): vai para a contabilidade`)
+    }
     return {
       ufFavorecida: n.clienteUf,
       receita: a.codigoReceitaGnre!,
-      documentoOrigem: n.nfNumero,
-      tipoDocumentoOrigem: a.tipoDocOrigemGnre,
-      dataVencimento: vencimento(a.vencimentoRegra, n.emitidaEm, hoje),
+      ...(a.tipoDocOrigemGnre !== SEM_DOCUMENTO_ORIGEM && {
+        documentoOrigem: documentoOrigem(n, a.tipoDocOrigemGnre)!,
+        tipoDocumentoOrigem: a.tipoDocOrigemGnre,
+      }),
+      dataVencimento: prazo,
+      dataPagamento: hojeBr,
+      camposExtras: camposExtrasDaUf(a).map((c) => ({ codigo: c.codigo, valor: valorCampoExtra(c, n)! })),
       valorPrincipal: n.difalCalculado,
       referencia: {
         mes: String(n.emitidaEm.getUTCMonth() + 1).padStart(2, '0'),
@@ -142,13 +249,14 @@ export async function gerarLoteDasNotas(prisma: PrismaClient, ids: string[], hoj
         razaoSocial: n.clienteNome,
         municipio: n.municipioIbgeDestino!,
       },
-      identificadorGuia: `${n.empresa}-NF-${n.nfNumero}`,
+      // XSD dados_gnre_v2.00: identificadorGuia só aceita [0-9]{1,10}. O número da NF basta,
+      // porque cada lote é de uma empresa só.
+      identificadorGuia: n.nfNumero.replace(/\D/g, '').slice(-10),
     }
   })
 
   const xml = montarLoteGnre(guias, {
     cnpj: emitente.cnpj,
-    inscricaoEstadual: emitente.inscricaoEstadual ?? undefined,
     razaoSocial: emitente.razaoSocial,
     endereco: emitente.endereco,
     municipio: emitente.municipioIbge,

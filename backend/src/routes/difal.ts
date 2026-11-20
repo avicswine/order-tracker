@@ -9,9 +9,9 @@ import { Router, Request, Response } from 'express'
 import { query, body, validationResult } from 'express-validator'
 import { prisma } from '../lib/prisma'
 import { DifalResponsavel, DifalSituacao, Prisma } from '@prisma/client'
-import { importarNotas } from '../services/difal/importar'
+import { importarNotas, type ResultadoImportacao } from '../services/difal/importar'
 import { semearAliquotas } from '../services/difal/aliquotas'
-import { listarGuiasPendentes, gerarLoteDasNotas } from '../services/difal/guias'
+import { listarGuiasPendentes, gerarLoteDasNotas, classificarCamposExtras } from '../services/difal/guias'
 import { ErroMontagemGnre } from '../services/difal/gnre'
 import { sincronizarCobrancasMl, fechamentoMensal } from '../services/difal/cobrancasMl'
 import {
@@ -23,6 +23,12 @@ import {
 import historicoGuias from '../services/difal/dados/historico-guias.json'
 
 const router = Router()
+
+// Notas que interessam no painel: DIFAL maior que zero. As de DIFAL zero (ex.: NCM 8436 em UF de 12%,
+// venda dentro do RS) somem — menos as divergentes e as que o ML cobrou, que são justamente problema.
+const COM_DIFAL: Prisma.DifalNotaWhereInput = {
+  OR: [{ difalCalculado: { gt: 0 } }, { situacao: 'DIVERGENTE' }, { difalCobradoMl: { gt: 0 } }],
+}
 
 // GET /difal — lista as notas do monitor
 router.get(
@@ -45,7 +51,7 @@ router.get(
     const pagina = Number(req.query.pagina ?? 1)
     const porPagina = 100
 
-    const where: Prisma.DifalNotaWhereInput = {}
+    const where: Prisma.DifalNotaWhereInput = { AND: [COM_DIFAL] }
     if (responsavel) where.responsavel = responsavel as DifalResponsavel
     if (situacao) where.situacao = situacao as DifalSituacao
     if (empresa) where.empresa = String(empresa).toUpperCase()
@@ -88,7 +94,7 @@ router.get('/resumo', [query('desde').optional().isISO8601()], async (req: Reque
   const erros = validationResult(req)
   if (!erros.isEmpty()) return res.status(400).json({ errors: erros.array() })
   try {
-  const where: Prisma.DifalNotaWhereInput = {}
+  const where: Prisma.DifalNotaWhereInput = { AND: [COM_DIFAL] }
   if (req.query.desde) where.emitidaEm = { gte: new Date(String(req.query.desde)) }
 
   const porResponsavel = await prisma.difalNota.groupBy({
@@ -147,13 +153,20 @@ router.put(
     body('nota').optional().trim(),
     body('codigoReceitaGnre').optional().trim().matches(/^\d{6}$/).withMessage('código de receita tem 6 dígitos'),
     body('vencimentoRegra').optional().isIn(['saida', 'dia15']),
+    body('tipoDocOrigemGnre').optional().trim().matches(/^(\d{2})?$/).withMessage('tipo de documento de origem tem 2 dígitos (ou vazio, se a UF não exige)'),
+    body('camposAdicionais').optional().isArray({ max: 20 }),
+    body('camposAdicionais.*.codigo').isString().trim().isLength({ min: 1, max: 10 }),
+    body('camposAdicionais.*.titulo').isString().isLength({ max: 120 }),
+    body('camposAdicionais.*.tipo').optional().isString().isLength({ max: 2 }),
+    body('camposAdicionais.*.obrigatorio').isBoolean(),
+    body('exigeProduto').optional().isBoolean(),
   ],
   async (req: Request, res: Response) => {
     const erros = validationResult(req)
     if (!erros.isEmpty()) return res.status(400).json({ errors: erros.array() })
 
     const uf = String(req.params.uf).toUpperCase()
-    const { aliquotaInterna, fcp, interestadual, metodo, nota, codigoReceitaGnre, vencimentoRegra } = req.body
+    const { aliquotaInterna, fcp, interestadual, metodo, nota, codigoReceitaGnre, vencimentoRegra, tipoDocOrigemGnre, camposAdicionais, exigeProduto } = req.body
     try {
     const atualizada = await prisma.difalAliquota.update({
       where: { uf },
@@ -165,6 +178,15 @@ router.put(
         ...(nota !== undefined && { nota: String(nota) }),
         ...(codigoReceitaGnre !== undefined && { codigoReceitaGnre: String(codigoReceitaGnre) }),
         ...(vencimentoRegra !== undefined && { vencimentoRegra: String(vencimentoRegra) }),
+        ...(tipoDocOrigemGnre !== undefined && { tipoDocOrigemGnre: String(tipoDocOrigemGnre) }),
+        ...(camposAdicionais !== undefined && {
+          camposExtrasGnre: classificarCamposExtras(
+            (camposAdicionais as Record<string, unknown>[]).map((c) => ({
+              codigo: String(c.codigo ?? ''), titulo: String(c.titulo ?? ''), tipo: String(c.tipo ?? ''), obrigatorio: c.obrigatorio === true,
+            })),
+            exigeProduto === true
+          ) as unknown as Prisma.InputJsonValue,
+        }),
       },
     })
     res.json(atualizada)
@@ -177,29 +199,55 @@ router.put(
   }
 )
 
-// POST /difal/importar — busca as notas do Bling e calcula (só leitura no Bling)
+// A importação roda em segundo plano: 90 dias de notas são minutos de chamadas ao Bling
+// (detalhe + XML por nota) e o proxy do Railway devolve 502 quando a requisição passa do
+// limite dele. O botão dispara e a tela consulta o andamento em /importar/status.
+interface EstadoImportacao {
+  emAndamento: boolean
+  iniciadaEm: Date | null
+  terminadaEm: Date | null
+  resultado: ResultadoImportacao[] | null
+  erro: string | null
+}
+let importacao: EstadoImportacao = { emAndamento: false, iniciadaEm: null, terminadaEm: null, resultado: null, erro: null }
+
+// POST /difal/importar — dispara a busca das notas do Bling (só leitura no Bling) e responde na hora
 router.post(
   '/importar',
   [body('dias').optional().isInt({ min: 1, max: 365 }), body('empresa').optional().trim(), body('forcar').optional().isBoolean()],
-  async (req: Request, res: Response) => {
+  (req: Request, res: Response) => {
     const erros = validationResult(req)
     if (!erros.isEmpty()) return res.status(400).json({ errors: erros.array() })
+    if (importacao.emAndamento) return res.status(409).json({ ok: false, erro: 'já existe uma importação em andamento' })
     const dias = Number(req.body?.dias ?? 90)
     const desde = new Date(Date.now() - dias * 24 * 60 * 60 * 1000)
-    try {
-      await semearAliquotas(prisma)
-      const resultado = await importarNotas(prisma, {
-        desde,
-        empresa: req.body?.empresa ? String(req.body.empresa) : undefined,
-        // forcar=true recalcula tudo (ex.: depois de mudar uma alíquota)
-        forcar: req.body?.forcar === true || req.body?.forcar === 'true',
-      })
-      res.json({ ok: true, desde, resultado })
-    } catch (e) {
-      res.status(500).json({ ok: false, erro: (e as Error).message })
+    const opcoes = {
+      desde,
+      empresa: req.body?.empresa ? String(req.body.empresa) : undefined,
+      // forcar=true recalcula tudo (ex.: depois de mudar uma alíquota)
+      forcar: req.body?.forcar === true || req.body?.forcar === 'true',
     }
+    importacao = { emAndamento: true, iniciadaEm: new Date(), terminadaEm: null, resultado: null, erro: null }
+    void (async () => {
+      try {
+        await semearAliquotas(prisma)
+        importacao.resultado = await importarNotas(prisma, opcoes)
+      } catch (e) {
+        importacao.erro = (e as Error).message
+        console.error('[DIFAL] importação falhou:', importacao.erro)
+      } finally {
+        importacao.emAndamento = false
+        importacao.terminadaEm = new Date()
+      }
+    })()
+    res.status(202).json({ ok: true, desde, iniciada: true })
   }
 )
+
+// GET /difal/importar/status — andamento e resultado da última importação
+router.get('/importar/status', (_req: Request, res: Response) => {
+  res.json(importacao)
+})
 
 // GET /difal/guias-pendentes — notas que precisam de guia nossa e o que falta em cada uma
 router.get('/guias-pendentes', [query('empresa').optional().trim()], async (req: Request, res: Response) => {
@@ -381,12 +429,23 @@ router.post('/lotes/:id/enviar', async (req: Request, res: Response) => {
   }
 })
 
-// POST /difal/lotes/:id/desfazer — apaga um lote que ainda não foi ao portal e devolve as notas à fila
+// Situações da guia que garantem que ela NÃO vale para pagamento (manual GNRE): 1 = invalidada pelo
+// Portal, 2 = invalidada pela UF. Erro de comunicação (3) e pendência (4) ficam de fora: a guia ainda pode valer.
+const GUIA_INVALIDADA = new Set(['1', '2'])
+
+// POST /difal/lotes/:id/desfazer — apaga o lote e devolve as notas à fila. Vale para lote que ainda não foi ao
+// portal, ou que foi e teve TODAS as guias invalidadas (senão a nota ficaria presa num lote recusado).
 router.post('/lotes/:id/desfazer', async (req: Request, res: Response) => {
   try {
-    const lote = await prisma.difalLoteGnre.findUnique({ where: { id: String(req.params.id) }, select: { id: true, numeroRecibo: true } })
+    const lote = await prisma.difalLoteGnre.findUnique({ where: { id: String(req.params.id) }, select: { id: true, numeroRecibo: true, resultadoXml: true } })
     if (!lote) return res.status(404).json({ erro: 'lote não encontrado' })
-    if (lote.numeroRecibo) return res.status(409).json({ erro: `lote já enviado ao portal (recibo ${lote.numeroRecibo}); não dá para desfazer` })
+    if (lote.numeroRecibo) {
+      const guias = lote.resultadoXml ? lerResultadoLote(lote.resultadoXml).guias : []
+      const todasInvalidadas = guias.length > 0 && guias.every((g) => GUIA_INVALIDADA.has(g.situacaoGuia))
+      if (!todasInvalidadas) {
+        return res.status(409).json({ erro: `lote já enviado ao portal (recibo ${lote.numeroRecibo}) e nem todas as guias foram invalidadas; não dá para desfazer` })
+      }
+    }
     const [notas] = await prisma.$transaction([
       prisma.difalNota.updateMany({ where: { guiaLoteId: lote.id }, data: { guiaGeradaEm: null, guiaLoteId: null } }),
       prisma.difalLoteGnre.delete({ where: { id: lote.id } }),

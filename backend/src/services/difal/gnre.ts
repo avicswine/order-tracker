@@ -43,7 +43,6 @@ export const LIMITE_ITENS_POR_GUIA = 100
 
 export interface EmitenteGnre {
   cnpj: string
-  inscricaoEstadual?: string
   razaoSocial: string
   endereco: string
   /** código IBGE do município com 5 dígitos (sem a UF) */
@@ -68,7 +67,8 @@ export interface GuiaGnre {
   receita: string
   detalhamentoReceita?: string
   /** número da nota que originou o recolhimento */
-  documentoOrigem: string
+  /** ausente quando a UF não exige documento de origem para a receita (ex.: MS e PB na 100102) */
+  documentoOrigem?: string
   tipoDocumentoOrigem?: string
   /** AAAA-MM-DD */
   dataVencimento: string
@@ -80,16 +80,42 @@ export interface GuiaGnre {
   destinatario: DestinatarioGnre
   /** exigências extras da UF, vindas do GnreConfigUF (no máximo 3) */
   camposExtras?: { codigo: string; valor: string }[]
+  /** AAAA-MM-DD; várias UFs exigem (exigeDataPagamento no GnreConfigUF). Deve ser >= hoje e <= vencimento */
+  dataPagamento?: string
   /** nosso identificador, para casar a resposta com a nota */
   identificadorGuia?: string
 }
 
 export class ErroMontagemGnre extends Error {}
 
+/** XSD dados_gnre_v2.00: razaoSocial e endereco têm maxLength 60 */
+const TAMANHO_MAX_TEXTO = 60
+
 export function escapar(v: string): string {
   return String(v).replace(/[<>&'"]/g, (c) =>
     ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' })[c] as string
   )
+}
+
+/**
+ * Texto livre (razão social, endereço) no formato TString do XSD: até 60 caracteres, sem espaço
+ * nas pontas e só caracteres de U+0020 a U+00FF (latim comum, com acentos). Aspas e travessões
+ * tipográficos viram os simples; o que mais estiver fora da faixa sai.
+ */
+export function textoGnre(v: string | undefined): string | undefined {
+  if (v === undefined) return undefined
+  const limpo = String(v)
+    .normalize('NFC')
+    .replace(/[\u2018\u2019\u201A\u2032]/g, "'")
+    .replace(/[\u201C\u201D\u201E\u2033]/g, '"')
+    .replace(/[\u2013\u2014\u2212]/g, '-')
+    .replace(/\s/g, ' ')
+    .replace(/[^\u0020-\u00FF]/g, '')
+    .replace(/ {2,}/g, ' ')
+    .trim()
+    .slice(0, TAMANHO_MAX_TEXTO)
+    .trim()
+  return limpo || undefined
 }
 
 function digitos(v: string | undefined): string {
@@ -115,7 +141,7 @@ function conferir(guias: GuiaGnre[], emitente: EmitenteGnre): void {
   if (digitos(emitente.cep).length !== 8) throw new ErroMontagemGnre('CEP do emitente deve ter 8 dígitos')
 
   guias.forEach((g, i) => {
-    const onde = `guia ${i + 1} (${g.ufFavorecida}, nota ${g.documentoOrigem})`
+    const onde = `guia ${i + 1} (${g.ufFavorecida}, nota ${g.identificadorGuia ?? g.documentoOrigem ?? '?'})`
     if (!/^[A-Z]{2}$/.test(g.ufFavorecida)) throw new ErroMontagemGnre(`${onde}: UF inválida`)
     if (!g.receita) throw new ErroMontagemGnre(`${onde}: sem código de receita — consulte o GnreConfigUF`)
     if (!(g.valorPrincipal > 0)) throw new ErroMontagemGnre(`${onde}: valor principal deve ser maior que zero`)
@@ -179,13 +205,14 @@ function montarGuia(g: GuiaGnre, emitente: EmitenteGnre): string {
     `    <TDadosGNRE versao="2.00">\n` +
     tag('ufFavorecida', g.ufFavorecida, '      ') +
     tag('tipoGnre', TIPO_GNRE.simples, '      ') +
+    // Só o CNPJ: a IE vai apenas se o emitente for inscrito na UF favorecida (manual, regra 202).
+    // A guia por operação é de quem não é inscrito no destino; a IE do RS é recusada pela UF (erro 700).
     `      <contribuinteEmitente>\n` +
     `        <identificacao>\n` +
     tag('CNPJ', digitos(emitente.cnpj), '          ') +
-    tag('IE', digitos(emitente.inscricaoEstadual) || undefined, '          ') +
     `        </identificacao>\n` +
-    tag('razaoSocial', emitente.razaoSocial, '        ') +
-    tag('endereco', emitente.endereco, '        ') +
+    tag('razaoSocial', textoGnre(emitente.razaoSocial), '        ') +
+    tag('endereco', textoGnre(emitente.endereco), '        ') +
     tag('municipio', emitente.municipio, '        ') +
     tag('uf', emitente.uf, '        ') +
     tag('cep', digitos(emitente.cep), '        ') +
@@ -195,7 +222,9 @@ function montarGuia(g: GuiaGnre, emitente: EmitenteGnre): string {
     `        <item>\n` +
     tag('receita', g.receita, '          ') +
     tag('detalhamentoReceita', g.detalhamentoReceita, '          ') +
-    `          <documentoOrigem tipo="${escapar(g.tipoDocumentoOrigem ?? DOC_ORIGEM_NFE)}">${escapar(g.documentoOrigem)}</documentoOrigem>\n` +
+    (g.documentoOrigem
+      ? `          <documentoOrigem tipo="${escapar(g.tipoDocumentoOrigem ?? DOC_ORIGEM_NFE)}">${escapar(g.documentoOrigem)}</documentoOrigem>\n`
+      : '') +
     referencia +
     tag('dataVencimento', g.dataVencimento, '          ') +
     valores +
@@ -203,13 +232,14 @@ function montarGuia(g: GuiaGnre, emitente: EmitenteGnre): string {
     `            <identificacao>\n` +
     tag(tipoDoc, doc, '              ') +
     `            </identificacao>\n` +
-    tag('razaoSocial', g.destinatario.razaoSocial, '            ') +
+    tag('razaoSocial', textoGnre(g.destinatario.razaoSocial), '            ') +
     tag('municipio', g.destinatario.municipio, '            ') +
     `          </contribuinteDestinatario>\n` +
     extras +
     `        </item>\n` +
     `      </itensGNRE>\n` +
     tag('valorGNRE', dinheiro(total), '      ') +
+    tag('dataPagamento', g.dataPagamento, '      ') +
     tag('identificadorGuia', g.identificadorGuia, '      ') +
     `    </TDadosGNRE>`
   )

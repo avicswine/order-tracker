@@ -181,6 +181,16 @@ export interface DifalNota {
   calculoDetalhe: Record<string, unknown> | null
 }
 
+export interface DifalImportacaoStatus {
+  emAndamento: boolean
+  iniciadaEm: string | null
+  terminadaEm: string | null
+  resultado:
+    | { empresa: string; lidas: number; gravadas: number; atualizadas: number; ignoradas: number; puladas: number; erros: string[] }[]
+    | null
+  erro: string | null
+}
+
 export interface DifalResumo {
   porResponsavel: {
     responsavel: DifalResponsavel
@@ -215,6 +225,10 @@ export interface DifalGuiaPendente {
   difalCalculado: number
   pronta: boolean
   faltando: string[]
+  /** último dia para pagar sem multa/juros (AAAA-MM-DD) */
+  prazo: string
+  /** passou do prazo: vai para a contabilidade, não para lote */
+  atrasada: boolean
 }
 
 
@@ -357,8 +371,9 @@ export const difalApi = {
   aliquotas: () => api.get<DifalAliquota[]>('/difal/aliquotas').then((r) => r.data),
   historico: () => api.get<DifalHistorico>('/difal/historico').then((r) => r.data),
   importar: (dias?: number) =>
-    api.post<{ ok: boolean; resultado: unknown }>('/difal/importar', { dias }).then((r) => r.data),
-  atualizarAliquota: (uf: string, dados: { codigoReceitaGnre?: string; vencimentoRegra?: string }) =>
+    api.post<{ ok: boolean; iniciada: boolean }>('/difal/importar', { dias }).then((r) => r.data),
+  importarStatus: () => api.get<DifalImportacaoStatus>('/difal/importar/status').then((r) => r.data),
+  atualizarAliquota: (uf: string, dados: { codigoReceitaGnre?: string; vencimentoRegra?: string; tipoDocOrigemGnre?: string; camposAdicionais?: DifalReceitaUf['camposAdicionais']; exigeProduto?: boolean }) =>
     api.put<DifalAliquota>(`/difal/aliquotas/${uf}`, dados).then((r) => r.data),
   portalStatus: () => api.get<DifalPortalStatus>('/difal/portal/status').then((r) => r.data),
   portalConfigUf: (uf: string, empresa: string) =>

@@ -7,7 +7,9 @@
  * em /tmp para validação formal contra o schema, quando houver validador.
  */
 import { writeFileSync } from 'fs'
-import { montarLoteGnre, dividirEmLotes, ErroMontagemGnre, type GuiaGnre, type EmitenteGnre } from './gnre'
+import { montarLoteGnre, dividirEmLotes, ErroMontagemGnre, textoGnre, type GuiaGnre, type EmitenteGnre } from './gnre'
+import { classificarCamposExtras, valorCampoExtra, prazoLegal } from './guias'
+import type { DifalNota } from '@prisma/client'
 
 // dados de exemplo — NÃO são de cliente real
 const emitente: EmitenteGnre = {
@@ -27,7 +29,7 @@ const guiaPiaui: GuiaGnre = {
   valorPrincipal: 15, // R$ 1.000 x 1,5%
   referencia: { mes: '11', ano: '2026' },
   destinatario: { documento: '123.456.789-09', razaoSocial: 'Consumidor Exemplo', municipio: '11001' },
-  identificadorGuia: 'AVIC-NF-13439',
+  identificadorGuia: '13439',
 }
 
 const PADRAO_DATA = /^\d{4}-\d{2}-\d{2}$/
@@ -59,7 +61,7 @@ caso('todos os valores respeitam TDec_1502', [...pega('valor'), ...pega('valorGN
 caso('CPF do destinatário com 11 dígitos', pega('CPF')[0] === '12345678909', pega('CPF')[0])
 caso('documento de origem é NF-e (tipo 10)', xml.includes('<documentoOrigem tipo="10">13439</documentoOrigem>'))
 caso('nenhum campo do layout 1.00 (c01_, c02_...)', !/<c\d{2}_/.test(xml))
-caso('identificadorGuia presente para casar a resposta', pega('identificadorGuia')[0] === 'AVIC-NF-13439')
+caso('identificadorGuia presente para casar a resposta', pega('identificadorGuia')[0] === '13439')
 
 // recusas que devem acontecer
 function recusa(nome: string, fn: () => void) {
@@ -78,5 +80,42 @@ caso('120 guias viram 3 lotes (50+50+20)', lotes.length === 3 && lotes[2].length
 
 writeFileSync('/tmp/lote_gnre_exemplo.xml', xml, 'utf-8')
 console.log(`\nXML de exemplo gravado em /tmp/lote_gnre_exemplo.xml (${xml.length} bytes)`)
+// texto livre no formato TString do XSD (até 60, sem espaço nas pontas, só U+0020..U+00FF)
+caso('texto: espaços repetidos e nas pontas saem', textoGnre('  João  da Silva  ') === 'João da Silva')
+caso('texto: aspas e travessão tipográficos viram simples', textoGnre('Agro \u201CBom\u201D \u2013 Ltda') === 'Agro "Bom" - Ltda')
+caso('texto: emoji sai sem deixar espaço duplo', textoGnre('Fazenda \u{1F437} Feliz') === 'Fazenda Feliz')
+caso('texto: corta em 60 caracteres', textoGnre('X'.repeat(70))?.length === 60)
+caso('texto: só espaços vira ausente', textoGnre('   ') === undefined)
+caso('identificadorGuia só com dígitos (XSD [0-9]{1,10})', /^[0-9]{1,10}$/.test(pega('identificadorGuia')[0] ?? ''))
+
+// UF que não exige documento de origem (ex.: MS e PB na 100102): a guia vai sem o elemento
+const xmlSemDoc = montarLoteGnre([{ ...guiaPiaui, ufFavorecida: 'MS', documentoOrigem: undefined, tipoDocumentoOrigem: undefined }], emitente)
+caso('guia sem documento de origem não leva <documentoOrigem>', !xmlSemDoc.includes('<documentoOrigem'))
+
+// campos extras obrigatórios da UF (GnreConfigUF), classificados pelo título/tipo
+const cls = classificarCamposExtras([
+  { codigo: '107', titulo: 'Chave de Acesso da NFe', tipo: 'T', obrigatorio: true },
+  { codigo: '132', titulo: 'Data de Emissão', tipo: 'D', obrigatorio: true },
+  { codigo: '106', titulo: 'OBSERVAÇÃO', tipo: 'T', obrigatorio: true },
+  { codigo: '127', titulo: 'Informações complementares', tipo: 'T', obrigatorio: false },
+  { codigo: '999', titulo: 'Campo novo qualquer', tipo: 'T', obrigatorio: true },
+])
+caso('extras: chave, data e observação reconhecidos', cls[0]?.conteudo === 'chaveNfe' && cls[1]?.conteudo === 'dataEmissao' && cls[2]?.conteudo === 'observacao')
+caso('extras: opcional fica de fora', !cls.some((c) => c.codigo === '127'))
+caso('extras: obrigatório desconhecido trava em vez de ir errado', cls.find((c) => c.codigo === '999')?.conteudo === 'desconhecido')
+caso('extras: UF que exige produto trava a nota', classificarCamposExtras([], true)[0]?.conteudo === 'desconhecido')
+
+// valores dos campos extras a partir da nota (emitidaEm guarda o horário de Brasília como se fosse UTC)
+const notaMadrugada = { nfNumero: '013234', nfChave: '4'.repeat(44), emitidaEm: new Date('2026-11-19T01:30:00Z') } as DifalNota
+caso('data de emissão de nota da 1h30 não volta um dia', valorCampoExtra({ codigo: '132', titulo: 'Data de Emissão', conteudo: 'dataEmissao' }, notaMadrugada) === '2026-11-19')
+caso('observação: DIFAL NF + número sem zeros à esquerda', valorCampoExtra({ codigo: '106', titulo: 'OBSERVAÇÃO', conteudo: 'observacao' }, notaMadrugada) === 'DIFAL NF 13234')
+caso('observação: número de 7 dígitos não é cortado', valorCampoExtra({ codigo: '106', titulo: 'OBSERVAÇÃO', conteudo: 'observacao' }, { ...notaMadrugada, nfNumero: '1234567' }) === 'NF 1234567')
+caso('chave da NF-e vai inteira', valorCampoExtra({ codigo: '107', titulo: 'Chave', conteudo: 'chaveNfe' }, notaMadrugada)?.length === 44)
+
+// prazo legal (guia atrasada vai para a contabilidade)
+caso('prazo "na saída" é o dia da nota, mesmo emitida de madrugada', prazoLegal('saida', new Date('2026-11-19T01:30:00Z')) === '2026-11-19')
+caso('prazo "dia 15" é o dia 15 do mês seguinte', prazoLegal('dia15', new Date('2026-11-30T23:00:00Z')) === '2026-12-15')
+caso('prazo "dia 15" de dezembro vira janeiro do ano seguinte', prazoLegal('dia15', new Date('2026-12-10T10:00:00Z')) === '2027-01-15')
+
 console.log(falhas === 0 ? '\nTodos os casos conferem.' : `\n${falhas} caso(s) com erro.`)
 process.exit(falhas === 0 ? 0 : 1)

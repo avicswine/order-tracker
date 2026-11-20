@@ -155,9 +155,17 @@ export function extrairRetorno(envelopeResposta: string): string {
     const motivo = texto(falha, 'Text') ?? texto(falha, 'faultstring') ?? falha.slice(0, 200)
     throw new ErroPortalGnre(`o portal devolveu uma falha SOAP: ${motivo}`)
   }
-  // o WSDL chama a resposta de gnreRespostaMsg; o manual, de gnreRetornoMsg — aceita os dois
-  const retorno = texto(envelopeResposta, 'gnreRespostaMsg') ?? texto(envelopeResposta, 'gnreRetornoMsg')
-  if (retorno === undefined) throw new ErroPortalGnre('resposta do portal sem gnreRespostaMsg')
+  // Nome da resposta muda por serviço: ConfigUF e ResultadoLote usam gnreRespostaMsg; o envio
+  // de lote (GnreLoteRecepcao.wsdl) usa processarResponse; o manual fala em gnreRetornoMsg.
+  const retorno =
+    texto(envelopeResposta, 'gnreRespostaMsg') ??
+    texto(envelopeResposta, 'gnreRetornoMsg') ??
+    texto(envelopeResposta, 'processarResponse')
+  if (retorno === undefined) {
+    // mostra o começo da resposta para dar para diagnosticar (o portal não devolve dado de cliente aqui)
+    const inicio = envelopeResposta.replace(/\s+/g, ' ').slice(0, 300)
+    throw new ErroPortalGnre(`resposta do portal em formato inesperado: ${inicio}`)
+  }
   // pode vir como XML escapado, em CDATA ou aninhado; os três acabam como XML puro aqui
   return retorno.replace(/^<!\[CDATA\[([\s\S]*)\]\]>$/, '$1').trim()
 }

@@ -524,6 +524,9 @@ model DifalAliquota {
   // quando a guia vence: "saida" = antes de a mercadoria sair (por operação);
   // "dia15" = até o dia 15 do mês seguinte (quando a UF admite apuração)
   vencimentoRegra    String  @default("saida")
+  // campos extras OBRIGATÓRIOS da receita nesta UF (GnreConfigUF), já classificados:
+  // [{ codigo, titulo, conteudo: "chaveNfe" | "dataEmissao" | "observacao" | "desconhecido" }]
+  camposExtrasGnre   Json?
 
   atualizadoEm    DateTime @updatedAt
 
