@@ -421,11 +421,13 @@ async function importarNotasSemTrava(
         try {
           const existente = await prisma.difalNota.findUnique({
             where: { empresa_nfNumero: { empresa: empresa.code, nfNumero: numero } },
-            select: { id: true },
+            select: { id: true, guiaLoteId: true },
           })
           if (existente) {
-            // não toca no que foi conferido depois (cobrança do ML, guia paga)
-            await prisma.difalNota.update({ where: { id: existente.id }, data: registro })
+            // não toca no que foi conferido depois (cobrança do ML, guia paga). Nota com guia gerada mantém a conta
+            // com que a guia saiu: refazer mudaria o valor da guia que já existe.
+            const { valorComReducao, valorSemReducao, difalCalculado, difalMetodo, calculoDetalhe, responsavel, ...semConta } = registro
+            await prisma.difalNota.update({ where: { id: existente.id }, data: existente.guiaLoteId ? semConta : registro })
             res.atualizadas++
           } else {
             await prisma.difalNota.create({ data: registro })
