@@ -145,9 +145,25 @@ function temIe(ie?: string | null): boolean {
   return /\d/.test(v)
 }
 
+// trava: o botão da tela e a rotina diária não podem importar ao mesmo tempo (chamadas em dobro no Bling)
+let importando = false
+
 export async function importarNotas(
   prisma: PrismaClient,
   opcoes: { empresa?: string; desde?: Date; limite?: number; forcar?: boolean } = {}
+): Promise<ResultadoImportacao[]> {
+  if (importando) throw new Error('já existe uma importação em andamento')
+  importando = true
+  try {
+    return await importarNotasSemTrava(prisma, opcoes)
+  } finally {
+    importando = false
+  }
+}
+
+async function importarNotasSemTrava(
+  prisma: PrismaClient,
+  opcoes: { empresa?: string; desde?: Date; limite?: number; forcar?: boolean }
 ): Promise<ResultadoImportacao[]> {
   const desde = opcoes.desde ?? new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
   const desdeStr = desde.toISOString().slice(0, 10)

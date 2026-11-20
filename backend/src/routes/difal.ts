@@ -15,10 +15,11 @@ import { listarGuiasEmitidas, marcarGuiasPagas } from '../services/difal/guiasEm
 import { semearAliquotas } from '../services/difal/aliquotas'
 import { listarGuiasPendentes, gerarLoteDasNotas, classificarCamposExtras, marcarComprovanteMlEnviado, filtroVendasMl } from '../services/difal/guias'
 import { ErroMontagemGnre } from '../services/difal/gnre'
+import { empresaGnre, enviarLoteGnre, consultarLoteGnre, ErroLote } from '../services/difal/lotesGnre'
+import { rodarRotinaDifal } from '../services/difal/rotinaDiaria'
 import { sincronizarCobrancasMl, fechamentoMensal } from '../services/difal/cobrancasMl'
 import {
-  statusPortal, portalConfigurado, consultarConfigUf, enviarLote, consultarResultadoLote,
-  lerResultadoLote, ErroPortalGnre, ambienteGnre, type EmpresaGnre,
+  statusPortal, consultarConfigUf, lerResultadoLote, ErroPortalGnre,
 } from '../services/difal/portalGnre'
 // A apuração das guias já pagas é dado fixo, vindo da auditoria dos comprovantes
 // do Mercado Livre. Importado como módulo para entrar no build.
@@ -294,11 +295,8 @@ router.post('/cobrancas-ml/sincronizar', [body('meses').optional().isInt({ min: 
 })
 
 // ------------------------------------------------------------ Portal GNRE
-const EMPRESAS_GNRE: EmpresaGnre[] = ['AVIC', 'AGRO']
-const empresaGnre = (v: unknown): EmpresaGnre | null =>
-  EMPRESAS_GNRE.includes(String(v).toUpperCase() as EmpresaGnre) ? (String(v).toUpperCase() as EmpresaGnre) : null
-
 function responderErroPortal(res: Response, e: unknown) {
+  if (e instanceof ErroLote) return res.status(e.status).json({ erro: e.message })
   if (e instanceof ErroPortalGnre) return res.status(502).json({ erro: e.message })
   res.status(500).json({ erro: (e as Error).message })
 }
@@ -309,7 +307,7 @@ router.get('/portal/status', (_req: Request, res: Response) => res.json(statusPo
 // GET /difal/portal/config/:uf?empresa= — receitas e exigências da UF (GnreConfigUF)
 router.get(
   '/portal/config/:uf',
-  [query('empresa').isIn(EMPRESAS_GNRE)],
+  [query('empresa').isIn(['AVIC', 'AGRO'])],
   async (req: Request, res: Response) => {
     const erros = validationResult(req)
     if (!erros.isEmpty()) return res.status(400).json({ errors: erros.array() })
@@ -384,29 +382,7 @@ router.get('/lotes/:id/pdf', async (req: Request, res: Response) => {
 // POST /difal/lotes/:id/enviar — transmite o lote ao portal (GnreLoteRecepcao). Não paga nada.
 router.post('/lotes/:id/enviar', async (req: Request, res: Response) => {
   try {
-    const lote = await prisma.difalLoteGnre.findUnique({ where: { id: String(req.params.id) } })
-    if (!lote) return res.status(404).json({ erro: 'lote não encontrado' })
-    if (lote.numeroRecibo) return res.status(409).json({ erro: `lote já enviado (recibo ${lote.numeroRecibo})` })
-    if (lote.ambiente !== ambienteGnre()) {
-      return res.status(409).json({
-        erro: `este lote foi gerado para ${lote.ambiente} e o portal está em ${ambienteGnre()}: desfaça o lote e gere de novo`,
-      })
-    }
-    const empresa = empresaGnre(lote.empresa)
-    if (!empresa || !portalConfigurado(empresa)) return res.status(409).json({ erro: `certificado da ${lote.empresa} não configurado` })
-
-    const recibo = await enviarLote(empresa, lote.xml)
-    const atualizado = await prisma.difalLoteGnre.update({
-      where: { id: lote.id },
-      data: {
-        enviadoEm: new Date(),
-        numeroRecibo: recibo.recibo?.numero ?? null,
-        situacaoCodigo: recibo.situacao.codigo,
-        situacaoDescricao: recibo.situacao.descricao,
-      },
-      select: { id: true, numeroRecibo: true, situacaoCodigo: true, situacaoDescricao: true, enviadoEm: true },
-    })
-    res.json({ ...atualizado, tempoEstimadoMs: recibo.recibo?.tempoEstimadoMs ?? null })
+    res.json(await enviarLoteGnre(prisma, String(req.params.id)))
   } catch (e) {
     responderErroPortal(res, e)
   }
@@ -447,26 +423,25 @@ router.post('/lotes/:id/desfazer', async (req: Request, res: Response) => {
 // POST /difal/lotes/:id/consultar — busca o resultado do recibo (GnreResultadoLote), com PDF
 router.post('/lotes/:id/consultar', async (req: Request, res: Response) => {
   try {
-    const lote = await prisma.difalLoteGnre.findUnique({ where: { id: String(req.params.id) } })
-    if (!lote) return res.status(404).json({ erro: 'lote não encontrado' })
-    if (!lote.numeroRecibo) return res.status(409).json({ erro: 'lote ainda não foi enviado ao portal' })
-    const empresa = empresaGnre(lote.empresa)
-    if (!empresa || !portalConfigurado(empresa)) return res.status(409).json({ erro: `certificado da ${lote.empresa} não configurado` })
-
-    const resultado = await consultarResultadoLote(empresa, lote.numeroRecibo, true)
-    await prisma.difalLoteGnre.update({
-      where: { id: lote.id },
-      data: {
-        consultadoEm: new Date(),
-        situacaoCodigo: resultado.situacao.codigo,
-        situacaoDescricao: resultado.situacao.descricao,
-        resultadoXml: resultado.bruto,
-        ...(resultado.pdfGuias && { pdfGuias: resultado.pdfGuias }),
-      },
-    })
-    res.json({ situacao: resultado.situacao, guias: resultado.guias, temPdf: !!resultado.pdfGuias })
+    res.json(await consultarLoteGnre(prisma, String(req.params.id)))
   } catch (e) {
     responderErroPortal(res, e)
+  }
+})
+
+// POST /difal/rotina/simular — monta a mensagem da rotina diária com os dados de agora, sem gerar lote,
+// sem enviar ao portal e sem mandar WhatsApp (botão na Configuração)
+router.post('/rotina/simular', async (_req: Request, res: Response) => {
+  try {
+    const r = await rodarRotinaDifal(prisma, { simulacao: true, agendada: false })
+    res.json({
+      ...r,
+      agendada: process.env.DIFAL_ROTINA === '1',
+      modoCompleto: process.env.DIFAL_ROTINA_ENVIAR === '1',
+      temNumero: !!process.env.DIFAL_WHATSAPP_NUMERO?.trim(),
+    })
+  } catch (e) {
+    res.status(500).json({ erro: (e as Error).message })
   }
 })
 

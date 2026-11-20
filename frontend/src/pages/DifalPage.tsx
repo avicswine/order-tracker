@@ -1093,6 +1093,39 @@ function LotesGnre() {
 }
 
 // ------------------------------------------------------- Configuração (alíquotas + receita GNRE)
+/** Rotina diária das 17h: mostra como está ligada e simula a mensagem com os dados de agora (não envia nada). */
+function RotinaDiaria() {
+  const simular = useMutation({ mutationFn: difalApi.simularRotina })
+  const r = simular.data
+  return (
+    <div className="difal-cartao flex gap-4 rounded-2xl border border-slate-200 bg-white p-5 text-sm">
+      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-600"><Icone nome="atualizar" /></span>
+      <div className="min-w-0 flex-1">
+        <p className="font-semibold text-slate-900">Rotina diária (17h, dias úteis)</p>
+        <p className="text-xs text-slate-500">
+          Atualiza as notas, monta a lista do dia (no prazo, estados com cobrança) e manda o resumo no WhatsApp. O pagamento continua com você.
+        </p>
+        <button onClick={() => simular.mutate()} disabled={simular.isPending}
+          className="difal-btn mt-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:border-slate-300 disabled:opacity-60">
+          {simular.isPending ? 'Montando…' : 'Rodar rotina agora (simulação)'}
+        </button>
+        {simular.isError && <p className="mt-2 text-xs text-rose-600">{mensagemErro(simular.error)}</p>}
+        {r && (
+          <div className="difal-entrar mt-3 space-y-2">
+            <ul className="text-xs text-slate-600">
+              <li>Agendamento: <b>{r.agendada ? 'ligado' : 'desligado'}</b>{!r.agendada && ' (variável DIFAL_ROTINA=1 no Railway)'}</li>
+              <li>Modo: <b>{r.modoCompleto ? 'completo (gera e envia os lotes ao portal)' : 'só aviso'}</b></li>
+              <li>WhatsApp: <b>{r.temNumero ? 'número configurado' : 'sem número (DIFAL_WHATSAPP_NUMERO)'}</b></li>
+            </ul>
+            <p className="text-xs text-slate-500">Mensagem que iria agora (simulação: usa as notas já importadas, não gera lote nem envia nada):</p>
+            <pre className="whitespace-pre-wrap rounded-xl bg-slate-50 p-3 text-xs text-slate-800 ring-1 ring-slate-100">{r.pulou ? `Não rodou: ${r.pulou}` : r.mensagem}</pre>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function Configuracao() {
   const qc = useQueryClient()
   const [empresa, setEmpresa] = useState<'AVIC' | 'AGRO'>('AVIC')
@@ -1133,6 +1166,8 @@ function Configuracao() {
         )}
         </div>
       </div>
+
+      <RotinaDiaria />
 
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">

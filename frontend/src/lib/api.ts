@@ -450,6 +450,8 @@ export const difalApi = {
     api.post<DifalSincronizacaoMl[]>('/difal/cobrancas-ml/sincronizar', { meses: 2 }).then((r) => r.data),
   marcarComprovanteMl: (id: string) => api.post<{ ok: boolean }>(`/difal/notas/${id}/comprovante-ml`).then((r) => r.data),
   guiasEmitidas: () => api.get<{ guias: DifalGuiaEmitida[]; alertas: { tipo: string; texto: string }[] }>('/difal/guias-emitidas').then((r) => r.data),
+  simularRotina: () =>
+    api.post<{ mensagem: string; pulou?: string; agendada: boolean; modoCompleto: boolean; temNumero: boolean }>('/difal/rotina/simular').then((r) => r.data),
   marcarPagas: (ids: string[], data: string | null) => api.post<{ ok: boolean; notas: number }>('/difal/guias-emitidas/pagas', { ids, data }).then((r) => r.data),
   guiasPendentes: () => api.get<DifalGuiaPendente[]>('/difal/guias-pendentes').then((r) => r.data),
   // devolve o XML do lote GNRE como arquivo para baixar
