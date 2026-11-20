@@ -102,12 +102,14 @@ function CalculoDaNota({ d, total }: { d: DifalCalculoDetalhe | null | undefined
       <p className="text-sm font-semibold text-slate-900">Como chegamos em {brl(total)}</p>
       <p className="text-slate-500">
         {d.uf}: alíquota interna {pctBr(d.aliquotaInterna)}{d.fcp ? ` + fundo de pobreza ${pctBr(d.fcp)}` : ''}. Do RS para {d.uf} a nota sai com {pctBr(d.interestadual)} (interestadual).
-        {d.freteRateado ? ` O frete de ${brl(d.freteRateado)} entra na base, dividido entre as partes na proporção dos produtos.` : ''}
+        {d.valorNota !== undefined
+          ? ` A base é o valor total da NF, ${brl(d.valorNota)}${d.freteRateado ? ` (com frete de ${brl(d.freteRateado)})` : ''}${d.ajusteNota ? `, já ${d.ajusteNota < 0 ? `com desconto de ${brl(-d.ajusteNota)}` : `com ${brl(d.ajusteNota)} de outras despesas/IPI`}` : ''}, dividida entre as partes na proporção dos produtos.`
+          : d.freteRateado ? ` O frete de ${brl(d.freteRateado)} entra na base, dividido entre as partes na proporção dos produtos.` : ''}
       </p>
       {com && com.valor > 0 && (
         <div className="rounded-lg bg-slate-50 p-2.5">
           <p className="mb-1 font-medium text-slate-900">1. Itens NCM 8436 (com redução do Convênio 52/91)</p>
-          <div className={linha}><span>Base (produtos + frete rateado)</span><span className="tabular-nums">{brl(com.valor)}</span></div>
+          <div className={linha}><span>{d.valorNota !== undefined ? 'Base (parte do valor da NF)' : 'Base (produtos + frete rateado)'}</span><span className="tabular-nums">{brl(com.valor)}</span></div>
           {com.metodo === 'prop' ? (
             <>
               <div className={linha}><span>Base reduzida: {brl(com.valor)} × (5,6% ÷ {pctBr(d.aliquotaInterna)})</span><span className="tabular-nums">{brl(com.baseReduzida)}</span></div>
@@ -127,7 +129,7 @@ function CalculoDaNota({ d, total }: { d: DifalCalculoDetalhe | null | undefined
       {sem && sem.valor > 0 && (
         <div className="rounded-lg bg-slate-50 p-2.5">
           <p className="mb-1 font-medium text-slate-900">{com && com.valor > 0 ? '2. ' : ''}Demais itens (sem redução)</p>
-          <div className={linha}><span>Base (produtos + frete rateado)</span><span className="tabular-nums">{brl(sem.valor)}</span></div>
+          <div className={linha}><span>{d.valorNota !== undefined ? 'Base (parte do valor da NF)' : 'Base (produtos + frete rateado)'}</span><span className="tabular-nums">{brl(sem.valor)}</span></div>
           <div className={linha}><span>Alíquota cheia: {pctBr(interna)} − {pctBr(d.interestadual)}</span><span className="tabular-nums">{pctBr(sem.aliquotaCheia)}</span></div>
           <div className={`${linha} font-medium text-slate-900`}><span>{brl(sem.valor)} × {pctBr(sem.aliquotaCheia)}</span><span className="tabular-nums">{brl(sem.difal)}</span></div>
         </div>

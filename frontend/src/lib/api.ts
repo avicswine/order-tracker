@@ -282,6 +282,10 @@ export interface DifalCalculoDetalhe {
   fcp?: number
   interestadual?: number
   freteRateado?: number
+  /** base do imposto = valor total da NF (notas calculadas antes de 20/11/2026 não têm) */
+  valorNota?: number
+  /** valor da NF − produtos − frete: negativo = desconto; positivo = outras despesas, IPI */
+  ajusteNota?: number
   motivo?: string
   erro?: string
   comReducao?: {

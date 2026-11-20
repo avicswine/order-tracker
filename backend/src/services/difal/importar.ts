@@ -328,6 +328,7 @@ async function importarNotasSemTrava(
           canalTipo: canal?.tipo ?? null,
           itens,
           valorFrete: nf.valorFrete ?? 0,
+          valorNota: nf.valorNota,
         }
         const calc = calcularDifal(dados, porUf.get(uf))
         const erroCalculo = (calc.detalhe as { erro?: string }).erro ?? null

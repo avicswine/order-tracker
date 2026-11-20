@@ -129,6 +129,37 @@ const casos: Caso[] = [
     esperaResponsavel: 'NOSSO',
     porque: 'frete rateado: 990 x 1,5% = 14,85 mais 110 x 15,5% = 17,05, total 31,90',
   },
+  {
+    nome: 'Piauí, R$ 1.000 de produto 8436 com R$ 100 de desconto na NF (NF de R$ 900)',
+    nota: {
+      ufDestino: 'PI',
+      temInscricaoEstadual: false,
+      canalTipo: null,
+      valorNota: 900,
+      itens: [{ ncm: '84362900', valorTotal: 1000 }],
+    },
+    regra: PI,
+    esperaDifal: 13.5,
+    esperaResponsavel: 'NOSSO',
+    porque: 'a base é o valor total da NF: 900 x 1,5% = 13,50 (desconto sai da base)',
+  },
+  {
+    nome: 'Piauí, R$ 800 de 8436 + R$ 200 fora, NF de R$ 1.100 (IPI e outras despesas)',
+    nota: {
+      ufDestino: 'PI',
+      temInscricaoEstadual: false,
+      canalTipo: null,
+      valorNota: 1100,
+      itens: [
+        { ncm: '84362900', valorTotal: 800 },
+        { ncm: '73269090', valorTotal: 200 },
+      ],
+    },
+    regra: PI,
+    esperaDifal: 47.3,
+    esperaResponsavel: 'NOSSO',
+    porque: 'NF repartida 80/20: 880 x 1,5% = 13,20 mais 220 x 15,5% = 34,10, total 47,30',
+  },
 ]
 
 let falhas = 0
