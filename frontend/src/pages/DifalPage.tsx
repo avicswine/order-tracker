@@ -20,6 +20,7 @@ const ICONES = {
   busca: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM21 21l-4-4',
   cadeado: 'M5 11h14v10H5zM7 11V7a5 5 0 0 1 10 0v4',
   moedas: 'M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6',
+  engrenagem: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z',
 } as const
 
 function Icone({ nome, className = 'h-5 w-5' }: { nome: keyof typeof ICONES; className?: string }) {
@@ -214,7 +215,6 @@ type NomeAba = 'vendas' | 'historico' | 'config'
 const ABAS: { id: NomeAba; texto: string }[] = [
   { id: 'vendas', texto: 'Vendas' },
   { id: 'historico', texto: 'O que já pagamos' },
-  { id: 'config', texto: 'Configuração' },
 ]
 
 // seletor de abas com um fundo escuro que desliza até a aba escolhida
@@ -223,7 +223,8 @@ function Abas({ aba, onTrocar }: { aba: NomeAba; onTrocar: (a: NomeAba) => void 
   const [indicador, setIndicador] = useState({ esquerda: 0, largura: 0 })
   useLayoutEffect(() => {
     const b = botoes.current[aba]
-    if (b) setIndicador({ esquerda: b.offsetLeft, largura: b.offsetWidth })
+    // na configuração (engrenagem) nenhuma aba fica marcada
+    setIndicador(b ? { esquerda: b.offsetLeft, largura: b.offsetWidth } : { esquerda: 0, largura: 0 })
   }, [aba])
   return (
     <div className="relative inline-flex rounded-xl bg-white/80 p-1 shadow-sm ring-1 ring-indigo-100 backdrop-blur">
@@ -390,12 +391,23 @@ function GuiasPendentes() {
   const noPrazo = visiveis.filter((g) => !g.atrasada)
   const atrasadas = visiveis.filter((g) => g.atrasada)
   const prontas = noPrazo.filter((g) => g.pronta)
+  const prontasAtrasadas = atrasadas.filter((g) => g.pronta)
   // marcar em lote: todas as prontas visíveis de UMA empresa (o portal aceita lote de uma empresa só), até o limite
-  function marcarEmpresa(empresa: string) {
-    setEscolhidas(new Set(prontas.filter((g) => g.empresa === empresa).slice(0, LIMITE_GUIAS_LOTE).map((g) => g.id)))
+  function marcarEmpresa(empresa: string, lista = prontas) {
+    setEscolhidas(new Set(lista.filter((g) => g.empresa === empresa).slice(0, LIMITE_GUIAS_LOTE).map((g) => g.id)))
   }
-  const prontasPorEmpresa = (empresa: string) => prontas.filter((g) => g.empresa === empresa).length
-  const empresaEscolhida = noPrazo.find((g) => escolhidas.has(g.id))?.empresa
+  const prontasPorEmpresa = (empresa: string, lista = prontas) => lista.filter((g) => g.empresa === empresa).length
+  // atrasada sai só com o imposto: o José confirma antes de gerar (decisão de 20/11/2026)
+  function gerarComAviso() {
+    const atrasadasEscolhidas = guias.filter((g) => escolhidas.has(g.id) && g.atrasada).length
+    if (atrasadasEscolhidas > 0 && !window.confirm(
+      `${atrasadasEscolhidas} guia(s) atrasada(s): vão sair só com o imposto, SEM multa e juros. O estado pode cobrar a diferença depois. Gerar mesmo assim?`
+    )) return
+    setAviso(null)
+    setErroTexto(null)
+    gerar.mutate()
+  }
+  const empresaEscolhida = guias.find((g) => escolhidas.has(g.id))?.empresa
 
   const gerar = useMutation({
     mutationFn: () => difalApi.gerarLote([...escolhidas]),
@@ -452,6 +464,8 @@ function GuiasPendentes() {
       </span>
     </label>
     </div>
+    {aviso && <div className="difal-entrar rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-2.5 text-sm text-emerald-900">{aviso}</div>}
+    {erroTexto && <div className="difal-entrar rounded-xl border border-red-200 bg-red-50 px-5 py-2.5 text-sm text-red-800">{erroTexto}</div>}
     {noPrazo.length === 0 ? (
       <div className="difal-entrar flex items-center gap-3 rounded-2xl border border-emerald-200 bg-white p-4 text-sm text-emerald-900">
         <span className="grid h-8 w-8 place-items-center rounded-xl bg-emerald-50 text-emerald-600"><Icone nome="ok" className="h-4 w-4" /></span>
@@ -478,7 +492,7 @@ function GuiasPendentes() {
           <button onClick={() => setEscolhidas(new Set())} className="difal-btn rounded-xl px-3 py-2 text-sm text-slate-500 hover:text-slate-800">Limpar</button>
         )}
         <button
-          onClick={() => { setAviso(null); setErroTexto(null); gerar.mutate() }}
+          onClick={gerarComAviso}
           disabled={escolhidas.size === 0 || gerar.isPending}
           className="difal-btn rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-4 py-2 text-sm font-medium text-white shadow-md shadow-indigo-500/30 hover:from-indigo-500 hover:to-violet-500 disabled:opacity-40"
         >
@@ -486,12 +500,6 @@ function GuiasPendentes() {
         </button>
         </span>
       </div>
-      {aviso && <div className="difal-entrar border-b border-emerald-100 bg-emerald-50 px-5 py-2 text-sm text-emerald-900">{aviso}</div>}
-      {erroTexto && (
-        <div className="difal-entrar border-b border-red-100 bg-red-50 px-5 py-2 text-sm text-red-800">
-          {erroTexto}
-        </div>
-      )}
       <table className="min-w-full text-sm">
         <thead className="bg-gradient-to-r from-indigo-50 to-sky-50 text-left text-xs uppercase tracking-wide text-indigo-900/60">
           <tr><th className="w-10 px-5 py-2"></th><th className="px-2 py-2">Nota / cliente</th><th className="px-2 py-2">Emissão</th><th className="px-2 py-2">Prazo</th><th className="px-2 py-2">UF</th><th className="px-2 py-2">Canal</th><th className="px-2 py-2">Transportadora</th><th className="px-2 py-2">Status</th><th className="px-2 py-2">Envio</th><th className="px-2 py-2">Previsão</th><th className="px-2 py-2 text-right">DIFAL</th><th className="px-5 py-2">Situação</th></tr>
@@ -561,7 +569,19 @@ function GuiasPendentes() {
       </table>
     </div>
     )}
-    {atrasadas.length > 0 && <GuiasAtrasadas notas={atrasadas} />}
+    {atrasadas.length > 0 && (
+      <GuiasAtrasadas
+        notas={atrasadas}
+        escolhidas={escolhidas}
+        alternar={alternar}
+        empresaEscolhida={empresaEscolhida}
+        marcarEmpresa={(emp) => marcarEmpresa(emp, prontasAtrasadas)}
+        prontasPorEmpresa={(emp) => prontasPorEmpresa(emp, prontasAtrasadas)}
+        gerar={gerarComAviso}
+        gerando={gerar.isPending}
+        limpar={() => setEscolhidas(new Set())}
+      />
+    )}
     </>
   )
 }
@@ -595,8 +615,19 @@ function atalhosPeriodo(): [string, string, string][] {
 const LIMITE_GUIAS_LOTE = 50
 
 // Notas que passaram do prazo: não vão para lote (sairiam sem multa e juros); a contabilidade regulariza.
-function GuiasAtrasadas({ notas }: { notas: DifalGuiaPendente[] }) {
+function GuiasAtrasadas({ notas, escolhidas, alternar, empresaEscolhida, marcarEmpresa, prontasPorEmpresa, gerar, gerando, limpar }: {
+  notas: DifalGuiaPendente[]
+  escolhidas: Set<string>
+  alternar: (g: DifalGuiaPendente) => void
+  empresaEscolhida: string | undefined
+  marcarEmpresa: (empresa: string) => void
+  prontasPorEmpresa: (empresa: string) => number
+  gerar: () => void
+  gerando: boolean
+  limpar: () => void
+}) {
   const [aberta, setAberta] = useState(false)
+  const escolhidasAqui = notas.filter((g) => escolhidas.has(g.id)).length
   const total = notas.reduce((s, g) => s + g.difalCalculado, 0)
 
   // planilha para a contabilidade: só dados da nota, sem nome nem CPF do cliente (LGPD)
@@ -618,13 +649,29 @@ function GuiasAtrasadas({ notas }: { notas: DifalGuiaPendente[] }) {
         <div className="flex items-start gap-3">
           <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-rose-50 text-rose-600"><Icone nome="alerta" /></span>
           <div>
-            <p className="text-base font-semibold text-slate-900">Atrasadas: com a contabilidade</p>
+            <p className="text-base font-semibold text-slate-900">Atrasadas: passaram do prazo</p>
             <p className="text-xs text-slate-500">
-              {notas.length} nota(s) · {brl(total)} de DIFAL sem multa e juros. Passaram do prazo: não entram em lote GNRE.
+              {notas.length} nota(s) · {brl(total)} de DIFAL. Dá para gerar a guia, mas ela sai só com o imposto, <b className="text-rose-700">sem multa e juros</b>.
+              A planilha vai para a contabilidade.
             </p>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {['AVIC', 'AGRO'].map((emp) => prontasPorEmpresa(emp) > 0 && (
+            <button key={emp} onClick={() => { marcarEmpresa(emp); setAberta(true) }}
+              className="difal-btn rounded-xl border border-rose-200 bg-white px-3 py-2 text-sm text-rose-700 hover:bg-rose-50">
+              Marcar {emp} ({Math.min(prontasPorEmpresa(emp), LIMITE_GUIAS_LOTE)})
+            </button>
+          ))}
+          {escolhidasAqui > 0 && (
+            <>
+              <button onClick={limpar} className="difal-btn rounded-xl px-3 py-2 text-sm text-slate-500 hover:text-slate-800">Limpar</button>
+              <button onClick={gerar} disabled={gerando}
+                className="difal-btn rounded-xl bg-gradient-to-r from-rose-600 to-orange-500 px-4 py-2 text-sm font-medium text-white shadow-md shadow-rose-500/30 disabled:opacity-40">
+                {gerando ? 'Montando lote…' : `Baixar lote GNRE (${escolhidas.size})`}
+              </button>
+            </>
+          )}
           <button onClick={() => setAberta(!aberta)} className="difal-btn rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm hover:border-slate-300">
             {aberta ? 'Esconder' : 'Ver notas'}
           </button>
@@ -638,7 +685,8 @@ function GuiasAtrasadas({ notas }: { notas: DifalGuiaPendente[] }) {
           <table className="min-w-full text-sm">
             <thead className="sticky top-0 bg-gradient-to-r from-rose-50 to-orange-50 text-xs uppercase tracking-wide text-rose-900/60">
               <tr>
-                <th className="px-5 py-2 text-left">Nota / cliente</th>
+                <th className="w-10 px-5 py-2"></th>
+                <th className="px-2 py-2 text-left">Nota / cliente</th>
                 <th className="px-2 py-2 text-left">Emissão</th>
                 <th className="px-2 py-2 text-left">Venceu em</th>
                 <th className="px-2 py-2 text-left">UF</th>
@@ -653,7 +701,12 @@ function GuiasAtrasadas({ notas }: { notas: DifalGuiaPendente[] }) {
             <tbody className="difal-linhas divide-y divide-slate-100">
               {notas.map((g) => (
                 <tr key={g.id}>
-                  <td className="px-5 py-2"><NotaCliente nf={g.nfNumero} empresa={g.empresa} cliente={g.clienteNome} itens={g.itens} /></td>
+                  <td className="px-5 py-2">
+                    <input type="checkbox" checked={escolhidas.has(g.id)} onChange={() => alternar(g)}
+                      disabled={!g.pronta || (empresaEscolhida !== undefined && g.empresa !== empresaEscolhida && !escolhidas.has(g.id))}
+                      title={g.pronta ? undefined : `falta: ${g.faltando.join('; ')}`} className="h-4 w-4 accent-rose-600" />
+                  </td>
+                  <td className="px-2 py-2"><NotaCliente nf={g.nfNumero} empresa={g.empresa} cliente={g.clienteNome} itens={g.itens} /></td>
                   <td className="px-2 py-2 text-slate-500">{dataBr(g.emitidaEm)}</td>
                   <td className="px-2 py-2 text-rose-700">{dataBr(g.prazo)}</td>
                   <td className="px-2 py-2"><span className="rounded-md bg-rose-50 px-1.5 py-0.5 text-xs font-semibold text-rose-700 ring-1 ring-rose-100">{g.clienteUf}</span></td>
@@ -1348,6 +1401,15 @@ export function DifalPage() {
     // mesma margem das outras páginas (p-6): sem ela o conteúdo encosta na barra lateral
     <div className="difal-fundo min-h-screen space-y-6 p-6">
       <div className="difal-hero px-7 py-6">
+        <button
+          onClick={() => setAba(aba === 'config' ? 'vendas' : 'config')}
+          title={aba === 'config' ? 'Voltar para Vendas' : 'Configuração (portal GNRE e receitas por estado)'}
+          className={`difal-btn absolute right-5 top-5 grid h-10 w-10 place-items-center rounded-xl ring-1 backdrop-blur transition-colors ${
+            aba === 'config' ? 'bg-sky-400/30 text-white ring-sky-300/50' : 'bg-white/10 text-sky-200 ring-white/20 hover:bg-white/20'
+          }`}
+        >
+          <Icone nome="engrenagem" className="h-5 w-5" />
+        </button>
         <div className="flex items-center gap-3">
           <span className="grid h-10 w-10 place-items-center rounded-xl bg-white/10 ring-1 ring-white/20 backdrop-blur"><Icone nome="documento" className="h-5 w-5 text-sky-300" /></span>
           <h1 className="text-3xl font-semibold tracking-tight">DIFAL</h1>

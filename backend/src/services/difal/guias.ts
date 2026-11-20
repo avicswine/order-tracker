@@ -30,7 +30,7 @@ export interface GuiaPendente {
   faltando: string[]
   /** último dia para pagar sem multa/juros (AAAA-MM-DD), pela regra de vencimento da UF */
   prazo: string
-  /** passou do prazo: não vai para lote GNRE, vai para a contabilidade (decisão do José, 20/11/2026) */
+  /** passou do prazo legal: pode gerar guia, mas ela sai só com o imposto, sem multa e juros (José liberou com aviso, 20/11/2026) */
   atrasada: boolean
   /** envio da nota no order-tracker; null quando a nota não está lá (retirada, Mercado Envios, Shopee…) */
   envio: EnvioDaNota | null
@@ -397,10 +397,8 @@ export async function gerarLoteDasNotas(prisma: PrismaClient, ids: string[], hoj
     const prazo = prazoLegal(a.vencimentoRegra, n.emitidaEm)
     // venda do ML: paga dentro da janela de 7 dias, antes da barreira; vence hoje (o portal exige vencimento >= pagamento)
     const ml = n.responsavel === 'ML_PAGA'
-    // guia atrasada sairia sem multa e juros: vai para a contabilidade, não para lote
-    if (!ml && prazo < hojeBr) {
-      throw new ErroMontagemGnre(`nota ${n.nfNumero} passou do prazo (vencia em ${prazo.split('-').reverse().join('/')}): vai para a contabilidade`)
-    }
+    // nota atrasada (prazo < hoje): o José liberou com aviso na tela (20/11/2026). A guia sai só com o
+    // imposto, sem multa e juros, e com vencimento no dia do pagamento (o portal exige vencimento >= pagamento).
     return {
       ufFavorecida: n.clienteUf,
       receita: a.codigoReceitaGnre!,
