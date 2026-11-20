@@ -5,7 +5,7 @@
  */
 import type { PrismaClient } from '@prisma/client'
 import { lerResultadoLote } from './portalGnre'
-import { prazoLegal, UFS_COM_COBRANCA } from './guias'
+import { UFS_COM_COBRANCA } from './guias'
 import { dataBR, somarDias } from '../separacao/datas'
 
 /** guia aceita há mais que isso e não marcada como paga entra no alerta */
@@ -48,12 +48,10 @@ export interface AlertaGuias {
 }
 
 export async function listarGuiasEmitidas(prisma: PrismaClient): Promise<{ guias: GuiaEmitida[]; alertas: AlertaGuias[] }> {
-  const [notas, lotes, aliquotas] = await Promise.all([
+  const [notas, lotes] = await Promise.all([
     prisma.difalNota.findMany({ where: { guiaLoteId: { not: null } }, orderBy: { guiaGeradaEm: 'desc' } }),
     prisma.difalLoteGnre.findMany({ select: { id: true, empresa: true, ambiente: true, enviadoEm: true, resultadoXml: true } }),
-    prisma.difalAliquota.findMany({ select: { uf: true, vencimentoRegra: true } }),
   ])
-  const regraPorUf = new Map(aliquotas.map((a) => [a.uf, a.vencimentoRegra]))
   const resultado = new Map(lotes.map((l) => [l.id, { ...l, guias: l.resultadoXml ? lerResultadoLote(l.resultadoXml).guias : [] }]))
 
   const guias: GuiaEmitida[] = notas.map((n) => {
@@ -68,7 +66,8 @@ export async function listarGuiasEmitidas(prisma: PrismaClient): Promise<{ guias
       mlOrderId: n.mlOrderId, valorNota: n.valorNota, difalCalculado: n.difalCalculado, calculoDetalhe: n.calculoDetalhe, itens: n.itens,
       emitidaEm: n.emitidaEm, loteId: n.guiaLoteId!, ambiente: lote?.ambiente ?? null, geradaEm,
       enviadaEm: lote?.enviadoEm ?? null, situacaoPortal: g?.situacaoGuia ?? null, linhaDigitavel: g?.linhaDigitavel ?? null,
-      atrasada: !ml && prazoLegal(regraPorUf.get(n.clienteUf) ?? 'saida', n.emitidaEm) < geradaEm,
+      // regra do José: o DIFAL é pago no dia da emissão (emitidaEm guarda Brasília como UTC: as partes UTC dão o dia)
+      atrasada: n.emitidaEm.toISOString().slice(0, 10) < geradaEm,
       pagaEm: n.guiaPagaEm ? dataBR(n.guiaPagaEm) : null, valorPago: n.difalPagoGuia,
       comprovanteMlEnviadoEm: n.comprovanteMlEnviadoEm,
     }

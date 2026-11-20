@@ -196,7 +196,7 @@ export async function marcarComprovanteMlEnviado(prisma: PrismaClient, id: strin
  */
 export const UFS_COM_COBRANCA = ['AC', 'AL', 'AM', 'CE', 'PB', 'PI', 'RN', 'TO']
 
-/** Vendas do ML que pagamos nós: sem guia e com nota de até 7 dias, ou com guia gerada e comprovante ainda não enviado */
+/** Vendas do ML que pagamos nós: sem guia e com nota de até 30 dias, ou com guia gerada e comprovante ainda não enviado */
 export function filtroVendasMl(): Prisma.DifalNotaWhereInput {
   const limite = new Date(`${somarDias(dataBR(), -JANELA_ML_DIAS)}T00:00:00Z`) // emitidaEm guarda Brasília como UTC
   return {
@@ -216,7 +216,7 @@ export async function listarGuiasPendentes(prisma: PrismaClient, empresa?: strin
       where: {
         difalCalculado: { gt: 0 },
         ...(empresa && { empresa }),
-        // nós pagamos todas (decisão do José, 20/11/2026): as nossas em aberto e as do ML na janela de 7 dias
+        // nós pagamos todas (decisão do José, 20/11/2026): as nossas em aberto e as do ML dos últimos 30 dias
         OR: [
           { responsavel: 'NOSSO', situacao: { in: [...SITUACOES_ABERTAS] }, guiaGeradaEm: null },
           filtroVendasMl(),
@@ -260,10 +260,8 @@ export async function listarGuiasPendentes(prisma: PrismaClient, empresa?: strin
     const faltando = n.guiaGeradaEm ? [] : oQueFalta(n, porUf.get(n.clienteUf), porEmpresa.get(n.empresa))
     // sem o número da venda não há onde anexar o comprovante: pagaríamos nós e o ML também
     if (ml && !n.guiaGeradaEm && !n.mlOrderId) faltando.push('número da venda no ML (para anexar o comprovante)')
-    // venda do ML: o prazo prático é o fim da janela de 7 dias (antes de chegar à barreira)
-    const prazo = ml
-      ? somarDias(aaaaMmDd(n.emitidaEm), JANELA_ML_DIAS)
-      : prazoLegal(porUf.get(n.clienteUf)?.vencimentoRegra ?? REGRA_PADRAO, n.emitidaEm)
+    // regra do José (20/11/2026): todo DIFAL é pago no dia da emissão da NF, de qualquer canal
+    const prazo = aaaaMmDd(n.emitidaEm)
     return {
       id: n.id,
       empresa: n.empresa,
@@ -277,8 +275,7 @@ export async function listarGuiasPendentes(prisma: PrismaClient, empresa?: strin
       pronta: !n.guiaGeradaEm && faltando.length === 0,
       faltando,
       prazo,
-      // venda do ML fora da janela nem entra na lista (o ML pode já ter pago na barreira)
-      atrasada: !ml && prazo < hoje,
+      atrasada: prazo < hoje,
       ml,
       mlOrderId: n.mlOrderId,
       guiaGeradaEm: n.guiaGeradaEm,
@@ -297,8 +294,6 @@ export async function listarGuiasPendentes(prisma: PrismaClient, empresa?: strin
 function aaaaMmDd(d: Date): string {
   return d.toISOString().slice(0, 10)
 }
-
-const REGRA_PADRAO = 'saida'
 
 /** domingo de Páscoa (algoritmo de Meeus/Jones/Butcher), base dos feriados móveis */
 function pascoa(ano: number): Date {
@@ -331,8 +326,8 @@ export function proximoDiaUtil(dataIso: string): string {
   }
 }
 
-/** venda do ML entra se a nota tem até 7 dias (decisão do José, 20/11/2026, até a contabilidade responder) */
-const JANELA_ML_DIAS = 7
+/** venda do ML entra na lista se a nota tem até 30 dias (decisão do José, 20/11/2026); as mais antigas ficam com a contabilidade */
+export const JANELA_ML_DIAS = 30
 
 // nós pagamos o DIFAL das vendas do ML em todos os estados (decisão do José, 20/11/2026), dentro da janela
 function vendaMlNaJanela(nota: DifalNota, hojeBr: string): boolean {
@@ -398,8 +393,6 @@ export async function gerarLoteDasNotas(prisma: PrismaClient, ids: string[], hoj
     if (faltando.length) throw new ErroMontagemGnre(`nota ${n.nfNumero}: falta ${faltando.join('; ')}`)
     const a = porUf.get(n.clienteUf)!
     const prazo = prazoLegal(a.vencimentoRegra, n.emitidaEm)
-    // venda do ML: paga dentro da janela de 7 dias, antes da barreira; vence hoje (o portal exige vencimento >= pagamento)
-    const ml = n.responsavel === 'ML_PAGA'
     // nota atrasada (prazo < hoje): o José liberou com aviso na tela (20/11/2026). A guia sai só com o
     // imposto, sem multa e juros, e com vencimento no dia do pagamento (o portal exige vencimento >= pagamento).
     return {

@@ -11,10 +11,9 @@ import axios from 'axios'
 import type { PrismaClient } from '@prisma/client'
 import { mlAuth, type MlCompany } from '../mercadolivre'
 import { dataBR, somarDias } from '../separacao/datas'
+import { JANELA_ML_DIAS } from './guias'
 
 const ML_API = 'https://api.mercadolibre.com'
-/** mesma janela das vendas do ML na lista de guias (guias.ts) */
-const JANELA_DIAS = 7
 /** pausa entre chamadas, para não pressionar o limite do ML */
 const PAUSA_MS = 150
 /** no máximo por rodada: o resto fica para a próxima atualização */
@@ -69,7 +68,7 @@ async function logisticaDaVenda(id: string, auth: { headers: Record<string, stri
 
 /** Preenche o tipo de envio das vendas do ML da lista que ainda não têm. Para no primeiro 429. */
 export async function preencherLogisticaMl(prisma: PrismaClient): Promise<{ lidas: number; erros: string[] }> {
-  const limite = new Date(`${somarDias(dataBR(), -JANELA_DIAS)}T00:00:00Z`) // emitidaEm guarda Brasília como UTC
+  const limite = new Date(`${somarDias(dataBR(), -JANELA_ML_DIAS)}T00:00:00Z`) // emitidaEm guarda Brasília como UTC
   const notas = await prisma.difalNota.findMany({
     where: { responsavel: 'ML_PAGA', difalCalculado: { gt: 0 }, emitidaEm: { gte: limite }, mlLogistica: null, mlOrderId: { not: null } },
     select: { id: true, empresa: true, nfNumero: true, mlOrderId: true },
