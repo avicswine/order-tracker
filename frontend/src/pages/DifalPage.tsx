@@ -700,6 +700,43 @@ function FechamentoMensal() {
 }
 
 // --------------------------------------------------------------- Lotes GNRE gerados
+function copiarPeloMetodoAntigo(texto: string): boolean {
+  const campo = document.createElement('textarea')
+  campo.value = texto
+  campo.style.position = 'fixed'
+  campo.style.opacity = '0'
+  document.body.appendChild(campo)
+  campo.select()
+  const ok = document.execCommand('copy')
+  campo.remove()
+  return ok
+}
+
+// copia um texto (linha digitável ou PIX copia e cola) e mostra "copiado!" por 2 segundos
+function BotaoCopiar({ texto, rotulo }: { texto: string; rotulo: string }) {
+  const [estado, setEstado] = useState<'' | 'copiado' | 'erro'>('')
+  async function copiar() {
+    try {
+      await navigator.clipboard.writeText(texto)
+      setEstado('copiado')
+    } catch {
+      // alguns navegadores bloqueiam a área de transferência moderna: tenta o método antigo
+      setEstado(copiarPeloMetodoAntigo(texto) ? 'copiado' : 'erro')
+    }
+    setTimeout(() => setEstado(''), 2000)
+  }
+  return (
+    <button
+      onClick={copiar}
+      className={`difal-btn rounded-lg border px-3 py-1.5 text-xs font-medium ${
+        estado === 'copiado' ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : estado === 'erro' ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+      }`}
+    >
+      {estado === 'copiado' ? 'copiado!' : estado === 'erro' ? 'não deu para copiar' : rotulo}
+    </button>
+  )
+}
+
 function mensagemErro(e: unknown): string {
   const resp = (e as { response?: { data?: { erro?: string } } }).response
   return resp?.data?.erro ?? (e as Error).message
@@ -813,6 +850,12 @@ function LotesGnre() {
                       {g.dataLimitePagamento && <> · pagar até {g.dataLimitePagamento}</>}
                       {g.linhaDigitavel && <> · linha digitável <code className="select-all break-all rounded bg-white px-1 py-0.5 ring-1 ring-slate-200">{g.linhaDigitavel}</code></>}
                       {g.motivos.map((m) => <span key={m.codigo} className="text-red-700"> · {m.codigo} {m.descricao}{m.campo ? ` (${m.campo})` : ''}</span>)}
+                      {(g.linhaDigitavel || g.qrcodePayload) && (
+                        <span className="mt-1.5 flex flex-wrap gap-2">
+                          {g.linhaDigitavel && <BotaoCopiar texto={g.linhaDigitavel} rotulo="Copiar código de barras" />}
+                          {g.qrcodePayload && <BotaoCopiar texto={g.qrcodePayload} rotulo="Copiar PIX" />}
+                        </span>
+                      )}
                     </li>
                   ))}
                 </ul>
