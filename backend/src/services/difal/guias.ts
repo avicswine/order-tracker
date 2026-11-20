@@ -56,6 +56,8 @@ export interface EnvioDaNota {
   previsao: Date | null
   entregueEm: Date | null
   ultimoRastreio: string | null
+  /** ocorrência no transporte (avaria, extravio...), como no selo da tela de Pedidos */
+  temOcorrencia: boolean
 }
 
 /** mesmo formato que a importação do Bling usa para criar o pedido: AVIC-NF-013234 */
@@ -223,7 +225,7 @@ export async function listarGuiasPendentes(prisma: PrismaClient, empresa?: strin
     where: { orderNumber: { in: notas.map((n) => numeroDoPedido(n.empresa, n.nfNumero)) } },
     select: {
       orderNumber: true, status: true, shippedAt: true, estimatedDelivery: true, deliveredAt: true,
-      lastTracking: true, carrier: { select: { name: true } },
+      lastTracking: true, hasOccurrence: true, carrier: { select: { name: true } },
     },
   })
   const envioPorPedido = new Map(pedidos.map((p) => [p.orderNumber, {
@@ -233,6 +235,7 @@ export async function listarGuiasPendentes(prisma: PrismaClient, empresa?: strin
     previsao: p.estimatedDelivery,
     entregueEm: p.deliveredAt,
     ultimoRastreio: p.lastTracking,
+    temOcorrencia: p.hasOccurrence,
   } satisfies EnvioDaNota]))
   const porUf = new Map(aliquotas.map((a) => [a.uf, a]))
   const porEmpresa = new Map(emitentes.map((e) => [e.empresa, e]))

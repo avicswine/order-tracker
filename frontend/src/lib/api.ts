@@ -225,6 +225,7 @@ export interface DifalGuiaPendente {
     previsao: string | null
     entregueEm: string | null
     ultimoRastreio: string | null
+    temOcorrencia: boolean
   } | null
   /** venda do ML: depois de pagar, anexar o comprovante na venda do ML */
   ml: boolean

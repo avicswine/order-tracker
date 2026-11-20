@@ -6,6 +6,7 @@ import type {
   DifalLote, DifalAliquota, DifalReceitaUf, DifalItemNota, DifalCalculoDetalhe,
 } from '../lib/api'
 import './difal.css'
+import { StatusBadge } from '../components/ui/Badge'
 
 // Ícones simples desenhados aqui mesmo (sem biblioteca nova)
 const ICONES = {
@@ -453,7 +454,7 @@ function GuiasPendentes() {
       )}
       <table className="min-w-full text-sm">
         <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
-          <tr><th className="w-10 px-5 py-2"></th><th className="px-2 py-2">Nota / cliente</th><th className="px-2 py-2">Emissão</th><th className="px-2 py-2">Prazo</th><th className="px-2 py-2">UF</th><th className="px-2 py-2">Envio</th><th className="px-2 py-2 text-right">DIFAL</th><th className="px-5 py-2">Situação</th></tr>
+          <tr><th className="w-10 px-5 py-2"></th><th className="px-2 py-2">Nota / cliente</th><th className="px-2 py-2">Emissão</th><th className="px-2 py-2">Prazo</th><th className="px-2 py-2">UF</th><th className="px-2 py-2">Transportadora</th><th className="px-2 py-2">Status</th><th className="px-2 py-2">Envio</th><th className="px-2 py-2">Previsão</th><th className="px-2 py-2 text-right">DIFAL</th><th className="px-5 py-2">Situação</th></tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
           {noPrazo.map((g) => {
@@ -476,7 +477,7 @@ function GuiasPendentes() {
                 <td className="px-2 py-2.5 text-slate-500">{dataBr(g.emitidaEm)}</td>
                 <td className="px-2 py-2.5 text-xs text-slate-500">{g.ml ? 'pagar até' : 'vence'} {dataBr(g.prazo)}</td>
                 <td className="px-2 py-2.5 font-medium text-slate-700">{g.clienteUf}</td>
-                <td className="px-2 py-2.5"><SeloEnvio envio={g.envio} /></td>
+                <CelulasEnvio envio={g.envio} />
                 <td className="px-2 py-2.5 text-right font-semibold tabular-nums text-slate-900">
                   <ComDica largura={460} altura={340} conteudo={<CalculoDaNota d={g.calculoDetalhe} total={g.difalCalculado} />}>
                     <span className="cursor-help underline decoration-dotted decoration-slate-300 underline-offset-4">{brl(g.difalCalculado)}</span>
@@ -577,7 +578,10 @@ function GuiasAtrasadas({ notas }: { notas: DifalGuiaPendente[] }) {
                 <th className="px-2 py-2 text-left">Emissão</th>
                 <th className="px-2 py-2 text-left">Venceu em</th>
                 <th className="px-2 py-2 text-left">UF</th>
+                <th className="px-2 py-2 text-left">Transportadora</th>
+                <th className="px-2 py-2 text-left">Status</th>
                 <th className="px-2 py-2 text-left">Envio</th>
+                <th className="px-2 py-2 text-left">Previsão</th>
                 <th className="px-5 py-2 text-right">DIFAL</th>
               </tr>
             </thead>
@@ -588,7 +592,7 @@ function GuiasAtrasadas({ notas }: { notas: DifalGuiaPendente[] }) {
                   <td className="px-2 py-2 text-slate-500">{dataBr(g.emitidaEm)}</td>
                   <td className="px-2 py-2 text-rose-700">{dataBr(g.prazo)}</td>
                   <td className="px-2 py-2 font-medium text-slate-700">{g.clienteUf}</td>
-                  <td className="px-2 py-2"><SeloEnvio envio={g.envio} /></td>
+                  <CelulasEnvio envio={g.envio} />
                   <td className="px-5 py-2 text-right font-semibold tabular-nums">
                     <ComDica largura={460} altura={340} conteudo={<CalculoDaNota d={g.calculoDetalhe} total={g.difalCalculado} />}>
                       <span className="cursor-help underline decoration-dotted decoration-slate-300 underline-offset-4">{brl(g.difalCalculado)}</span>
@@ -604,36 +608,30 @@ function GuiasAtrasadas({ notas }: { notas: DifalGuiaPendente[] }) {
   )
 }
 
-// Situação do envio vinda do order-tracker
-const SITUACAO_ENVIO: Record<string, { texto: string; cor: string }> = {
-  PENDING: { texto: 'aguardando coleta', cor: 'bg-slate-100 text-slate-600' },
-  IN_TRANSIT: { texto: 'em trânsito', cor: 'bg-blue-50 text-blue-700' },
-  DELIVERED: { texto: 'entregue', cor: 'bg-emerald-50 text-emerald-700' },
-  CANCELLED: { texto: 'cancelado', cor: 'bg-rose-50 text-rose-700' },
+// Envio da nota como na tela de Pedidos: transportadora, status (mesmo selo), data de envio e previsão/entrega
+function CelulasEnvio({ envio }: { envio: DifalGuiaPendente['envio'] }) {
+  if (!envio) {
+    return (
+      <td colSpan={4} className="px-2 py-2.5 text-xs text-slate-400" title="Nota não está no order-tracker (retirada, Mercado Envios, Shopee…)">sem rastreio</td>
+    )
+  }
+  return (
+    <>
+      <td className="max-w-[180px] truncate px-2 py-2.5 text-xs text-slate-600" title={envio.transportadora ?? undefined}>{envio.transportadora ?? '—'}</td>
+      <td className="px-2 py-2.5" title={envio.ultimoRastreio ?? undefined}>
+        <StatusBadge status={envio.situacao} hasOccurrence={envio.temOcorrencia} lastTracking={envio.ultimoRastreio} />
+      </td>
+      <td className="px-2 py-2.5 text-xs text-slate-600">{envio.enviadoEm ? dataBr(envio.enviadoEm) : '—'}</td>
+      <td className="px-2 py-2.5 text-xs text-slate-600">
+        {envio.entregueEm ? <span className="text-emerald-700">entregue {dataBr(envio.entregueEm)}</span> : envio.previsao ? dataBr(envio.previsao) : '—'}
+      </td>
+    </>
+  )
 }
 
 function envioTexto(e: DifalGuiaPendente['envio']): string {
-  return e ? SITUACAO_ENVIO[e.situacao]?.texto ?? e.situacao : 'sem rastreio'
-}
-
-// entrega no cliente, ou a previsão, ou a data de envio — o que houver de mais útil
-function envioDatas(e: DifalGuiaPendente['envio']): string {
-  if (!e) return ''
-  if (e.entregueEm) return `entregue ${dataBr(e.entregueEm)}`
-  if (e.previsao) return `previsão ${dataBr(e.previsao)}`
-  if (e.enviadoEm) return `enviado ${dataBr(e.enviadoEm)}`
-  return ''
-}
-
-function SeloEnvio({ envio }: { envio: DifalGuiaPendente['envio'] }) {
-  const cor = envio ? SITUACAO_ENVIO[envio.situacao]?.cor ?? 'bg-slate-100 text-slate-600' : 'bg-slate-50 text-slate-400'
-  const dica = envio ? [envio.transportadora, envio.ultimoRastreio].filter(Boolean).join(' · ') : 'Nota não está no order-tracker (retirada, Mercado Envios, Shopee…)'
-  return (
-    <span title={dica} className="inline-flex flex-col gap-0.5">
-      <span className={`w-fit rounded-full px-2 py-0.5 text-[11px] font-medium ${cor}`}>{envioTexto(envio)}</span>
-      {envio && <span className="text-[11px] text-slate-500">{[envio.transportadora, envioDatas(envio)].filter(Boolean).join(' · ')}</span>}
-    </span>
-  )
+  const rotulos: Record<string, string> = { PENDING: 'aguardando coleta', IN_TRANSIT: 'em trânsito', DELIVERED: 'entregue', CANCELLED: 'cancelado' }
+  return e ? rotulos[e.situacao] ?? e.situacao : 'sem rastreio'
 }
 
 // ------------------------------------------------- Fechamento mensal: ML cobrou x calculamos
