@@ -150,7 +150,7 @@ function Vendas() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-gray-600">
-          Notas emitidas nos últimos 90 dias, com o DIFAL calculado por NCM e estado.
+          Notas emitidas nos últimos 90 dias, com o DIFAL calculado por NCM e estado. Notas com DIFAL zero não aparecem (exceto divergentes ou cobradas pelo ML).
         </p>
         <button
           onClick={() => importar.mutate()}
