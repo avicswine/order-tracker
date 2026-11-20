@@ -12,7 +12,7 @@
 import type { PrismaClient, DifalNota, DifalAliquota, DifalEmitente } from '@prisma/client'
 import { montarLoteGnre, ErroMontagemGnre, LIMITE_GUIAS_POR_LOTE, type GuiaGnre } from './gnre'
 import { ambienteGnre } from './portalGnre'
-import { dataBR } from '../separacao/datas'
+import { dataBR, somarDias } from '../separacao/datas'
 
 export interface GuiaPendente {
   id: string
@@ -143,6 +143,60 @@ function oQueFalta(nota: DifalNota, aliquota: DifalAliquota | undefined, emitent
 
 const SITUACOES_ABERTAS = ['PENDENTE', 'ATRASADO'] as const
 
+export interface VendaMlBarreira {
+  id: string
+  empresa: string
+  nfNumero: string
+  emitidaEm: Date
+  clienteUf: string
+  difalCalculado: number
+  mlOrderId: string | null
+  guiaGeradaEm: Date | null
+  guiaLoteId: string | null
+  /** pode entrar em lote agora (sem guia, dentro da janela e com todos os dados) */
+  pronta: boolean
+  faltando: string[]
+}
+
+/** Vendas do ML nos estados da barreira: sem guia e na janela, ou com guia gerada e comprovante ainda não enviado ao ML. */
+export async function listarVendasMlBarreira(prisma: PrismaClient): Promise<VendaMlBarreira[]> {
+  const hojeBr = dataBR()
+  const limite = new Date(`${somarDias(hojeBr, -JANELA_ML_DIAS)}T00:00:00Z`) // emitidaEm guarda Brasília como UTC
+  const [notas, aliquotas, emitentes] = await Promise.all([
+    prisma.difalNota.findMany({
+      where: {
+        responsavel: 'ML_PAGA',
+        difalCalculado: { gt: 0 },
+        clienteUf: { in: UFS_BARREIRA_ML },
+        comprovanteMlEnviadoEm: null,
+        OR: [{ emitidaEm: { gte: limite }, guiaGeradaEm: null }, { guiaGeradaEm: { not: null } }],
+      },
+      orderBy: { emitidaEm: 'desc' },
+    }),
+    prisma.difalAliquota.findMany(),
+    prisma.difalEmitente.findMany(),
+  ])
+  const porUf = new Map(aliquotas.map((a) => [a.uf, a]))
+  const porEmpresa = new Map(emitentes.map((e) => [e.empresa, e]))
+  return notas.map((n) => {
+    const faltando = n.guiaGeradaEm ? [] : oQueFalta(n, porUf.get(n.clienteUf), porEmpresa.get(n.empresa))
+    return {
+      id: n.id, empresa: n.empresa, nfNumero: n.nfNumero, emitidaEm: n.emitidaEm, clienteUf: n.clienteUf,
+      difalCalculado: n.difalCalculado, mlOrderId: n.mlOrderId, guiaGeradaEm: n.guiaGeradaEm, guiaLoteId: n.guiaLoteId,
+      pronta: !n.guiaGeradaEm && faltando.length === 0, faltando,
+    }
+  })
+}
+
+/** José anexou o comprovante na venda do ML: a venda sai da lista e deixa de contar como 'ML cobra' no fechamento. */
+export async function marcarComprovanteMlEnviado(prisma: PrismaClient, id: string): Promise<void> {
+  const n = await prisma.difalNota.findUnique({ where: { id }, select: { responsavel: true, guiaGeradaEm: true, nfNumero: true } })
+  if (!n) throw new ErroMontagemGnre('nota não encontrada')
+  if (n.responsavel !== 'ML_PAGA') throw new ErroMontagemGnre(`a nota ${n.nfNumero} não é venda do ML`)
+  if (!n.guiaGeradaEm) throw new ErroMontagemGnre(`a nota ${n.nfNumero} ainda não tem guia gerada`)
+  await prisma.difalNota.update({ where: { id }, data: { comprovanteMlEnviadoEm: new Date() } })
+}
+
 export async function listarGuiasPendentes(prisma: PrismaClient, empresa?: string): Promise<GuiaPendente[]> {
   const [notas, aliquotas, emitentes] = await Promise.all([
     prisma.difalNota.findMany({
@@ -204,6 +258,19 @@ function aaaaMmDd(d: Date): string {
 const REGRA_PADRAO = 'saida'
 
 /**
+ * Estados em que o Mercado Livre pagou DIFAL na barreira fiscal (ZIPs de comprovantes do ML, dez/2025–nov/2026):
+ * nesses, pagamos nós a guia logo após a venda e anexamos o comprovante na venda do ML.
+ */
+export const UFS_BARREIRA_ML = ['CE', 'PB', 'RN', 'PI', 'TO', 'AL', 'AC', 'AM']
+/** venda do ML entra se a nota tem até 7 dias (decisão do José, 20/11/2026, até a contabilidade responder) */
+const JANELA_ML_DIAS = 7
+
+function vendaMlNaJanela(nota: DifalNota, hojeBr: string): boolean {
+  return nota.responsavel === 'ML_PAGA' && UFS_BARREIRA_ML.includes(nota.clienteUf)
+    && aaaaMmDd(nota.emitidaEm) >= somarDias(hojeBr, -JANELA_ML_DIAS)
+}
+
+/**
  * Prazo legal para pagar sem multa e juros, pela regra da UF:
  *  - "saida": a guia acompanha a mercadoria: o prazo é o dia da nota.
  *  - "dia15": até o dia 15 do mês seguinte ao da emissão.
@@ -242,8 +309,9 @@ export async function gerarLoteDasNotas(prisma: PrismaClient, ids: string[], hoj
 
   const jaGerada = notas.find((n) => n.guiaGeradaEm)
   if (jaGerada) throw new ErroMontagemGnre(`a nota ${jaGerada.nfNumero} já teve guia gerada (lote ${jaGerada.guiaLoteId})`)
-  const naoNossa = notas.find((n) => n.responsavel !== 'NOSSO' || !(n.difalCalculado > 0))
-  if (naoNossa) throw new ErroMontagemGnre(`a nota ${naoNossa.nfNumero} não é uma guia nossa`)
+  const hojeBr = dataBR(hoje) // dia de hoje em Brasília (o servidor roda em UTC)
+  const naoNossa = notas.find((n) => !(n.difalCalculado > 0) || !(n.responsavel === 'NOSSO' || vendaMlNaJanela(n, hojeBr)))
+  if (naoNossa) throw new ErroMontagemGnre(`a nota ${naoNossa.nfNumero} não é uma guia nossa (venda do ML só nos estados da barreira e com até ${JANELA_ML_DIAS} dias)`)
 
   const [aliquotas, emitente] = await Promise.all([
     prisma.difalAliquota.findMany({ where: { uf: { in: [...new Set(notas.map((n) => n.clienteUf))] } } }),
@@ -252,14 +320,15 @@ export async function gerarLoteDasNotas(prisma: PrismaClient, ids: string[], hoj
   if (!emitente) throw new ErroMontagemGnre(`dados do emitente ${empresa} ainda não foram lidos de nenhuma nota`)
   const porUf = new Map(aliquotas.map((a) => [a.uf, a]))
 
-  const hojeBr = dataBR(hoje) // dia de hoje em Brasília (o servidor roda em UTC)
   const guias: GuiaGnre[] = notas.map((n) => {
     const faltando = oQueFalta(n, porUf.get(n.clienteUf), emitente)
     if (faltando.length) throw new ErroMontagemGnre(`nota ${n.nfNumero}: falta ${faltando.join('; ')}`)
     const a = porUf.get(n.clienteUf)!
     const prazo = prazoLegal(a.vencimentoRegra, n.emitidaEm)
+    // venda do ML: paga dentro da janela de 7 dias, antes da barreira; vence hoje (o portal exige vencimento >= pagamento)
+    const ml = n.responsavel === 'ML_PAGA'
     // guia atrasada sairia sem multa e juros: vai para a contabilidade, não para lote
-    if (prazo < hojeBr) {
+    if (!ml && prazo < hojeBr) {
       throw new ErroMontagemGnre(`nota ${n.nfNumero} passou do prazo (vencia em ${prazo.split('-').reverse().join('/')}): vai para a contabilidade`)
     }
     return {
@@ -269,7 +338,7 @@ export async function gerarLoteDasNotas(prisma: PrismaClient, ids: string[], hoj
         documentoOrigem: documentoOrigem(n, a.tipoDocOrigemGnre)!,
         tipoDocumentoOrigem: a.tipoDocOrigemGnre,
       }),
-      dataVencimento: prazo,
+      dataVencimento: ml && prazo < hojeBr ? hojeBr : prazo,
       dataPagamento: hojeBr,
       camposExtras: camposExtrasDaUf(a).map((c) => ({ codigo: c.codigo, valor: valorCampoExtra(c, n)! })),
       valorPrincipal: n.difalCalculado,

@@ -191,6 +191,20 @@ export interface DifalImportacaoStatus {
   erro: string | null
 }
 
+export interface DifalVendaMl {
+  id: string
+  empresa: string
+  nfNumero: string
+  emitidaEm: string
+  clienteUf: string
+  difalCalculado: number
+  mlOrderId: string | null
+  guiaGeradaEm: string | null
+  guiaLoteId: string | null
+  pronta: boolean
+  faltando: string[]
+}
+
 export interface DifalResumo {
   porResponsavel: {
     responsavel: DifalResponsavel
@@ -402,6 +416,8 @@ export const difalApi = {
   fechamentoMensal: () => api.get<DifalFechamentoMes[]>('/difal/fechamento-mensal').then((r) => r.data),
   sincronizarCobrancasMl: () =>
     api.post<DifalSincronizacaoMl[]>('/difal/cobrancas-ml/sincronizar', { meses: 2 }).then((r) => r.data),
+  vendasMlBarreira: () => api.get<{ ufs: string[]; vendas: DifalVendaMl[] }>('/difal/ml-barreira').then((r) => r.data),
+  marcarComprovanteMl: (id: string) => api.post<{ ok: boolean }>(`/difal/notas/${id}/comprovante-ml`).then((r) => r.data),
   guiasPendentes: () => api.get<DifalGuiaPendente[]>('/difal/guias-pendentes').then((r) => r.data),
   // devolve o XML do lote GNRE como arquivo para baixar
   gerarLote: (ids: string[]) =>
