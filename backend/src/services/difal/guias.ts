@@ -275,7 +275,8 @@ export async function listarGuiasPendentes(prisma: PrismaClient, empresa?: strin
       pronta: !n.guiaGeradaEm && faltando.length === 0,
       faltando,
       prazo,
-      atrasada: prazo < hoje,
+      // com guia gerada não é atrasada: a guia já existe (venda do ML esperando o comprovante)
+      atrasada: !n.guiaGeradaEm && prazo < hoje,
       ml,
       mlOrderId: n.mlOrderId,
       guiaGeradaEm: n.guiaGeradaEm,
@@ -404,12 +405,15 @@ export async function gerarLoteDasNotas(prisma: PrismaClient, ids: string[], hoj
   if (!emitente) throw new ErroMontagemGnre(`dados do emitente ${empresa} ainda não foram lidos de nenhuma nota`)
   const porUf = new Map(aliquotas.map((a) => [a.uf, a]))
 
-  const dataPagamento = proximoDiaUtil(hojeBr)
+  const primeiroDiaPagavel = proximoDiaUtil(hojeBr)
   const guias: GuiaGnre[] = notas.map((n) => {
     const faltando = oQueFalta(n, porUf.get(n.clienteUf), emitente)
     if (faltando.length) throw new ErroMontagemGnre(`nota ${n.nfNumero}: falta ${faltando.join('; ')}`)
     const a = porUf.get(n.clienteUf)!
     const prazo = prazoLegal(a.vencimentoRegra, n.emitidaEm)
+    // paga no prazo do DIFAL (nota depois das 17h ou de fim de semana: próximo dia útil), nunca antes do primeiro dia pagável
+    const prazoPagar = prazoDoDifal(n.emitidaEm)
+    const dataPagamento = prazoPagar > primeiroDiaPagavel ? prazoPagar : primeiroDiaPagavel
     // nota atrasada (prazo < hoje): o José liberou com aviso na tela (20/11/2026). A guia sai só com o
     // imposto, sem multa e juros, e com vencimento no dia do pagamento (o portal exige vencimento >= pagamento).
     return {

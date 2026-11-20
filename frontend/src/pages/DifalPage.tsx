@@ -590,7 +590,7 @@ function GuiasPendentes() {
                   <NotaCliente nf={g.nfNumero} empresa={g.empresa} cliente={g.clienteNome} itens={g.itens} />
                 </td>
                 <td className="px-2 py-2.5 text-slate-500">{dataBr(g.emitidaEm)}</td>
-                <td className={`px-2 py-2.5 text-xs ${g.atrasada ? 'font-medium text-rose-700' : 'text-slate-500'}`}>{g.atrasada ? 'venceu' : 'pagar hoje'} {g.atrasada ? dataBr(g.prazo) : ''}</td>
+                <td className={`px-2 py-2.5 text-xs ${g.atrasada ? 'font-medium text-rose-700' : 'text-slate-500'}`}>{g.atrasada ? `venceu ${dataBr(g.prazo)}` : g.prazo === isoDia(new Date()) ? 'pagar hoje' : `vence ${dataBr(g.prazo)}`}</td>
                 <td className="px-2 py-2.5"><span className="rounded-md bg-indigo-50 px-1.5 py-0.5 text-xs font-semibold text-indigo-700 ring-1 ring-indigo-100">{g.clienteUf}</span></td>
                 <CelulaCanal g={g} />
                 <CelulasEnvio envio={g.envio} />
