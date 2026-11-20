@@ -398,8 +398,11 @@ function GuiasPendentes() {
     queryFn: difalApi.guiasPendentes,
   })
 
-  const prontas = guias.filter((g) => g.pronta)
-  const empresaEscolhida = guias.find((g) => escolhidas.has(g.id))?.empresa
+  // no prazo: entram em lote GNRE; atrasadas: vão para a contabilidade (sairiam sem multa e juros)
+  const noPrazo = guias.filter((g) => !g.atrasada)
+  const atrasadas = guias.filter((g) => g.atrasada)
+  const prontas = noPrazo.filter((g) => g.pronta)
+  const empresaEscolhida = noPrazo.find((g) => escolhidas.has(g.id))?.empresa
 
   const gerar = useMutation({
     mutationFn: () => difalApi.gerarLote([...escolhidas]),
@@ -423,23 +426,22 @@ function GuiasPendentes() {
   }
 
   if (isLoading) return null
-  if (guias.length === 0) {
-    return (
-      <div className="difal-entrar flex items-center gap-3 rounded-2xl border border-emerald-200 bg-white p-4 text-sm text-emerald-900">
-        <span className="grid h-8 w-8 place-items-center rounded-xl bg-emerald-50 text-emerald-600"><Icone nome="ok" className="h-4 w-4" /></span>
-        Nenhuma guia nossa pendente. Tudo o que saiu para fora do RS está sendo recolhido pelo Mercado Livre ou é do cliente.
-      </div>
-    )
-  }
 
   return (
+    <>
+    {noPrazo.length === 0 ? (
+      <div className="difal-entrar flex items-center gap-3 rounded-2xl border border-emerald-200 bg-white p-4 text-sm text-emerald-900">
+        <span className="grid h-8 w-8 place-items-center rounded-xl bg-emerald-50 text-emerald-600"><Icone nome="ok" className="h-4 w-4" /></span>
+        Nenhuma guia no prazo para emitir agora.
+      </div>
+    ) : (
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
         <div>
-          <p className="font-semibold text-slate-900">Guias de DIFAL que nós precisamos emitir</p>
+          <p className="font-semibold text-slate-900">Guias para emitir agora (no prazo)</p>
           <p className="text-xs text-slate-500">
-            {guias.length} nota(s) pendente(s) · {prontas.length} com todos os dados para a guia (GNRE).
-            Um lote por empresa, até 50 guias.
+            {noPrazo.length} nota(s) no prazo · {prontas.length} com todos os dados para a guia (GNRE).
+            Um lote por empresa, até 50 guias. Gere e pague no mesmo dia.
           </p>
         </div>
         <button
@@ -458,7 +460,7 @@ function GuiasPendentes() {
       )}
       <table className="min-w-full text-sm">
         <tbody className="divide-y divide-gray-100">
-          {guias.map((g) => {
+          {noPrazo.map((g) => {
             const bloqueada = !g.pronta || (empresaEscolhida !== undefined && g.empresa !== empresaEscolhida && !escolhidas.has(g.id))
             return (
               <tr key={g.id} className={`transition-colors ${g.pronta ? 'hover:bg-slate-50' : 'bg-slate-50/60'}`}>
@@ -476,6 +478,7 @@ function GuiasPendentes() {
                   NF {g.nfNumero} <SeloEmpresa empresa={g.empresa} />
                 </td>
                 <td className="px-2 py-2.5 text-slate-500">{dataBr(g.emitidaEm)}</td>
+                <td className="px-2 py-2.5 text-xs text-slate-500">vence {dataBr(g.prazo)}</td>
                 <td className="px-2 py-2.5 font-medium text-slate-700">{g.clienteUf}</td>
                 <td className="px-2 py-2.5 text-right font-semibold tabular-nums text-slate-900">{brl(g.difalCalculado)}</td>
                 <td className="px-5 py-2.5 text-xs">
@@ -490,6 +493,75 @@ function GuiasPendentes() {
           })}
         </tbody>
       </table>
+    </div>
+    )}
+    {atrasadas.length > 0 && <GuiasAtrasadas notas={atrasadas} />}
+    </>
+  )
+}
+
+// Notas que passaram do prazo: não vão para lote (sairiam sem multa e juros); a contabilidade regulariza.
+function GuiasAtrasadas({ notas }: { notas: DifalGuiaPendente[] }) {
+  const [aberta, setAberta] = useState(false)
+  const total = notas.reduce((s, g) => s + g.difalCalculado, 0)
+
+  // planilha para a contabilidade: só dados da nota, sem nome nem CPF do cliente (LGPD)
+  function baixarLista() {
+    const linhas = [['Empresa', 'NF', 'Emissão', 'UF', 'Prazo', 'DIFAL (R$)'].join(';')].concat(
+      notas.map((g) => [g.empresa, g.nfNumero, dataBr(g.emitidaEm), g.clienteUf, dataBr(g.prazo), g.difalCalculado.toFixed(2).replace('.', ',')].join(';'))
+    )
+    // BOM para o Excel abrir com acentos certos; ';' e vírgula decimal no padrão brasileiro
+    const arquivo = new Blob(['\ufeff' + linhas.join('\r\n')], { type: 'text/csv;charset=utf-8' })
+    baixarArquivo(arquivo, `difal-atrasadas-${new Date().toISOString().slice(0, 10)}.csv`)
+  }
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-rose-200 bg-white">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+        <div className="flex items-start gap-3">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-rose-50 text-rose-600"><Icone nome="alerta" /></span>
+          <div>
+            <p className="font-semibold text-slate-900">Atrasadas: com a contabilidade</p>
+            <p className="text-xs text-slate-500">
+              {notas.length} nota(s) · {brl(total)} de DIFAL sem multa e juros. Passaram do prazo: não entram em lote GNRE.
+            </p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={() => setAberta(!aberta)} className="difal-btn rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm hover:border-slate-300">
+            {aberta ? 'Esconder' : 'Ver notas'}
+          </button>
+          <button onClick={baixarLista} className="difal-btn rounded-xl bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700">
+            Baixar lista
+          </button>
+        </div>
+      </div>
+      {aberta && (
+        <div className="difal-entrar max-h-[360px] overflow-auto border-t border-rose-100">
+          <table className="min-w-full text-sm">
+            <thead className="sticky top-0 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="px-5 py-2 text-left">NF</th>
+                <th className="px-2 py-2 text-left">Emissão</th>
+                <th className="px-2 py-2 text-left">Venceu em</th>
+                <th className="px-2 py-2 text-left">UF</th>
+                <th className="px-5 py-2 text-right">DIFAL</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {notas.map((g) => (
+                <tr key={g.id} className="transition-colors hover:bg-rose-50/40">
+                  <td className="whitespace-nowrap px-5 py-2 font-medium text-slate-900">NF {g.nfNumero} <SeloEmpresa empresa={g.empresa} /></td>
+                  <td className="px-2 py-2 text-slate-500">{dataBr(g.emitidaEm)}</td>
+                  <td className="px-2 py-2 text-rose-700">{dataBr(g.prazo)}</td>
+                  <td className="px-2 py-2 font-medium text-slate-700">{g.clienteUf}</td>
+                  <td className="px-5 py-2 text-right font-semibold tabular-nums">{brl(g.difalCalculado)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }

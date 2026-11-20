@@ -225,6 +225,10 @@ export interface DifalGuiaPendente {
   difalCalculado: number
   pronta: boolean
   faltando: string[]
+  /** último dia para pagar sem multa/juros (AAAA-MM-DD) */
+  prazo: string
+  /** passou do prazo: vai para a contabilidade, não para lote */
+  atrasada: boolean
 }
 
 
