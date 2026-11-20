@@ -24,6 +24,12 @@ import historicoGuias from '../services/difal/dados/historico-guias.json'
 
 const router = Router()
 
+// Notas que interessam no painel: DIFAL maior que zero. As de DIFAL zero (ex.: NCM 8436 em UF de 12%,
+// venda dentro do RS) somem — menos as divergentes e as que o ML cobrou, que são justamente problema.
+const COM_DIFAL: Prisma.DifalNotaWhereInput = {
+  OR: [{ difalCalculado: { gt: 0 } }, { situacao: 'DIVERGENTE' }, { difalCobradoMl: { gt: 0 } }],
+}
+
 // GET /difal — lista as notas do monitor
 router.get(
   '/',
@@ -45,7 +51,7 @@ router.get(
     const pagina = Number(req.query.pagina ?? 1)
     const porPagina = 100
 
-    const where: Prisma.DifalNotaWhereInput = {}
+    const where: Prisma.DifalNotaWhereInput = { AND: [COM_DIFAL] }
     if (responsavel) where.responsavel = responsavel as DifalResponsavel
     if (situacao) where.situacao = situacao as DifalSituacao
     if (empresa) where.empresa = String(empresa).toUpperCase()
@@ -88,7 +94,7 @@ router.get('/resumo', [query('desde').optional().isISO8601()], async (req: Reque
   const erros = validationResult(req)
   if (!erros.isEmpty()) return res.status(400).json({ errors: erros.array() })
   try {
-  const where: Prisma.DifalNotaWhereInput = {}
+  const where: Prisma.DifalNotaWhereInput = { AND: [COM_DIFAL] }
   if (req.query.desde) where.emitidaEm = { gte: new Date(String(req.query.desde)) }
 
   const porResponsavel = await prisma.difalNota.groupBy({
