@@ -21,6 +21,7 @@ import { reconciliarPendenciasEntregues } from './services/pendencias'
 import { notificarAtrasosTransportadora } from './services/notifier'
 import { cicloEnviosMl } from './services/mlEnvios'
 import { rodarRotinaDifal } from './services/difal/rotinaDiaria'
+import { HORA_ROTINA_DIFAL } from './services/difal/guias'
 import separacaoRouter from './routes/separacao'
 import { iniciarSyncPeriodico as iniciarSyncSeparacao } from './services/separacao/tarefas'
 import { requireAuth } from './middleware/auth'
@@ -175,16 +176,16 @@ app.listen(Number(PORT), '0.0.0.0', () => {
     mlRecuperarNotificacoesPerdidas().catch(err => console.error('[ML notif] perdidas:', err))
   })
 
-  // DIFAL: rotina diária às 17h (dias úteis) com resumo no WhatsApp. Só liga com DIFAL_ROTINA=1;
+  // DIFAL: rotina diária às 16h (dias úteis; o pessoal sai às 17h) com resumo no WhatsApp. Só liga com DIFAL_ROTINA=1;
   // DIFAL_ROTINA_ENVIAR=1 também gera e envia os lotes ao portal GNRE (o pagamento continua manual).
   if (process.env.DIFAL_ROTINA === '1') {
-    cron.schedule('0 17 * * *', () => {
+    cron.schedule(`0 ${HORA_ROTINA_DIFAL} * * *`, () => {
       rodarRotinaDifal(prisma, { simulacao: false, agendada: true })
         .then(r => { if (r.pulou) console.log(`[Cron DIFAL] pulou: ${r.pulou}`) })
         // só a mensagem: o objeto de erro do banco pode repetir dados da nota (LGPD)
         .catch(err => console.error('[Cron DIFAL] rotina falhou:', String((err as Error).message).split('\n')[0]))
     }, { timezone: 'America/Sao_Paulo' })
-    console.log(`[Cron] DIFAL: rotina diária às 17h (${process.env.DIFAL_ROTINA_ENVIAR === '1' ? 'completa: gera e envia lotes' : 'só aviso'})`)
+    console.log(`[Cron] DIFAL: rotina diária às ${HORA_ROTINA_DIFAL}h (${process.env.DIFAL_ROTINA_ENVIAR === '1' ? 'completa: gera e envia lotes' : 'só aviso'})`)
   } else {
     console.log('[Cron] DIFAL: rotina diária DESLIGADA (defina DIFAL_ROTINA=1 para ativar)')
   }

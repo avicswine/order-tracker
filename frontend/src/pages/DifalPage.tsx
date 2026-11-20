@@ -1039,7 +1039,7 @@ function LotesGnre() {
 }
 
 // ------------------------------------------------------- Configuração (alíquotas + receita GNRE)
-/** Rotina diária das 17h: mostra como está ligada e simula a mensagem com os dados de agora (não envia nada). */
+/** Rotina diária das 16h: mostra como está ligada e simula a mensagem com os dados de agora (não envia nada). */
 function RotinaDiaria() {
   const simular = useMutation({ mutationFn: difalApi.simularRotina })
   const r = simular.data
@@ -1047,9 +1047,9 @@ function RotinaDiaria() {
     <div className="difal-cartao flex gap-4 rounded-2xl border border-slate-200 bg-white p-5 text-sm">
       <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-600"><Icone nome="atualizar" /></span>
       <div className="min-w-0 flex-1">
-        <p className="font-semibold text-slate-900">Rotina diária (17h, dias úteis)</p>
+        <p className="font-semibold text-slate-900">Rotina diária (16h, dias úteis)</p>
         <p className="text-xs text-slate-500">
-          Atualiza as notas, monta a lista do dia (no prazo, estados com cobrança) e manda o resumo no WhatsApp. O pagamento continua com você.
+          Atualiza as notas, monta a lista do dia (no prazo, estados com cobrança) e manda o resumo no WhatsApp. Nota emitida até as 16h59 vence no mesmo dia; a partir das 17h, no próximo dia útil. O pagamento continua com você.
         </p>
         <button onClick={() => simular.mutate()} disabled={simular.isPending}
           className="difal-btn mt-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:border-slate-300 disabled:opacity-60">

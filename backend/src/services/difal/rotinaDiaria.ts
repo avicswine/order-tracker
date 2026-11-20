@@ -1,5 +1,5 @@
 /**
- * Rotina diária do DIFAL (aprovada pelo José em 20/11/2026): todo dia útil às 17h (Brasília) atualiza as notas,
+ * Rotina diária do DIFAL (aprovada pelo José em 20/11/2026): todo dia útil às 16h (Brasília; HORA_ROTINA_DIFAL) atualiza as notas,
  * monta a lista do dia (no prazo, estados com cobrança) e manda um resumo por WhatsApp.
  *   DIFAL_ROTINA=1          liga o agendamento (sem ela, só roda pelo botão de simulação)
  *   DIFAL_ROTINA_ENVIAR=1   modo completo: também gera os lotes, envia ao portal e consulta o resultado.
@@ -10,7 +10,7 @@
 import type { PrismaClient } from '@prisma/client'
 import { importarNotas } from './importar'
 import { preencherLogisticaMl } from './logisticaMl'
-import { gerarLoteDasNotas, listarGuiasPendentes, proximoDiaUtil, type GuiaPendente } from './guias'
+import { gerarLoteDasNotas, listarGuiasPendentes, proximoDiaUtil, HORA_ROTINA_DIFAL, type GuiaPendente } from './guias'
 import { LIMITE_GUIAS_POR_LOTE } from './gnre'
 import { consultarLoteGnre, enviarLoteGnre } from './lotesGnre'
 import { ambienteGnre, SITUACAO_GUIA } from './portalGnre'
@@ -110,7 +110,7 @@ async function montarMensagem(prisma: PrismaClient, hoje: string, simulacao: boo
   if (!doDia.length) linhasPortal = []
   else if (!pedeCompleto) linhasPortal = ['Gere o lote no painel (modo só aviso).']
   else if (!producao) linhasPortal = ['Modo completo parado: o portal está em TESTE (guia de teste travaria a nota real). Gere o lote no painel.']
-  else if (simulacao) linhasPortal = [`Modo completo: às 17h geraria e enviaria ao portal o lote de ${EMPRESAS.filter((e) => porEmpresa(e).length).join(' e ')}.`]
+  else if (simulacao) linhasPortal = [`Modo completo: às ${HORA_ROTINA_DIFAL}h geraria e enviaria ao portal o lote de ${EMPRESAS.filter((e) => porEmpresa(e).length).join(' e ')}.`]
   else linhasPortal = await enviarLotesDoDia(prisma, hoje, doDia)
 
   // sem nome nem CPF de cliente
@@ -138,7 +138,7 @@ async function avisarWhatsapp(mensagem: string): Promise<boolean> {
  */
 export async function rodarRotinaDifal(prisma: PrismaClient, { simulacao, agendada }: { simulacao: boolean; agendada: boolean }): Promise<ResultadoRotina> {
   const hoje = dataBR()
-  // a simulação só lê: não disputa a trava com a rotina das 17h
+  // a simulação só lê: não disputa a trava com a rotina das 16h
   if (simulacao) return { mensagem: await montarMensagem(prisma, hoje, true), enviadaWhatsapp: false }
 
   if (agendada && proximoDiaUtil(hoje) !== hoje) return { mensagem: '', enviadaWhatsapp: false, pulou: `${hoje} não é dia útil bancário` }
@@ -153,7 +153,7 @@ export async function rodarRotinaDifal(prisma: PrismaClient, { simulacao, agenda
   } catch (e) {
     // erro nunca passa em silêncio: vai para o WhatsApp e para o painel (só a mensagem, sem dados de cliente)
     const motivo = String((e as Error).message).split('\n')[0].slice(0, 200)
-    const mensagem = `DIFAL: a rotina das 17h falhou (${motivo}). Confira no painel: ${PAINEL_DIFAL}`
+    const mensagem = `DIFAL: a rotina das ${HORA_ROTINA_DIFAL}h falhou (${motivo}). Confira no painel: ${PAINEL_DIFAL}`
     const enviadaWhatsapp = await avisarWhatsapp(mensagem).catch((err) => {
       console.error('[DIFAL rotina] aviso da falha também não foi pelo WhatsApp:', (err as Error).message)
       return false

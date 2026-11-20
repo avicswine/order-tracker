@@ -5,7 +5,7 @@
  */
 import type { PrismaClient } from '@prisma/client'
 import { lerResultadoLote } from './portalGnre'
-import { UFS_COM_COBRANCA } from './guias'
+import { prazoDoDifal, UFS_COM_COBRANCA } from './guias'
 import { dataBR, somarDias } from '../separacao/datas'
 
 /** guia aceita há mais que isso e não marcada como paga entra no alerta */
@@ -66,8 +66,7 @@ export async function listarGuiasEmitidas(prisma: PrismaClient): Promise<{ guias
       mlOrderId: n.mlOrderId, valorNota: n.valorNota, difalCalculado: n.difalCalculado, calculoDetalhe: n.calculoDetalhe, itens: n.itens,
       emitidaEm: n.emitidaEm, loteId: n.guiaLoteId!, ambiente: lote?.ambiente ?? null, geradaEm,
       enviadaEm: lote?.enviadoEm ?? null, situacaoPortal: g?.situacaoGuia ?? null, linhaDigitavel: g?.linhaDigitavel ?? null,
-      // regra do José: o DIFAL é pago no dia da emissão (emitidaEm guarda Brasília como UTC: as partes UTC dão o dia)
-      atrasada: n.emitidaEm.toISOString().slice(0, 10) < geradaEm,
+      atrasada: prazoDoDifal(n.emitidaEm) < geradaEm,
       pagaEm: n.guiaPagaEm ? dataBR(n.guiaPagaEm) : null, valorPago: n.difalPagoGuia,
       comprovanteMlEnviadoEm: n.comprovanteMlEnviadoEm,
     }

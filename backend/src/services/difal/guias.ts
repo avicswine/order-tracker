@@ -261,7 +261,7 @@ export async function listarGuiasPendentes(prisma: PrismaClient, empresa?: strin
     // sem o número da venda não há onde anexar o comprovante: pagaríamos nós e o ML também
     if (ml && !n.guiaGeradaEm && !n.mlOrderId) faltando.push('número da venda no ML (para anexar o comprovante)')
     // regra do José (20/11/2026): todo DIFAL é pago no dia da emissão da NF, de qualquer canal
-    const prazo = aaaaMmDd(n.emitidaEm)
+    const prazo = prazoDoDifal(n.emitidaEm)
     return {
       id: n.id,
       empresa: n.empresa,
@@ -324,6 +324,23 @@ export function proximoDiaUtil(dataIso: string): string {
     if (semana !== 0 && semana !== 6 && !feriadosBancarios(Number(d.slice(0, 4))).has(d)) return d
     d = somarDias(d, 1)
   }
+}
+
+/** hora do aviso diário no WhatsApp (José, 20/11/2026: o pessoal sai às 17h, o aviso chega com 1h para pagar) */
+export const HORA_ROTINA_DIFAL = 16
+/**
+ * Corte do dia (José, 20/11/2026): nota emitida a partir desta hora vence no próximo dia útil, porque a mercadoria
+ * só sai no dia seguinte e a guia é paga antes da saída.
+ */
+export const HORA_CORTE_DIFAL = 17
+
+/**
+ * Dia em que o DIFAL da nota precisa estar pago: o dia da emissão (ou o próximo dia útil, se emitida a partir do
+ * corte ou em fim de semana/feriado). emitidaEm guarda Brasília como se fosse UTC: as partes UTC são o horário local.
+ */
+export function prazoDoDifal(emitidaEm: Date): string {
+  const dia = aaaaMmDd(emitidaEm)
+  return proximoDiaUtil(emitidaEm.getUTCHours() >= HORA_CORTE_DIFAL ? somarDias(dia, 1) : dia)
 }
 
 /** venda do ML entra na lista se a nota tem até 30 dias (decisão do José, 20/11/2026); as mais antigas ficam com a contabilidade */
