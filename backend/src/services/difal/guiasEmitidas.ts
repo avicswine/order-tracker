@@ -75,9 +75,11 @@ export async function listarGuiasEmitidas(prisma: PrismaClient): Promise<{ guias
   })
 
   const alertas: AlertaGuias[] = []
-  // mesma nota com mais de uma guia aceita pelo portal, em qualquer lote (inclui lotes antigos ainda guardados)
+  // mesma nota com mais de uma guia aceita pelo portal, em qualquer lote de PRODUÇÃO (guia de teste não é paga:
+  // a mesma NF testada e depois emitida de verdade não é dobro)
   const aceitas = new Map<string, string[]>()
   for (const l of resultado.values()) {
+    if (l.ambiente !== 'producao') continue
     for (const g of l.guias) {
       if (g.situacaoGuia !== '0' || !g.identificadorGuia) continue
       const chave = `${l.empresa} NF ${g.identificadorGuia}`
@@ -88,7 +90,7 @@ export async function listarGuiasEmitidas(prisma: PrismaClient): Promise<{ guias
     if (ids.length > 1) alertas.push({ tipo: 'dobro', texto: `${chave}: ${ids.length} guias aceitas pelo portal (lotes ${ids.join(', ')})` })
   }
   const limite = somarDias(dataBR(), -DIAS_ALERTA_SEM_PAGAMENTO)
-  const esquecidas = guias.filter((g) => g.situacaoPortal === '0' && !g.pagaEm && g.geradaEm < limite)
+  const esquecidas = guias.filter((g) => g.ambiente === 'producao' && g.situacaoPortal === '0' && !g.pagaEm && g.geradaEm < limite)
   if (esquecidas.length) {
     alertas.push({
       tipo: 'sem_pagamento',
@@ -99,12 +101,19 @@ export async function listarGuiasEmitidas(prisma: PrismaClient): Promise<{ guias
 }
 
 /**
- * Marca (data AAAA-MM-DD) ou desmarca (null) guias como pagas. Só notas com guia gerada; marcar põe a situação
- * PAGO (sai do "a pagar" do topo) e grava o valor pago = DIFAL calculado; desmarcar volta para PENDENTE.
+ * Marca (data AAAA-MM-DD) ou desmarca (null) guias como pagas. Só notas com guia gerada; marcar vale só para guia
+ * aceita pelo portal em PRODUÇÃO (guia recusada ou de teste não tem como ser paga), põe a situação PAGO (sai do
+ * "a pagar" do topo) e grava o valor pago = DIFAL calculado; desmarcar volta para PENDENTE.
+ * Devolve quantas foram gravadas e quantas foram recusadas por não serem guia aceita em produção.
  */
-export async function marcarGuiasPagas(prisma: PrismaClient, ids: string[], data: string | null): Promise<number> {
+export async function marcarGuiasPagas(prisma: PrismaClient, ids: string[], data: string | null): Promise<{ notas: number; recusadas: number }> {
   if (data !== null && !/^\d{4}-\d{2}-\d{2}$/.test(data)) throw new Error('data de pagamento deve estar em AAAA-MM-DD')
-  const notas = await prisma.difalNota.findMany({ where: { id: { in: ids }, guiaLoteId: { not: null } }, select: { id: true, difalCalculado: true, situacao: true } })
+  let validos = ids
+  if (data !== null) {
+    const pagaveis = new Set((await listarGuiasEmitidas(prisma)).guias.filter((g) => g.ambiente === 'producao' && g.situacaoPortal === '0').map((g) => g.id))
+    validos = ids.filter((id) => pagaveis.has(id))
+  }
+  const notas = await prisma.difalNota.findMany({ where: { id: { in: validos }, guiaLoteId: { not: null } }, select: { id: true, difalCalculado: true, situacao: true } })
   for (const n of notas) {
     await prisma.difalNota.update({
       where: { id: n.id },
@@ -113,5 +122,5 @@ export async function marcarGuiasPagas(prisma: PrismaClient, ids: string[], data
         : { guiaPagaEm: null, difalPagoGuia: null, ...(n.situacao === 'PAGO' && { situacao: 'PENDENTE' as const }) },
     })
   }
-  return notas.length
+  return { notas: notas.length, recusadas: ids.length - notas.length }
 }

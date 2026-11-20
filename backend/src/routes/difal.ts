@@ -225,8 +225,8 @@ router.post(
     const erros = validationResult(req)
     if (!erros.isEmpty()) return res.status(400).json({ errors: erros.array() })
     try {
-      const n = await marcarGuiasPagas(prisma, req.body.ids as string[], req.body.data ? String(req.body.data).slice(0, 10) : null)
-      res.json({ ok: true, notas: n })
+      const r = await marcarGuiasPagas(prisma, req.body.ids as string[], req.body.data ? String(req.body.data).slice(0, 10) : null)
+      res.json({ ok: true, ...r })
     } catch (e) {
       res.status(500).json({ erro: (e as Error).message })
     }

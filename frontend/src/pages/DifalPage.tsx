@@ -1228,8 +1228,9 @@ function GuiasEmitidas() {
   const [erro, setErro] = useState<string | null>(null)
   const marcar = useMutation({
     mutationFn: ({ ids, data: d }: { ids: string[]; data: string | null }) => difalApi.marcarPagas(ids, d),
-    onSuccess: () => {
+    onSuccess: (r) => {
       setEscolhidas(new Set())
+      if (r.recusadas > 0) setErro(`${r.recusadas} guia(s) não foram marcadas: só guia aceita pelo portal em produção pode ser paga (recusada ou de teste, não).`)
       qc.invalidateQueries({ queryKey: ['difal-guias-emitidas'] })
       qc.invalidateQueries({ queryKey: ['difal-resumo'] })
     },
@@ -1242,6 +1243,8 @@ function GuiasEmitidas() {
     .filter((g) => (!de || g.geradaEm >= de) && (!ate || g.geradaEm <= ate))
     .filter((g) => filtro === 'todas' || (filtro === 'pagas' ? !!g.pagaEm : !g.pagaEm))
   const totalPago = visiveis.reduce((s, g) => s + (g.valorPago ?? 0), 0)
+  // só as marcadas que estão na tela: trocar o filtro não pode deixar escondida uma guia marcada
+  const marcadas = visiveis.filter((g) => escolhidas.has(g.id)).map((g) => g.id)
   const totalAPagar = visiveis.filter((g) => !g.pagaEm && g.situacaoPortal === '0').reduce((s, g) => s + g.difalCalculado, 0)
   function alternar(id: string) {
     setEscolhidas((a) => { const n = new Set(a); if (n.has(id)) n.delete(id); else n.add(id); return n })
@@ -1297,14 +1300,14 @@ function GuiasEmitidas() {
             <p className="text-xs text-slate-500">{visiveis.length} guia(s) · pago {brl(totalPago)} · aceitas e ainda não pagas {brl(totalAPagar)}</p>
           </div>
           <span className="flex flex-wrap items-center gap-2">
-            {escolhidas.size > 0 && (
+            {marcadas.length > 0 && (
               <>
                 <input type="date" value={dataPagamento} onChange={(e) => setDataPagamento(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm" />
-                <button onClick={() => { setErro(null); marcar.mutate({ ids: [...escolhidas], data: dataPagamento }) }} disabled={marcar.isPending}
+                <button onClick={() => { setErro(null); marcar.mutate({ ids: marcadas, data: dataPagamento }) }} disabled={marcar.isPending}
                   className="difal-btn rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 px-4 py-2 text-sm font-medium text-white shadow-md shadow-emerald-500/30 disabled:opacity-40">
-                  Marcar como paga ({escolhidas.size})
+                  Marcar como paga ({marcadas.length})
                 </button>
-                <button onClick={() => { setErro(null); if (window.confirm(`Desmarcar ${escolhidas.size} guia(s) como paga(s)?`)) marcar.mutate({ ids: [...escolhidas], data: null }) }}
+                <button onClick={() => { setErro(null); if (window.confirm(`Desmarcar ${marcadas.length} guia(s) como paga(s)?`)) marcar.mutate({ ids: marcadas, data: null }) }}
                   className="difal-btn rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">Desmarcar</button>
               </>
             )}
