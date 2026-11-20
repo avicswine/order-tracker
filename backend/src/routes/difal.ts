@@ -11,7 +11,7 @@ import { prisma } from '../lib/prisma'
 import { DifalResponsavel, DifalSituacao, Prisma } from '@prisma/client'
 import { importarNotas, type ResultadoImportacao } from '../services/difal/importar'
 import { semearAliquotas } from '../services/difal/aliquotas'
-import { listarGuiasPendentes, gerarLoteDasNotas, classificarCamposExtras, listarVendasMlBarreira, marcarComprovanteMlEnviado, UFS_BARREIRA_ML } from '../services/difal/guias'
+import { listarGuiasPendentes, gerarLoteDasNotas, classificarCamposExtras, marcarComprovanteMlEnviado, filtroVendasMl } from '../services/difal/guias'
 import { ErroMontagemGnre } from '../services/difal/gnre'
 import { sincronizarCobrancasMl, fechamentoMensal } from '../services/difal/cobrancasMl'
 import {
@@ -105,7 +105,8 @@ router.get('/resumo', [query('desde').optional().isISO8601()], async (req: Reque
   })
 
   const aPagar = await prisma.difalNota.aggregate({
-    where: { ...where, responsavel: 'NOSSO', situacao: { in: ['PENDENTE', 'ATRASADO'] } },
+    // nós pagamos todas: as nossas em aberto e as do ML na janela de 7 dias ainda sem guia
+    where: { ...where, OR: [{ responsavel: 'NOSSO', situacao: { in: ['PENDENTE', 'ATRASADO'] } }, { ...filtroVendasMl(), guiaGeradaEm: null }] },
     _count: { _all: true },
     _sum: { difalCalculado: true },
   })
@@ -247,15 +248,6 @@ router.post(
 // GET /difal/importar/status — andamento e resultado da última importação
 router.get('/importar/status', (_req: Request, res: Response) => {
   res.json(importacao)
-})
-
-// GET /difal/ml-barreira — vendas do ML nos estados que cobram na barreira: pagar nós e anexar o comprovante no ML
-router.get('/ml-barreira', async (_req: Request, res: Response) => {
-  try {
-    res.json({ ufs: UFS_BARREIRA_ML, vendas: await listarVendasMlBarreira(prisma) })
-  } catch (e) {
-    res.status(500).json({ erro: (e as Error).message })
-  }
 })
 
 // POST /difal/notas/:id/comprovante-ml — José anexou o comprovante na venda do ML

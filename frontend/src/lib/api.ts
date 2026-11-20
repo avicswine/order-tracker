@@ -204,25 +204,6 @@ export interface DifalItemNota {
   valorTotal: number
 }
 
-export interface DifalVendaMl {
-  id: string
-  empresa: string
-  nfNumero: string
-  clienteNome: string
-  itens: DifalItemNota[] | null
-  emitidaEm: string
-  clienteUf: string
-  difalCalculado: number
-  mlOrderId: string | null
-  guiaGeradaEm: string | null
-  guiaLoteId: string | null
-  /** guia processada com sucesso pelo portal: só então pagar e marcar o comprovante */
-  guiaAceita: boolean
-  situacao: string
-  observacao: string | null
-  pronta: boolean
-  faltando: string[]
-}
 
 export interface DifalResumo {
   porResponsavel: {
@@ -273,6 +254,14 @@ export interface DifalGuiaPendente {
     entregueEm: string | null
     ultimoRastreio: string | null
   } | null
+  /** venda do ML: depois de pagar, anexar o comprovante na venda do ML */
+  ml: boolean
+  mlOrderId: string | null
+  guiaGeradaEm: string | null
+  /** guia processada pelo portal: libera 'Comprovante enviado' */
+  guiaAceita: boolean
+  situacao: string
+  observacao: string | null
 }
 
 
@@ -437,7 +426,6 @@ export const difalApi = {
   fechamentoMensal: () => api.get<DifalFechamentoMes[]>('/difal/fechamento-mensal').then((r) => r.data),
   sincronizarCobrancasMl: () =>
     api.post<DifalSincronizacaoMl[]>('/difal/cobrancas-ml/sincronizar', { meses: 2 }).then((r) => r.data),
-  vendasMlBarreira: () => api.get<{ ufs: string[]; vendas: DifalVendaMl[] }>('/difal/ml-barreira').then((r) => r.data),
   marcarComprovanteMl: (id: string) => api.post<{ ok: boolean }>(`/difal/notas/${id}/comprovante-ml`).then((r) => r.data),
   guiasPendentes: () => api.get<DifalGuiaPendente[]>('/difal/guias-pendentes').then((r) => r.data),
   // devolve o XML do lote GNRE como arquivo para baixar
