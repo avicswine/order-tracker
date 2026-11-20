@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { difalApi } from '../lib/api'
 import type {
@@ -110,12 +110,17 @@ function Vendas() {
     refetchInterval: (q) => (q.state.data?.emAndamento ? 3000 : false),
   })
   const terminadaEm = importacao?.terminadaEm ?? null
+  // Recarrega as listas só na passagem "importando → terminou" (não a cada vez que a página abre)
+  const estavaImportando = useRef(false)
+  const emAndamento = !!importacao?.emAndamento
   useEffect(() => {
-    if (!terminadaEm) return
-    qc.invalidateQueries({ queryKey: ['difal-notas'] })
-    qc.invalidateQueries({ queryKey: ['difal-resumo'] })
-    qc.invalidateQueries({ queryKey: ['difal-guias-pendentes'] })
-  }, [terminadaEm, qc])
+    if (estavaImportando.current && !emAndamento) {
+      qc.invalidateQueries({ queryKey: ['difal-notas'] })
+      qc.invalidateQueries({ queryKey: ['difal-resumo'] })
+      qc.invalidateQueries({ queryKey: ['difal-guias-pendentes'] })
+    }
+    estavaImportando.current = emAndamento
+  }, [emAndamento, qc])
   const importar = useMutation({
     mutationFn: () => difalApi.importar(90),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['difal-importacao'] }),
