@@ -11,8 +11,10 @@ import type {
  * 10 = número da nota; 22 = chave da NF-e; 24 = chave do DF-e (as duas últimas usam a chave de 44 dígitos).
  */
 function tipoDocPreferido(r: DifalReceitaUf): string | undefined {
+  if (!r.exigeDocumentoOrigem) return '' // a UF não exige: a guia vai sem documento de origem
   const aceitos = r.tiposDocumentosOrigem.map((t) => t.codigo)
-  return ['10', '22', '24'].find((t) => aceitos.includes(t))
+  // se a UF só aceita tipos que o sistema não preenche (ex.: 23 CT-e), grava o primeiro: a nota fica "falta"
+  return ['10', '22', '24'].find((t) => aceitos.includes(t)) ?? aceitos[0]
 }
 
 function brl(v: number | null | undefined) {
@@ -664,7 +666,7 @@ function Configuracao() {
     onError: (e) => setErro(mensagemErro(e)),
   })
   const salvar = useMutation({
-    mutationFn: ({ uf, dados }: { uf: string; dados: { codigoReceitaGnre?: string; vencimentoRegra?: string; tipoDocOrigemGnre?: string } }) =>
+    mutationFn: ({ uf, dados }: { uf: string; dados: { codigoReceitaGnre?: string; vencimentoRegra?: string; tipoDocOrigemGnre?: string; camposAdicionais?: DifalReceitaUf['camposAdicionais']; exigeProduto?: boolean } }) =>
       difalApi.atualizarAliquota(uf, dados),
     onSuccess: () => { recarregar(); setUfAberta(null); buscar.reset() },
     onError: (e) => setErro(mensagemErro(e)),
@@ -764,7 +766,7 @@ function Configuracao() {
                         {buscar.data.receitas.map((r: DifalReceitaUf) => (
                           <li key={`${r.codigo}-${r.courier}`} className="flex flex-wrap items-center gap-2 text-xs">
                             <button
-                              onClick={() => salvar.mutate({ uf: a.uf, dados: { codigoReceitaGnre: r.codigo, tipoDocOrigemGnre: tipoDocPreferido(r) } })}
+                              onClick={() => salvar.mutate({ uf: a.uf, dados: { codigoReceitaGnre: r.codigo, tipoDocOrigemGnre: tipoDocPreferido(r), camposAdicionais: r.camposAdicionais, exigeProduto: r.exigeProduto } })}
                               className="rounded bg-gray-900 px-2 py-0.5 text-white hover:bg-gray-800"
                             >
                               usar {r.codigo}

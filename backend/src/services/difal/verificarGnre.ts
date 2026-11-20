@@ -8,6 +8,8 @@
  */
 import { writeFileSync } from 'fs'
 import { montarLoteGnre, dividirEmLotes, ErroMontagemGnre, textoGnre, type GuiaGnre, type EmitenteGnre } from './gnre'
+import { classificarCamposExtras, valorCampoExtra } from './guias'
+import type { DifalNota } from '@prisma/client'
 
 // dados de exemplo — NÃO são de cliente real
 const emitente: EmitenteGnre = {
@@ -85,6 +87,30 @@ caso('texto: emoji sai sem deixar espaço duplo', textoGnre('Fazenda \u{1F437} F
 caso('texto: corta em 60 caracteres', textoGnre('X'.repeat(70))?.length === 60)
 caso('texto: só espaços vira ausente', textoGnre('   ') === undefined)
 caso('identificadorGuia só com dígitos (XSD [0-9]{1,10})', /^[0-9]{1,10}$/.test(pega('identificadorGuia')[0] ?? ''))
+
+// UF que não exige documento de origem (ex.: MS e PB na 100102): a guia vai sem o elemento
+const xmlSemDoc = montarLoteGnre([{ ...guiaPiaui, ufFavorecida: 'MS', documentoOrigem: undefined, tipoDocumentoOrigem: undefined }], emitente)
+caso('guia sem documento de origem não leva <documentoOrigem>', !xmlSemDoc.includes('<documentoOrigem'))
+
+// campos extras obrigatórios da UF (GnreConfigUF), classificados pelo título/tipo
+const cls = classificarCamposExtras([
+  { codigo: '107', titulo: 'Chave de Acesso da NFe', tipo: 'T', obrigatorio: true },
+  { codigo: '132', titulo: 'Data de Emissão', tipo: 'D', obrigatorio: true },
+  { codigo: '106', titulo: 'OBSERVAÇÃO', tipo: 'T', obrigatorio: true },
+  { codigo: '127', titulo: 'Informações complementares', tipo: 'T', obrigatorio: false },
+  { codigo: '999', titulo: 'Campo novo qualquer', tipo: 'T', obrigatorio: true },
+])
+caso('extras: chave, data e observação reconhecidos', cls[0]?.conteudo === 'chaveNfe' && cls[1]?.conteudo === 'dataEmissao' && cls[2]?.conteudo === 'observacao')
+caso('extras: opcional fica de fora', !cls.some((c) => c.codigo === '127'))
+caso('extras: obrigatório desconhecido trava em vez de ir errado', cls.find((c) => c.codigo === '999')?.conteudo === 'desconhecido')
+caso('extras: UF que exige produto trava a nota', classificarCamposExtras([], true)[0]?.conteudo === 'desconhecido')
+
+// valores dos campos extras a partir da nota (emitidaEm guarda o horário de Brasília como se fosse UTC)
+const notaMadrugada = { nfNumero: '013234', nfChave: '4'.repeat(44), emitidaEm: new Date('2026-11-19T01:30:00Z') } as DifalNota
+caso('data de emissão de nota da 1h30 não volta um dia', valorCampoExtra({ codigo: '132', titulo: 'Data de Emissão', conteudo: 'dataEmissao' }, notaMadrugada) === '2026-11-19')
+caso('observação: DIFAL NF + número sem zeros à esquerda', valorCampoExtra({ codigo: '106', titulo: 'OBSERVAÇÃO', conteudo: 'observacao' }, notaMadrugada) === 'DIFAL NF 13234')
+caso('observação: número de 7 dígitos não é cortado', valorCampoExtra({ codigo: '106', titulo: 'OBSERVAÇÃO', conteudo: 'observacao' }, { ...notaMadrugada, nfNumero: '1234567' }) === 'NF 1234567')
+caso('chave da NF-e vai inteira', valorCampoExtra({ codigo: '107', titulo: 'Chave', conteudo: 'chaveNfe' }, notaMadrugada)?.length === 44)
 
 console.log(falhas === 0 ? '\nTodos os casos conferem.' : `\n${falhas} caso(s) com erro.`)
 process.exit(falhas === 0 ? 0 : 1)

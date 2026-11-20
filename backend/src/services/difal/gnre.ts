@@ -67,7 +67,8 @@ export interface GuiaGnre {
   receita: string
   detalhamentoReceita?: string
   /** número da nota que originou o recolhimento */
-  documentoOrigem: string
+  /** ausente quando a UF não exige documento de origem para a receita (ex.: MS e PB na 100102) */
+  documentoOrigem?: string
   tipoDocumentoOrigem?: string
   /** AAAA-MM-DD */
   dataVencimento: string
@@ -140,7 +141,7 @@ function conferir(guias: GuiaGnre[], emitente: EmitenteGnre): void {
   if (digitos(emitente.cep).length !== 8) throw new ErroMontagemGnre('CEP do emitente deve ter 8 dígitos')
 
   guias.forEach((g, i) => {
-    const onde = `guia ${i + 1} (${g.ufFavorecida}, nota ${g.documentoOrigem})`
+    const onde = `guia ${i + 1} (${g.ufFavorecida}, nota ${g.identificadorGuia ?? g.documentoOrigem ?? '?'})`
     if (!/^[A-Z]{2}$/.test(g.ufFavorecida)) throw new ErroMontagemGnre(`${onde}: UF inválida`)
     if (!g.receita) throw new ErroMontagemGnre(`${onde}: sem código de receita — consulte o GnreConfigUF`)
     if (!(g.valorPrincipal > 0)) throw new ErroMontagemGnre(`${onde}: valor principal deve ser maior que zero`)
@@ -221,7 +222,9 @@ function montarGuia(g: GuiaGnre, emitente: EmitenteGnre): string {
     `        <item>\n` +
     tag('receita', g.receita, '          ') +
     tag('detalhamentoReceita', g.detalhamentoReceita, '          ') +
-    `          <documentoOrigem tipo="${escapar(g.tipoDocumentoOrigem ?? DOC_ORIGEM_NFE)}">${escapar(g.documentoOrigem)}</documentoOrigem>\n` +
+    (g.documentoOrigem
+      ? `          <documentoOrigem tipo="${escapar(g.tipoDocumentoOrigem ?? DOC_ORIGEM_NFE)}">${escapar(g.documentoOrigem)}</documentoOrigem>\n`
+      : '') +
     referencia +
     tag('dataVencimento', g.dataVencimento, '          ') +
     valores +
