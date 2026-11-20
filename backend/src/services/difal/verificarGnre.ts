@@ -8,7 +8,8 @@
  */
 import { writeFileSync } from 'fs'
 import { montarLoteGnre, dividirEmLotes, ErroMontagemGnre, textoGnre, type GuiaGnre, type EmitenteGnre } from './gnre'
-import { classificarCamposExtras } from './guias'
+import { classificarCamposExtras, valorCampoExtra } from './guias'
+import type { DifalNota } from '@prisma/client'
 
 // dados de exemplo — NÃO são de cliente real
 const emitente: EmitenteGnre = {
@@ -103,6 +104,13 @@ caso('extras: chave, data e observação reconhecidos', cls[0]?.conteudo === 'ch
 caso('extras: opcional fica de fora', !cls.some((c) => c.codigo === '127'))
 caso('extras: obrigatório desconhecido trava em vez de ir errado', cls.find((c) => c.codigo === '999')?.conteudo === 'desconhecido')
 caso('extras: UF que exige produto trava a nota', classificarCamposExtras([], true)[0]?.conteudo === 'desconhecido')
+
+// valores dos campos extras a partir da nota (emitidaEm guarda o horário de Brasília como se fosse UTC)
+const notaMadrugada = { nfNumero: '013234', nfChave: '4'.repeat(44), emitidaEm: new Date('2026-11-19T01:30:00Z') } as DifalNota
+caso('data de emissão de nota da 1h30 não volta um dia', valorCampoExtra({ codigo: '132', titulo: 'Data de Emissão', conteudo: 'dataEmissao' }, notaMadrugada) === '2026-11-19')
+caso('observação: DIFAL NF + número sem zeros à esquerda', valorCampoExtra({ codigo: '106', titulo: 'OBSERVAÇÃO', conteudo: 'observacao' }, notaMadrugada) === 'DIFAL NF 13234')
+caso('observação: número de 7 dígitos não é cortado', valorCampoExtra({ codigo: '106', titulo: 'OBSERVAÇÃO', conteudo: 'observacao' }, { ...notaMadrugada, nfNumero: '1234567' }) === 'NF 1234567')
+caso('chave da NF-e vai inteira', valorCampoExtra({ codigo: '107', titulo: 'Chave', conteudo: 'chaveNfe' }, notaMadrugada)?.length === 44)
 
 console.log(falhas === 0 ? '\nTodos os casos conferem.' : `\n${falhas} caso(s) com erro.`)
 process.exit(falhas === 0 ? 0 : 1)
