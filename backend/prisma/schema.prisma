@@ -457,6 +457,8 @@ model DifalNota {
   canalNome       String?
   canalTipo       String?  // MercadoLivre | LojaIntegrada | Api | ...
   mlOrderId       String?  // para casar com a cobrança do ML
+  // tipo de envio da venda do ML (FULL, Coleta, A combinar, ME1, Agência, Flex), lido uma vez da API do ML
+  mlLogistica     String?
   mlPackId        String?
 
   // o que calculamos

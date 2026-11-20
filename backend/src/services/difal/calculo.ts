@@ -51,6 +51,8 @@ export interface DadosNota {
   canalTipo?: string | null
   itens: ItemNota[]
   valorFrete?: number
+  /** valor total da NF (produtos − desconto + frete + outras despesas + IPI): é a base do imposto */
+  valorNota?: number
 }
 
 export interface ResultadoDifal {
@@ -93,8 +95,9 @@ export function definirResponsavel(nota: DadosNota): Responsavel {
 /**
  * Calcula o DIFAL da nota.
  *
- * O frete entra na base junto com os produtos, rateado na mesma proporção entre
- * a parcela com redução e a sem redução, porque compõe o valor da operação.
+ * A base é o valor da operação (LC 87/96, art. 13, I e § 1º): o valor total da NF, que já tira o
+ * desconto e soma frete, outras despesas e IPI. Ele é repartido entre a parcela com redução e a sem
+ * redução na mesma proporção dos produtos. Sem o valor da NF, usa produtos + frete (decisão do José, 20/11/2026).
  */
 export function calcularDifal(nota: DadosNota, regra: RegraUf | undefined): ResultadoDifal {
   const responsavel = definirResponsavel(nota)
@@ -107,11 +110,13 @@ export function calcularDifal(nota: DadosNota, regra: RegraUf | undefined): Resu
     .reduce((a, i) => a + (i.valorTotal || 0), 0)
   const totalProdutos = comReducaoProdutos + semReducaoProdutos
 
-  // o frete segue a mesma proporção dos produtos
   const frete = nota.valorFrete || 0
+  const valorNota = nota.valorNota && nota.valorNota > 0 ? nota.valorNota : totalProdutos + frete
+  // o que a NF tem além de produtos + frete: negativo = desconto; positivo = outras despesas, IPI
+  const ajusteNota = arredondar(valorNota - totalProdutos - frete)
   const fatorCom = totalProdutos > 0 ? comReducaoProdutos / totalProdutos : 0
-  const valorComReducao = arredondar(comReducaoProdutos + frete * fatorCom)
-  const valorSemReducao = arredondar(semReducaoProdutos + frete * (1 - fatorCom))
+  const valorComReducao = arredondar(valorNota * fatorCom)
+  const valorSemReducao = arredondar(valorNota - valorComReducao)
 
   const base = { valorComReducao, valorSemReducao }
 
@@ -221,6 +226,8 @@ export function calcularDifal(nota: DadosNota, regra: RegraUf | undefined): Resu
         aliquotaCheia: arredondar(regra.aliquotaInterna + regra.fcp - regra.interestadual),
       },
       freteRateado: arredondar(frete),
+      valorNota: arredondar(valorNota),
+      ajusteNota,
     },
   }
 }

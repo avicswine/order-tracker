@@ -6,6 +6,7 @@
  * cabeça contra a calculadora interna (Calculadora_DIFAL_8436_revisada.html).
  */
 import { calcularDifal, type DadosNota, type RegraUf } from './calculo'
+import { prazoDoDifal } from './guias'
 
 const PI: RegraUf = { uf: 'PI', nome: 'Piauí', aliquotaInterna: 22.5, fcp: 0, interestadual: 7, metodo: 'carga' }
 const CE: RegraUf = { uf: 'CE', nome: 'Ceará', aliquotaInterna: 20, fcp: 0, interestadual: 7, metodo: 'prop' }
@@ -129,6 +130,37 @@ const casos: Caso[] = [
     esperaResponsavel: 'NOSSO',
     porque: 'frete rateado: 990 x 1,5% = 14,85 mais 110 x 15,5% = 17,05, total 31,90',
   },
+  {
+    nome: 'Piauí, R$ 1.000 de produto 8436 com R$ 100 de desconto na NF (NF de R$ 900)',
+    nota: {
+      ufDestino: 'PI',
+      temInscricaoEstadual: false,
+      canalTipo: null,
+      valorNota: 900,
+      itens: [{ ncm: '84362900', valorTotal: 1000 }],
+    },
+    regra: PI,
+    esperaDifal: 13.5,
+    esperaResponsavel: 'NOSSO',
+    porque: 'a base é o valor total da NF: 900 x 1,5% = 13,50 (desconto sai da base)',
+  },
+  {
+    nome: 'Piauí, R$ 800 de 8436 + R$ 200 fora, NF de R$ 1.100 (IPI e outras despesas)',
+    nota: {
+      ufDestino: 'PI',
+      temInscricaoEstadual: false,
+      canalTipo: null,
+      valorNota: 1100,
+      itens: [
+        { ncm: '84362900', valorTotal: 800 },
+        { ncm: '73269090', valorTotal: 200 },
+      ],
+    },
+    regra: PI,
+    esperaDifal: 47.3,
+    esperaResponsavel: 'NOSSO',
+    porque: 'NF repartida 80/20: 880 x 1,5% = 13,20 mais 220 x 15,5% = 34,10, total 47,30',
+  },
 ]
 
 let falhas = 0
@@ -145,5 +177,21 @@ for (const c of casos) {
   console.log(`      ${c.porque}\n`)
 }
 
-console.log(falhas === 0 ? `Todos os ${casos.length} casos conferem.` : `${falhas} caso(s) com erro.`)
+// Prazo do DIFAL (regra do José, 20/11/2026): dia da emissão; a partir das 17h, fim de semana ou feriado,
+// o próximo dia útil. O horário é o de Brasília, guardado como se fosse UTC.
+const prazos: [string, string, string][] = [
+  ['quinta 10h', '2026-11-19T10:00:00Z', '2026-11-19'],
+  ['quinta 16h59', '2026-11-19T16:59:00Z', '2026-11-19'],
+  ['quinta 17h (sexta 20/11 é feriado)', '2026-11-19T17:00:00Z', '2026-11-23'],
+  ['quarta 18h', '2026-11-18T18:00:00Z', '2026-11-19'],
+  ['sábado 9h', '2026-11-21T09:00:00Z', '2026-11-23'],
+]
+console.log('\nConferência do prazo do DIFAL\n')
+for (const [nome, emitida, esperado] of prazos) {
+  const obtido = prazoDoDifal(new Date(emitida))
+  if (obtido !== esperado) falhas++
+  console.log(`${obtido === esperado ? 'OK  ' : 'FALHA'} ${nome}: vence ${obtido} (esperado ${esperado})`)
+}
+
+console.log(falhas === 0 ? `\nTodos os ${casos.length + prazos.length} casos conferem.` : `\n${falhas} caso(s) com erro.`)
 process.exit(falhas === 0 ? 0 : 1)

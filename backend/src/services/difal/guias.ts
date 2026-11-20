@@ -23,6 +23,8 @@ export interface GuiaPendente {
   itens: unknown
   emitidaEm: Date
   clienteUf: string
+  /** valor total da NF */
+  valorNota: number
   difalCalculado: number
   /** tudo pronto para entrar no lote */
   pronta: boolean
@@ -30,7 +32,7 @@ export interface GuiaPendente {
   faltando: string[]
   /** último dia para pagar sem multa/juros (AAAA-MM-DD), pela regra de vencimento da UF */
   prazo: string
-  /** passou do prazo: não vai para lote GNRE, vai para a contabilidade (decisão do José, 20/11/2026) */
+  /** passou do prazo legal: pode gerar guia, mas ela sai só com o imposto, sem multa e juros (José liberou com aviso, 20/11/2026) */
   atrasada: boolean
   /** envio da nota no order-tracker; null quando a nota não está lá (retirada, Mercado Envios, Shopee…) */
   envio: EnvioDaNota | null
@@ -43,15 +45,26 @@ export interface GuiaPendente {
   guiaAceita: boolean
   situacao: string
   observacao: string | null
+  /** estado em que já tivemos cobrança de DIFAL (UFS_COM_COBRANCA): a tela mostra só esses por padrão */
+  estadoComCobranca: boolean
+  /** a conta do DIFAL como foi feita na importação (tooltip no valor) */
+  calculoDetalhe: unknown
+  /** plataforma da venda (canal do Bling) e, no ML, o tipo de envio */
+  canal: string | null
+  mlLogistica: string | null
 }
 
 export interface EnvioDaNota {
+  /** id do pedido no order-tracker: abre a janela 'Detalhes do Pedido' */
+  pedidoId: string
   situacao: 'PENDING' | 'IN_TRANSIT' | 'DELIVERED' | 'CANCELLED'
   transportadora: string | null
   enviadoEm: Date | null
   previsao: Date | null
   entregueEm: Date | null
   ultimoRastreio: string | null
+  /** ocorrência no transporte (avaria, extravio...), como no selo da tela de Pedidos */
+  temOcorrencia: boolean
 }
 
 /** mesmo formato que a importação do Bling usa para criar o pedido: AVIC-NF-013234 */
@@ -176,7 +189,14 @@ export async function marcarComprovanteMlEnviado(prisma: PrismaClient, id: strin
   await prisma.difalNota.update({ where: { id }, data: { comprovanteMlEnviadoEm: new Date() } })
 }
 
-/** Vendas do ML que pagamos nós: sem guia e com nota de até 7 dias, ou com guia gerada e comprovante ainda não enviado */
+/**
+ * Estados em que já tivemos cobrança de DIFAL: os 7 do histórico auditado (AL, AM, CE, PB, PI, RN, TO) mais o AC,
+ * que aparece nos ZIPs de comprovantes do ML (dez/2025–nov/2026). Os demais o José confere com a contabilidade
+ * (decisão de 20/11/2026): a tela esconde esses por padrão.
+ */
+export const UFS_COM_COBRANCA = ['AC', 'AL', 'AM', 'CE', 'PB', 'PI', 'RN', 'TO']
+
+/** Vendas do ML que pagamos nós: sem guia e com nota de até 30 dias, ou com guia gerada e comprovante ainda não enviado */
 export function filtroVendasMl(): Prisma.DifalNotaWhereInput {
   const limite = new Date(`${somarDias(dataBR(), -JANELA_ML_DIAS)}T00:00:00Z`) // emitidaEm guarda Brasília como UTC
   return {
@@ -196,7 +216,7 @@ export async function listarGuiasPendentes(prisma: PrismaClient, empresa?: strin
       where: {
         difalCalculado: { gt: 0 },
         ...(empresa && { empresa }),
-        // nós pagamos todas (decisão do José, 20/11/2026): as nossas em aberto e as do ML na janela de 7 dias
+        // nós pagamos todas (decisão do José, 20/11/2026): as nossas em aberto e as do ML dos últimos 30 dias
         OR: [
           { responsavel: 'NOSSO', situacao: { in: [...SITUACOES_ABERTAS] }, guiaGeradaEm: null },
           filtroVendasMl(),
@@ -211,17 +231,19 @@ export async function listarGuiasPendentes(prisma: PrismaClient, empresa?: strin
   const pedidos = await prisma.order.findMany({
     where: { orderNumber: { in: notas.map((n) => numeroDoPedido(n.empresa, n.nfNumero)) } },
     select: {
-      orderNumber: true, status: true, shippedAt: true, estimatedDelivery: true, deliveredAt: true,
-      lastTracking: true, carrier: { select: { name: true } },
+      id: true, orderNumber: true, status: true, shippedAt: true, estimatedDelivery: true, deliveredAt: true,
+      lastTracking: true, hasOccurrence: true, carrier: { select: { name: true } },
     },
   })
   const envioPorPedido = new Map(pedidos.map((p) => [p.orderNumber, {
+    pedidoId: p.id,
     situacao: p.status,
     transportadora: p.carrier?.name ?? null,
     enviadoEm: p.shippedAt,
     previsao: p.estimatedDelivery,
     entregueEm: p.deliveredAt,
     ultimoRastreio: p.lastTracking,
+    temOcorrencia: p.hasOccurrence,
   } satisfies EnvioDaNota]))
   const porUf = new Map(aliquotas.map((a) => [a.uf, a]))
   const porEmpresa = new Map(emitentes.map((e) => [e.empresa, e]))
@@ -238,10 +260,8 @@ export async function listarGuiasPendentes(prisma: PrismaClient, empresa?: strin
     const faltando = n.guiaGeradaEm ? [] : oQueFalta(n, porUf.get(n.clienteUf), porEmpresa.get(n.empresa))
     // sem o número da venda não há onde anexar o comprovante: pagaríamos nós e o ML também
     if (ml && !n.guiaGeradaEm && !n.mlOrderId) faltando.push('número da venda no ML (para anexar o comprovante)')
-    // venda do ML: o prazo prático é o fim da janela de 7 dias (antes de chegar à barreira)
-    const prazo = ml
-      ? somarDias(aaaaMmDd(n.emitidaEm), JANELA_ML_DIAS)
-      : prazoLegal(porUf.get(n.clienteUf)?.vencimentoRegra ?? REGRA_PADRAO, n.emitidaEm)
+    // regra do José (20/11/2026): todo DIFAL é pago no dia da emissão da NF, de qualquer canal
+    const prazo = prazoDoDifal(n.emitidaEm)
     return {
       id: n.id,
       empresa: n.empresa,
@@ -250,18 +270,23 @@ export async function listarGuiasPendentes(prisma: PrismaClient, empresa?: strin
       itens: n.itens,
       emitidaEm: n.emitidaEm,
       clienteUf: n.clienteUf,
+      valorNota: n.valorNota,
       difalCalculado: n.difalCalculado,
       pronta: !n.guiaGeradaEm && faltando.length === 0,
       faltando,
       prazo,
-      // venda do ML fora da janela nem entra na lista (o ML pode já ter pago na barreira)
-      atrasada: !ml && prazo < hoje,
+      // com guia gerada não é atrasada: a guia já existe (venda do ML esperando o comprovante)
+      atrasada: !n.guiaGeradaEm && prazo < hoje,
       ml,
       mlOrderId: n.mlOrderId,
       guiaGeradaEm: n.guiaGeradaEm,
       guiaAceita: situacaoDaGuia(n, n.guiaLoteId ? resultadoPorLote.get(n.guiaLoteId) : null) === '0',
       situacao: n.situacao,
       observacao: n.observacao,
+      estadoComCobranca: UFS_COM_COBRANCA.includes(n.clienteUf),
+      calculoDetalhe: n.calculoDetalhe,
+      canal: n.canalNome,
+      mlLogistica: n.mlLogistica,
       envio: envioPorPedido.get(numeroDoPedido(n.empresa, n.nfNumero)) ?? null,
     }
   })
@@ -270,8 +295,6 @@ export async function listarGuiasPendentes(prisma: PrismaClient, empresa?: strin
 function aaaaMmDd(d: Date): string {
   return d.toISOString().slice(0, 10)
 }
-
-const REGRA_PADRAO = 'saida'
 
 /** domingo de Páscoa (algoritmo de Meeus/Jones/Butcher), base dos feriados móveis */
 function pascoa(ano: number): Date {
@@ -304,8 +327,25 @@ export function proximoDiaUtil(dataIso: string): string {
   }
 }
 
-/** venda do ML entra se a nota tem até 7 dias (decisão do José, 20/11/2026, até a contabilidade responder) */
-const JANELA_ML_DIAS = 7
+/** hora do aviso diário no WhatsApp (José, 20/11/2026: o pessoal sai às 17h, o aviso chega com 1h para pagar) */
+export const HORA_ROTINA_DIFAL = 16
+/**
+ * Corte do dia (José, 20/11/2026): nota emitida a partir desta hora vence no próximo dia útil, porque a mercadoria
+ * só sai no dia seguinte e a guia é paga antes da saída.
+ */
+export const HORA_CORTE_DIFAL = 17
+
+/**
+ * Dia em que o DIFAL da nota precisa estar pago: o dia da emissão (ou o próximo dia útil, se emitida a partir do
+ * corte ou em fim de semana/feriado). emitidaEm guarda Brasília como se fosse UTC: as partes UTC são o horário local.
+ */
+export function prazoDoDifal(emitidaEm: Date): string {
+  const dia = aaaaMmDd(emitidaEm)
+  return proximoDiaUtil(emitidaEm.getUTCHours() >= HORA_CORTE_DIFAL ? somarDias(dia, 1) : dia)
+}
+
+/** venda do ML entra na lista se a nota tem até 30 dias (decisão do José, 20/11/2026); as mais antigas ficam com a contabilidade */
+export const JANELA_ML_DIAS = 30
 
 // nós pagamos o DIFAL das vendas do ML em todos os estados (decisão do José, 20/11/2026), dentro da janela
 function vendaMlNaJanela(nota: DifalNota, hojeBr: string): boolean {
@@ -365,18 +405,17 @@ export async function gerarLoteDasNotas(prisma: PrismaClient, ids: string[], hoj
   if (!emitente) throw new ErroMontagemGnre(`dados do emitente ${empresa} ainda não foram lidos de nenhuma nota`)
   const porUf = new Map(aliquotas.map((a) => [a.uf, a]))
 
-  const dataPagamento = proximoDiaUtil(hojeBr)
+  const primeiroDiaPagavel = proximoDiaUtil(hojeBr)
   const guias: GuiaGnre[] = notas.map((n) => {
     const faltando = oQueFalta(n, porUf.get(n.clienteUf), emitente)
     if (faltando.length) throw new ErroMontagemGnre(`nota ${n.nfNumero}: falta ${faltando.join('; ')}`)
     const a = porUf.get(n.clienteUf)!
     const prazo = prazoLegal(a.vencimentoRegra, n.emitidaEm)
-    // venda do ML: paga dentro da janela de 7 dias, antes da barreira; vence hoje (o portal exige vencimento >= pagamento)
-    const ml = n.responsavel === 'ML_PAGA'
-    // guia atrasada sairia sem multa e juros: vai para a contabilidade, não para lote
-    if (!ml && prazo < hojeBr) {
-      throw new ErroMontagemGnre(`nota ${n.nfNumero} passou do prazo (vencia em ${prazo.split('-').reverse().join('/')}): vai para a contabilidade`)
-    }
+    // paga no prazo do DIFAL (nota depois das 17h ou de fim de semana: próximo dia útil), nunca antes do primeiro dia pagável
+    const prazoPagar = prazoDoDifal(n.emitidaEm)
+    const dataPagamento = prazoPagar > primeiroDiaPagavel ? prazoPagar : primeiroDiaPagavel
+    // nota atrasada (prazo < hoje): o José liberou com aviso na tela (20/11/2026). A guia sai só com o
+    // imposto, sem multa e juros, e com vencimento no dia do pagamento (o portal exige vencimento >= pagamento).
     return {
       ufFavorecida: n.clienteUf,
       receita: a.codigoReceitaGnre!,

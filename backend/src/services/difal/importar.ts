@@ -145,9 +145,25 @@ function temIe(ie?: string | null): boolean {
   return /\d/.test(v)
 }
 
+// trava: o botão da tela e a rotina diária não podem importar ao mesmo tempo (chamadas em dobro no Bling)
+let importando = false
+
 export async function importarNotas(
   prisma: PrismaClient,
   opcoes: { empresa?: string; desde?: Date; limite?: number; forcar?: boolean } = {}
+): Promise<ResultadoImportacao[]> {
+  if (importando) throw new Error('já existe uma importação em andamento')
+  importando = true
+  try {
+    return await importarNotasSemTrava(prisma, opcoes)
+  } finally {
+    importando = false
+  }
+}
+
+async function importarNotasSemTrava(
+  prisma: PrismaClient,
+  opcoes: { empresa?: string; desde?: Date; limite?: number; forcar?: boolean }
 ): Promise<ResultadoImportacao[]> {
   const desde = opcoes.desde ?? new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
   const desdeStr = desde.toISOString().slice(0, 10)
@@ -312,6 +328,7 @@ export async function importarNotas(
           canalTipo: canal?.tipo ?? null,
           itens,
           valorFrete: nf.valorFrete ?? 0,
+          valorNota: nf.valorNota,
         }
         const calc = calcularDifal(dados, porUf.get(uf))
         const erroCalculo = (calc.detalhe as { erro?: string }).erro ?? null
@@ -404,11 +421,17 @@ export async function importarNotas(
         try {
           const existente = await prisma.difalNota.findUnique({
             where: { empresa_nfNumero: { empresa: empresa.code, nfNumero: numero } },
-            select: { id: true },
+            select: { id: true, guiaLoteId: true },
           })
           if (existente) {
-            // não toca no que foi conferido depois (cobrança do ML, guia paga)
-            await prisma.difalNota.update({ where: { id: existente.id }, data: registro })
+            // não toca no que foi conferido depois (cobrança do ML, guia paga). Nota com guia gerada mantém a conta
+            // com que a guia saiu: refazer mudaria o valor da guia que já existe.
+            const { valorComReducao, valorSemReducao, difalCalculado, difalMetodo, calculoDetalhe, responsavel, ...semConta } = registro
+            // a condição vai na própria gravação: se o lote foi gerado durante esta leitura, a conta fica como saiu na guia
+            const semLote = existente.guiaLoteId
+              ? { count: 0 }
+              : await prisma.difalNota.updateMany({ where: { id: existente.id, guiaLoteId: null }, data: registro })
+            if (semLote.count === 0) await prisma.difalNota.update({ where: { id: existente.id }, data: semConta })
             res.atualizadas++
           } else {
             await prisma.difalNota.create({ data: registro })

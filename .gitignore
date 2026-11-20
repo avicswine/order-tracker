@@ -11,3 +11,6 @@ Certificados/
 *.pfx
 *.PFX
 *.p12
+
+# backups locais de dados (scripts de correção)
+backend/backups/

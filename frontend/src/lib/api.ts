@@ -177,6 +177,35 @@ export interface DifalItemNota {
 }
 
 
+/** guia gerada, com situação no portal e pagamento (aba 'O que já pagamos') */
+export interface DifalGuiaEmitida {
+  id: string
+  empresa: string
+  nfNumero: string
+  clienteNome: string
+  clienteUf: string
+  estadoComCobranca: boolean
+  canal: string | null
+  ml: boolean
+  mlLogistica: string | null
+  mlOrderId: string | null
+  valorNota: number
+  difalCalculado: number
+  calculoDetalhe: DifalCalculoDetalhe | null
+  itens: DifalItemNota[] | null
+  emitidaEm: string
+  loteId: string
+  ambiente: string | null
+  geradaEm: string
+  enviadaEm: string | null
+  situacaoPortal: string | null
+  linhaDigitavel: string | null
+  atrasada: boolean
+  pagaEm: string | null
+  valorPago: number | null
+  comprovanteMlEnviadoEm: string | null
+}
+
 export interface DifalResumo {
   porResponsavel: {
     responsavel: DifalResponsavel
@@ -210,6 +239,7 @@ export interface DifalGuiaPendente {
   itens: DifalItemNota[] | null
   emitidaEm: string
   clienteUf: string
+  valorNota: number
   difalCalculado: number
   pronta: boolean
   faltando: string[]
@@ -219,12 +249,14 @@ export interface DifalGuiaPendente {
   atrasada: boolean
   /** envio no order-tracker; null = nota não está lá (retirada, Mercado Envios, Shopee…) */
   envio: {
+    pedidoId: string
     situacao: 'PENDING' | 'IN_TRANSIT' | 'DELIVERED' | 'CANCELLED'
     transportadora: string | null
     enviadoEm: string | null
     previsao: string | null
     entregueEm: string | null
     ultimoRastreio: string | null
+    temOcorrencia: boolean
   } | null
   /** venda do ML: depois de pagar, anexar o comprovante na venda do ML */
   ml: boolean
@@ -234,6 +266,40 @@ export interface DifalGuiaPendente {
   guiaAceita: boolean
   situacao: string
   observacao: string | null
+  /** estado em que já tivemos cobrança de DIFAL */
+  estadoComCobranca: boolean
+  /** a conta do DIFAL feita na importação (calculo.ts) */
+  calculoDetalhe: DifalCalculoDetalhe | null
+  /** plataforma da venda e, no ML, o tipo de envio (FULL, Coleta, A combinar, ME1, Agência, Flex) */
+  canal: string | null
+  mlLogistica: string | null
+}
+
+/** espelho do 'detalhe' montado em backend/src/services/difal/calculo.ts */
+export interface DifalCalculoDetalhe {
+  uf?: string
+  aliquotaInterna?: number
+  fcp?: number
+  interestadual?: number
+  freteRateado?: number
+  /** base do imposto = valor total da NF (notas calculadas antes de 20/11/2026 não têm) */
+  valorNota?: number
+  /** valor da NF − produtos − frete: negativo = desconto; positivo = outras despesas, IPI */
+  ajusteNota?: number
+  motivo?: string
+  erro?: string
+  comReducao?: {
+    valor: number
+    difal: number
+    metodo?: 'carga' | 'prop'
+    explicacao?: string
+    cargaTotal?: number
+    cargaOrigem?: number
+    cargaDevida?: number
+    baseReduzida?: number
+    diferencaAliquotas?: number
+  }
+  semReducao?: { valor: number; difal: number; aliquotaCheia: number }
 }
 
 
@@ -387,6 +453,10 @@ export const difalApi = {
   sincronizarCobrancasMl: () =>
     api.post<DifalSincronizacaoMl[]>('/difal/cobrancas-ml/sincronizar', { meses: 2 }).then((r) => r.data),
   marcarComprovanteMl: (id: string) => api.post<{ ok: boolean }>(`/difal/notas/${id}/comprovante-ml`).then((r) => r.data),
+  guiasEmitidas: () => api.get<{ guias: DifalGuiaEmitida[]; alertas: { tipo: string; texto: string }[] }>('/difal/guias-emitidas').then((r) => r.data),
+  simularRotina: () =>
+    api.post<{ mensagem: string; pulou?: string; agendada: boolean; modoCompleto: boolean; temNumero: boolean; ultimaExecucao: { em: string; ok: boolean; enviadaWhatsapp: boolean; resumo: string } | null }>('/difal/rotina/simular').then((r) => r.data),
+  marcarPagas: (ids: string[], data: string | null) => api.post<{ ok: boolean; notas: number; recusadas: number }>('/difal/guias-emitidas/pagas', { ids, data }).then((r) => r.data),
   guiasPendentes: () => api.get<DifalGuiaPendente[]>('/difal/guias-pendentes').then((r) => r.data),
   // devolve o XML do lote GNRE como arquivo para baixar
   gerarLote: (ids: string[]) =>
