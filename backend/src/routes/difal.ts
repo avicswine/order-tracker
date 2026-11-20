@@ -11,7 +11,7 @@ import { prisma } from '../lib/prisma'
 import { DifalResponsavel, DifalSituacao, Prisma } from '@prisma/client'
 import { importarNotas, type ResultadoImportacao } from '../services/difal/importar'
 import { semearAliquotas } from '../services/difal/aliquotas'
-import { listarGuiasPendentes, gerarLoteDasNotas } from '../services/difal/guias'
+import { listarGuiasPendentes, gerarLoteDasNotas, classificarCamposExtras } from '../services/difal/guias'
 import { ErroMontagemGnre } from '../services/difal/gnre'
 import { sincronizarCobrancasMl, fechamentoMensal } from '../services/difal/cobrancasMl'
 import {
@@ -154,13 +154,15 @@ router.put(
     body('codigoReceitaGnre').optional().trim().matches(/^\d{6}$/).withMessage('código de receita tem 6 dígitos'),
     body('vencimentoRegra').optional().isIn(['saida', 'dia15']),
     body('tipoDocOrigemGnre').optional().trim().matches(/^(\d{2})?$/).withMessage('tipo de documento de origem tem 2 dígitos (ou vazio, se a UF não exige)'),
+    body('camposAdicionais').optional().isArray({ max: 20 }),
+    body('exigeProduto').optional().isBoolean(),
   ],
   async (req: Request, res: Response) => {
     const erros = validationResult(req)
     if (!erros.isEmpty()) return res.status(400).json({ errors: erros.array() })
 
     const uf = String(req.params.uf).toUpperCase()
-    const { aliquotaInterna, fcp, interestadual, metodo, nota, codigoReceitaGnre, vencimentoRegra, tipoDocOrigemGnre } = req.body
+    const { aliquotaInterna, fcp, interestadual, metodo, nota, codigoReceitaGnre, vencimentoRegra, tipoDocOrigemGnre, camposAdicionais, exigeProduto } = req.body
     try {
     const atualizada = await prisma.difalAliquota.update({
       where: { uf },
@@ -173,6 +175,14 @@ router.put(
         ...(codigoReceitaGnre !== undefined && { codigoReceitaGnre: String(codigoReceitaGnre) }),
         ...(vencimentoRegra !== undefined && { vencimentoRegra: String(vencimentoRegra) }),
         ...(tipoDocOrigemGnre !== undefined && { tipoDocOrigemGnre: String(tipoDocOrigemGnre) }),
+        ...(camposAdicionais !== undefined && {
+          camposExtrasGnre: classificarCamposExtras(
+            (camposAdicionais as Record<string, unknown>[]).map((c) => ({
+              codigo: String(c.codigo ?? ''), titulo: String(c.titulo ?? ''), tipo: String(c.tipo ?? ''), obrigatorio: c.obrigatorio === true,
+            })),
+            exigeProduto === true
+          ) as unknown as Prisma.InputJsonValue,
+        }),
       },
     })
     res.json(atualizada)

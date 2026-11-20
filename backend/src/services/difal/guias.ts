@@ -29,6 +29,59 @@ export interface GuiaPendente {
 /** Tipos de documento de origem que usam a chave de 44 dígitos (GnreConfigUF): 22 = chave da NF-e, 24 = chave do DF-e */
 const TIPOS_DOC_COM_CHAVE = new Set(['22', '24'])
 
+/** Campo extra obrigatório de uma UF, já com o que o sistema põe nele. */
+export interface CampoExtraUf {
+  codigo: string
+  titulo: string
+  conteudo: 'chaveNfe' | 'dataEmissao' | 'observacao' | 'desconhecido'
+}
+
+/**
+ * Lê os campos adicionais OBRIGATÓRIOS do GnreConfigUF e decide o que vai em cada um, pelo título e tipo.
+ * O que não for reconhecido fica 'desconhecido' e trava a nota ("falta"), em vez de ir errado ao portal.
+ */
+export function classificarCamposExtras(
+  campos: { codigo: string; titulo: string; tipo: string; obrigatorio: boolean }[],
+  exigeProduto = false
+): CampoExtraUf[] {
+  // 'produto' é uma categoria escolhida numa lista da UF (ex.: MA, 89 opções): decisão fiscal, ainda não definida.
+  const produto: CampoExtraUf[] = exigeProduto
+    ? [{ codigo: 'produto', titulo: 'categoria de produto exigida pela UF (definir com a contabilidade)', conteudo: 'desconhecido' }]
+    : []
+  return produto.concat(campos
+    .filter((c) => c.obrigatorio)
+    .map((c) => {
+      const titulo = c.titulo.toLowerCase()
+      const conteudo: CampoExtraUf['conteudo'] = titulo.includes('chave')
+        ? 'chaveNfe'
+        : c.tipo === 'D' && titulo.includes('emiss')
+          ? 'dataEmissao'
+          : titulo.includes('observa')
+            ? 'observacao'
+            : 'desconhecido'
+      return { codigo: c.codigo, titulo: c.titulo, conteudo }
+    }))
+}
+
+/** Observação pedida pelo TO (até 15 caracteres): definido pelo José em 20/11/2026 */
+const TAMANHO_OBSERVACAO = 15
+
+/** data da nota no fuso de Brasília, AAAA-MM-DD (emitidaEm é guardado em UTC) */
+function dataEmissaoBrasil(d: Date): string {
+  return d.toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
+}
+
+function valorCampoExtra(c: CampoExtraUf, nota: DifalNota): string | null {
+  if (c.conteudo === 'chaveNfe') return nota.nfChave
+  if (c.conteudo === 'dataEmissao') return dataEmissaoBrasil(nota.emitidaEm)
+  if (c.conteudo === 'observacao') return `DIFAL NF ${nota.nfNumero.replace(/^0+/, '')}`.slice(0, TAMANHO_OBSERVACAO)
+  return null
+}
+
+function camposExtrasDaUf(aliquota: DifalAliquota): CampoExtraUf[] {
+  return Array.isArray(aliquota.camposExtrasGnre) ? (aliquota.camposExtrasGnre as unknown as CampoExtraUf[]) : []
+}
+
 /** tipoDocOrigemGnre vazio = a UF não exige documento de origem para a receita (GnreConfigUF) */
 const SEM_DOCUMENTO_ORIGEM = ''
 
@@ -44,6 +97,10 @@ function oQueFalta(nota: DifalNota, aliquota: DifalAliquota | undefined, emitent
   if (!emitente) f.push(`dados do emitente ${nota.empresa} (reimportar uma nota da empresa)`)
   if (aliquota && aliquota.tipoDocOrigemGnre !== SEM_DOCUMENTO_ORIGEM && !documentoOrigem(nota, aliquota.tipoDocOrigemGnre)) {
     f.push('chave de acesso da NF-e (reimportar a nota)')
+  }
+  for (const c of aliquota ? camposExtrasDaUf(aliquota) : []) {
+    if (c.conteudo === 'desconhecido') f.push(`campo extra "${c.titulo}" (código ${c.codigo}) que o sistema não sabe preencher`)
+    else if (!valorCampoExtra(c, nota)) f.push(`${c.titulo} para o campo extra ${c.codigo} (reimportar a nota)`)
   }
   return f
 }
@@ -148,6 +205,7 @@ export async function gerarLoteDasNotas(prisma: PrismaClient, ids: string[], hoj
       }),
       dataVencimento: vencimento(a.vencimentoRegra, n.emitidaEm, hoje),
       dataPagamento: aaaaMmDd(hoje),
+      camposExtras: camposExtrasDaUf(a).map((c) => ({ codigo: c.codigo, valor: valorCampoExtra(c, n)! })),
       valorPrincipal: n.difalCalculado,
       referencia: {
         mes: String(n.emitidaEm.getUTCMonth() + 1).padStart(2, '0'),
