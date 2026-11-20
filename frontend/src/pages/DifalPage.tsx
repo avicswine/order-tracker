@@ -396,13 +396,20 @@ function GuiasPendentes() {
   // no prazo: entram em lote GNRE; atrasadas: vão para a contabilidade (sairiam sem multa e juros)
   const noPrazo = visiveis.filter((g) => !g.atrasada)
   const atrasadas = visiveis.filter((g) => g.atrasada)
-  const prontas = noPrazo.filter((g) => g.pronta)
-  const prontasAtrasadas = atrasadas.filter((g) => g.pronta)
-  // marcar em lote: todas as prontas visíveis de UMA empresa (o portal aceita lote de uma empresa só), até o limite
-  function marcarEmpresa(empresa: string, lista = prontas) {
-    setEscolhidas(new Set(lista.filter((g) => g.empresa === empresa).slice(0, LIMITE_GUIAS_LOTE).map((g) => g.id)))
+  // seletor no topo: a mesma tabela mostra as do prazo ou as atrasadas
+  const [lista, setLista] = useState<'prazo' | 'atrasadas'>('prazo')
+  const verAtrasadas = lista === 'atrasadas'
+  const mostradas = verAtrasadas ? atrasadas : noPrazo
+  const prontas = mostradas.filter((g) => g.pronta)
+  function trocarLista(nova: 'prazo' | 'atrasadas') {
+    setLista(nova)
+    setEscolhidas(new Set()) // não mistura no lote o que foi marcado na outra lista
   }
-  const prontasPorEmpresa = (empresa: string, lista = prontas) => lista.filter((g) => g.empresa === empresa).length
+  // marcar em lote: todas as prontas visíveis de UMA empresa (o portal aceita lote de uma empresa só), até o limite
+  function marcarEmpresa(empresa: string) {
+    setEscolhidas(new Set(prontas.filter((g) => g.empresa === empresa).slice(0, LIMITE_GUIAS_LOTE).map((g) => g.id)))
+  }
+  const prontasPorEmpresa = (empresa: string) => prontas.filter((g) => g.empresa === empresa).length
   // atrasada sai só com o imposto: o José confirma antes de gerar (decisão de 20/11/2026)
   function gerarComAviso() {
     const atrasadasEscolhidas = guias.filter((g) => escolhidas.has(g.id) && g.atrasada).length
@@ -472,20 +479,42 @@ function GuiasPendentes() {
     </div>
     {aviso && <div className="difal-entrar rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-2.5 text-sm text-emerald-900">{aviso}</div>}
     {erroTexto && <div className="difal-entrar rounded-xl border border-red-200 bg-red-50 px-5 py-2.5 text-sm text-red-800">{erroTexto}</div>}
-    {noPrazo.length === 0 ? (
+    <div className="inline-flex w-fit rounded-xl bg-slate-100 p-1 text-sm">
+        <button onClick={() => trocarLista('prazo')}
+          className={`rounded-lg px-4 py-1.5 transition-colors ${lista === 'prazo' ? 'bg-white font-semibold text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>
+          No prazo <span className="ml-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-[11px] tabular-nums">{noPrazo.length}</span>
+        </button>
+        <button onClick={() => trocarLista('atrasadas')}
+          className={`rounded-lg px-4 py-1.5 transition-colors ${lista === 'atrasadas' ? 'bg-white font-semibold text-rose-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>
+          Atrasadas <span className="ml-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-[11px] tabular-nums">{atrasadas.length}</span>
+        </button>
+    </div>
+    {mostradas.length === 0 ? (
       <div className="difal-entrar flex items-center gap-3 rounded-2xl border border-emerald-200 bg-white p-4 text-sm text-emerald-900">
         <span className="grid h-8 w-8 place-items-center rounded-xl bg-emerald-50 text-emerald-600"><Icone nome="ok" className="h-4 w-4" /></span>
-        Nenhuma guia no prazo para emitir agora.
+        {verAtrasadas ? 'Nenhuma nota atrasada neste filtro.' : 'Nenhuma guia no prazo para emitir agora.'}
       </div>
     ) : (
-    <div className="difal-secao difal-secao-azul overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div className="difal-cab-azul flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+    <div className={`difal-secao ${verAtrasadas ? 'difal-secao-rosa border-rose-200' : 'difal-secao-azul border-slate-200'} overflow-hidden rounded-2xl border bg-white shadow-sm`}>
+      <div className={`${verAtrasadas ? 'difal-cab-rosa' : 'difal-cab-azul'} flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4`}>
         <div>
-          <p className="text-base font-semibold text-slate-900">Guias para emitir agora (no prazo)</p>
-          <p className="text-xs text-slate-500">
-            {noPrazo.length} nota(s) no prazo · {prontas.length} prontas para a guia (GNRE). Um lote por empresa, até {LIMITE_GUIAS_LOTE} guias.
-            Vendas do Mercado Livre: depois de pagar, anexe o comprovante na venda do ML e clique em "Comprovante enviado".
-          </p>
+          {verAtrasadas ? (
+            <>
+              <p className="text-base font-semibold text-slate-900">Atrasadas: passaram do prazo</p>
+              <p className="text-xs text-slate-500">
+                {atrasadas.length} nota(s) · {brl(atrasadas.reduce((s, g) => s + g.difalCalculado, 0))} de DIFAL. Dá para gerar a guia, mas ela sai só com o imposto,{' '}
+                <b className="text-rose-700">sem multa e juros</b>. A planilha vai para a contabilidade.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-base font-semibold text-slate-900">Guias para emitir agora (no prazo)</p>
+              <p className="text-xs text-slate-500">
+                {noPrazo.length} nota(s) no prazo · {prontas.length} prontas para a guia (GNRE). Um lote por empresa, até {LIMITE_GUIAS_LOTE} guias.
+                Vendas do Mercado Livre: depois de pagar, anexe o comprovante na venda do ML e clique em "Comprovante enviado".
+              </p>
+            </>
+          )}
         </div>
         <span className="flex flex-wrap items-center gap-2">
         {['AVIC', 'AGRO'].map((emp) => prontasPorEmpresa(emp) > 0 && (
@@ -497,21 +526,26 @@ function GuiasPendentes() {
         {escolhidas.size > 0 && (
           <button onClick={() => setEscolhidas(new Set())} className="difal-btn rounded-xl px-3 py-2 text-sm text-slate-500 hover:text-slate-800">Limpar</button>
         )}
+        {verAtrasadas && (
+          <button onClick={() => baixarListaAtrasadas(atrasadas)} className="difal-btn rounded-xl border border-rose-200 bg-white px-3 py-2 text-sm text-rose-700 hover:bg-rose-50">
+            Baixar lista
+          </button>
+        )}
         <button
           onClick={gerarComAviso}
           disabled={escolhidas.size === 0 || gerar.isPending}
-          className="difal-btn rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-4 py-2 text-sm font-medium text-white shadow-md shadow-indigo-500/30 hover:from-indigo-500 hover:to-violet-500 disabled:opacity-40"
+          className={`difal-btn rounded-xl bg-gradient-to-r ${verAtrasadas ? 'from-rose-600 to-orange-500 shadow-rose-500/30' : 'from-indigo-600 to-violet-600 shadow-indigo-500/30 hover:from-indigo-500 hover:to-violet-500'} px-4 py-2 text-sm font-medium text-white shadow-md disabled:opacity-40`}
         >
           {gerar.isPending ? 'Montando lote…' : `Baixar lote GNRE (${escolhidas.size})`}
         </button>
         </span>
       </div>
       <table className="min-w-full text-sm">
-        <thead className="bg-gradient-to-r from-indigo-50 to-sky-50 text-left text-xs uppercase tracking-wide text-indigo-900/60">
-          <tr><th className="w-10 px-5 py-2"></th><th className="px-2 py-2">Nota / cliente</th><th className="px-2 py-2">Emissão</th><th className="px-2 py-2">Prazo</th><th className="px-2 py-2">UF</th><th className="px-2 py-2">Canal</th><th className="px-2 py-2">Transportadora</th><th className="px-2 py-2">Status</th><th className="px-2 py-2">Envio</th><th className="px-2 py-2">Previsão</th><th className="px-2 py-2 text-right">Valor da NF</th><th className="px-2 py-2 text-right">DIFAL</th><th className="px-5 py-2">Situação</th></tr>
+        <thead className={`bg-gradient-to-r ${verAtrasadas ? 'from-rose-50 to-orange-50 text-rose-900/60' : 'from-indigo-50 to-sky-50 text-indigo-900/60'} text-left text-xs uppercase tracking-wide`}>
+          <tr><th className="w-10 px-5 py-2"></th><th className="px-2 py-2">Nota / cliente</th><th className="px-2 py-2">Emissão</th><th className="px-2 py-2">{verAtrasadas ? 'Venceu em' : 'Prazo'}</th><th className="px-2 py-2">UF</th><th className="px-2 py-2">Canal</th><th className="px-2 py-2">Transportadora</th><th className="px-2 py-2">Status</th><th className="px-2 py-2">Envio</th><th className="px-2 py-2">Previsão</th><th className="px-2 py-2 text-right">Valor da NF</th><th className="px-2 py-2 text-right">DIFAL</th><th className="px-5 py-2">Situação</th></tr>
         </thead>
         <tbody className="difal-linhas divide-y divide-slate-100">
-          {noPrazo.map((g) => {
+          {mostradas.map((g) => {
             const bloqueada = !g.pronta || (empresaEscolhida !== undefined && g.empresa !== empresaEscolhida && !escolhidas.has(g.id))
             return (
               <tr key={g.id} className={g.pronta || g.guiaGeradaEm ? '' : 'opacity-75'}>
@@ -529,7 +563,7 @@ function GuiasPendentes() {
                   <NotaCliente nf={g.nfNumero} empresa={g.empresa} cliente={g.clienteNome} itens={g.itens} />
                 </td>
                 <td className="px-2 py-2.5 text-slate-500">{dataBr(g.emitidaEm)}</td>
-                <td className="px-2 py-2.5 text-xs text-slate-500">{g.ml ? 'pagar até' : 'vence'} {dataBr(g.prazo)}</td>
+                <td className={`px-2 py-2.5 text-xs ${g.atrasada ? 'font-medium text-rose-700' : 'text-slate-500'}`}>{g.atrasada ? 'venceu' : g.ml ? 'pagar até' : 'vence'} {dataBr(g.prazo)}</td>
                 <td className="px-2 py-2.5"><span className="rounded-md bg-indigo-50 px-1.5 py-0.5 text-xs font-semibold text-indigo-700 ring-1 ring-indigo-100">{g.clienteUf}</span></td>
                 <CelulaCanal g={g} />
                 <CelulasEnvio envio={g.envio} />
@@ -576,19 +610,6 @@ function GuiasPendentes() {
       </table>
     </div>
     )}
-    {atrasadas.length > 0 && (
-      <GuiasAtrasadas
-        notas={atrasadas}
-        escolhidas={escolhidas}
-        alternar={alternar}
-        empresaEscolhida={empresaEscolhida}
-        marcarEmpresa={(emp) => marcarEmpresa(emp, prontasAtrasadas)}
-        prontasPorEmpresa={(emp) => prontasPorEmpresa(emp, prontasAtrasadas)}
-        gerar={gerarComAviso}
-        gerando={gerar.isPending}
-        limpar={() => setEscolhidas(new Set())}
-      />
-    )}
     </>
   )
 }
@@ -621,119 +642,17 @@ function atalhosPeriodo(): [string, string, string][] {
 /** máximo de guias por lote: manual GNRE (o servidor usa LIMITE_GUIAS_POR_LOTE em gnre.ts com o mesmo valor) */
 const LIMITE_GUIAS_LOTE = 50
 
-// Notas que passaram do prazo: não vão para lote (sairiam sem multa e juros); a contabilidade regulariza.
-function GuiasAtrasadas({ notas, escolhidas, alternar, empresaEscolhida, marcarEmpresa, prontasPorEmpresa, gerar, gerando, limpar }: {
-  notas: DifalGuiaPendente[]
-  escolhidas: Set<string>
-  alternar: (g: DifalGuiaPendente) => void
-  empresaEscolhida: string | undefined
-  marcarEmpresa: (empresa: string) => void
-  prontasPorEmpresa: (empresa: string) => number
-  gerar: () => void
-  gerando: boolean
-  limpar: () => void
-}) {
-  const [aberta, setAberta] = useState(false)
-  const escolhidasAqui = notas.filter((g) => escolhidas.has(g.id)).length
-  const total = notas.reduce((s, g) => s + g.difalCalculado, 0)
-
-  // planilha para a contabilidade: só dados da nota, sem nome nem CPF do cliente (LGPD)
-  function baixarLista() {
-    const linhas = [['Empresa', 'NF', 'Emissão', 'UF', 'Prazo', 'DIFAL (R$)', 'Envio', 'Transportadora', 'Entregue em'].join(';')].concat(
-      notas.map((g) => [
-        g.empresa, g.nfNumero, dataBr(g.emitidaEm), g.clienteUf, dataBr(g.prazo), g.difalCalculado.toFixed(2).replace('.', ','),
-        envioTexto(g.envio), g.envio?.transportadora ?? '', g.envio?.entregueEm ? dataBr(g.envio.entregueEm) : '',
-      ].map((v) => String(v).replace(/;/g, ',')).join(';'))
-    )
-    // BOM para o Excel abrir com acentos certos; ';' e vírgula decimal no padrão brasileiro
-    const arquivo = new Blob(['\ufeff' + linhas.join('\r\n')], { type: 'text/csv;charset=utf-8' })
-    baixarArquivo(arquivo, `difal-atrasadas-${new Date().toISOString().slice(0, 10)}.csv`)
-  }
-
-  return (
-    <div className="difal-secao difal-secao-rosa overflow-hidden rounded-2xl border border-rose-200 bg-white shadow-sm">
-      <div className="difal-cab-rosa flex flex-wrap items-center justify-between gap-3 px-5 py-4">
-        <div className="flex items-start gap-3">
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-rose-50 text-rose-600"><Icone nome="alerta" /></span>
-          <div>
-            <p className="text-base font-semibold text-slate-900">Atrasadas: passaram do prazo</p>
-            <p className="text-xs text-slate-500">
-              {notas.length} nota(s) · {brl(total)} de DIFAL. Dá para gerar a guia, mas ela sai só com o imposto, <b className="text-rose-700">sem multa e juros</b>.
-              A planilha vai para a contabilidade.
-            </p>
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {['AVIC', 'AGRO'].map((emp) => prontasPorEmpresa(emp) > 0 && (
-            <button key={emp} onClick={() => { marcarEmpresa(emp); setAberta(true) }}
-              className="difal-btn rounded-xl border border-rose-200 bg-white px-3 py-2 text-sm text-rose-700 hover:bg-rose-50">
-              Marcar {emp} ({Math.min(prontasPorEmpresa(emp), LIMITE_GUIAS_LOTE)})
-            </button>
-          ))}
-          {escolhidasAqui > 0 && (
-            <>
-              <button onClick={limpar} className="difal-btn rounded-xl px-3 py-2 text-sm text-slate-500 hover:text-slate-800">Limpar</button>
-              <button onClick={gerar} disabled={gerando}
-                className="difal-btn rounded-xl bg-gradient-to-r from-rose-600 to-orange-500 px-4 py-2 text-sm font-medium text-white shadow-md shadow-rose-500/30 disabled:opacity-40">
-                {gerando ? 'Montando lote…' : `Baixar lote GNRE (${escolhidas.size})`}
-              </button>
-            </>
-          )}
-          <button onClick={() => setAberta(!aberta)} className="difal-btn rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm hover:border-slate-300">
-            {aberta ? 'Esconder' : 'Ver notas'}
-          </button>
-          <button onClick={baixarLista} className="difal-btn rounded-xl bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700">
-            Baixar lista
-          </button>
-        </div>
-      </div>
-      {aberta && (
-        <div className="difal-entrar max-h-[360px] overflow-auto border-t border-rose-100">
-          <table className="min-w-full text-sm">
-            <thead className="sticky top-0 bg-gradient-to-r from-rose-50 to-orange-50 text-xs uppercase tracking-wide text-rose-900/60">
-              <tr>
-                <th className="w-10 px-5 py-2"></th>
-                <th className="px-2 py-2 text-left">Nota / cliente</th>
-                <th className="px-2 py-2 text-left">Emissão</th>
-                <th className="px-2 py-2 text-left">Venceu em</th>
-                <th className="px-2 py-2 text-left">UF</th>
-                <th className="px-2 py-2 text-left">Canal</th>
-                <th className="px-2 py-2 text-left">Transportadora</th>
-                <th className="px-2 py-2 text-left">Status</th>
-                <th className="px-2 py-2 text-left">Envio</th>
-                <th className="px-2 py-2 text-left">Previsão</th>
-                <th className="px-2 py-2 text-right">Valor da NF</th>
-                <th className="px-5 py-2 text-right">DIFAL</th>
-              </tr>
-            </thead>
-            <tbody className="difal-linhas divide-y divide-slate-100">
-              {notas.map((g) => (
-                <tr key={g.id}>
-                  <td className="px-5 py-2">
-                    <input type="checkbox" checked={escolhidas.has(g.id)} onChange={() => alternar(g)}
-                      disabled={!g.pronta || (empresaEscolhida !== undefined && g.empresa !== empresaEscolhida && !escolhidas.has(g.id))}
-                      title={g.pronta ? undefined : `falta: ${g.faltando.join('; ')}`} className="h-4 w-4 accent-rose-600" />
-                  </td>
-                  <td className="px-2 py-2"><NotaCliente nf={g.nfNumero} empresa={g.empresa} cliente={g.clienteNome} itens={g.itens} /></td>
-                  <td className="px-2 py-2 text-slate-500">{dataBr(g.emitidaEm)}</td>
-                  <td className="px-2 py-2 text-rose-700">{dataBr(g.prazo)}</td>
-                  <td className="px-2 py-2"><span className="rounded-md bg-rose-50 px-1.5 py-0.5 text-xs font-semibold text-rose-700 ring-1 ring-rose-100">{g.clienteUf}</span></td>
-                  <CelulaCanal g={g} />
-                  <CelulasEnvio envio={g.envio} />
-                  <td className="px-2 py-2 text-right tabular-nums text-slate-600">{brl(g.valorNota)}</td>
-                  <td className="px-5 py-2 text-right font-semibold tabular-nums text-rose-700">
-                    <ComDica largura={460} altura={340} conteudo={<CalculoDaNota d={g.calculoDetalhe} total={g.difalCalculado} />}>
-                      <span className="cursor-help underline decoration-dotted decoration-slate-300 underline-offset-4">{brl(g.difalCalculado)}</span>
-                    </ComDica>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
+// planilha das atrasadas para a contabilidade: só dados da nota, sem nome nem CPF do cliente (LGPD)
+function baixarListaAtrasadas(notas: DifalGuiaPendente[]) {
+  const linhas = [['Empresa', 'NF', 'Emissão', 'UF', 'Prazo', 'DIFAL (R$)', 'Envio', 'Transportadora', 'Entregue em'].join(';')].concat(
+    notas.map((g) => [
+      g.empresa, g.nfNumero, dataBr(g.emitidaEm), g.clienteUf, dataBr(g.prazo), g.difalCalculado.toFixed(2).replace('.', ','),
+      envioTexto(g.envio), g.envio?.transportadora ?? '', g.envio?.entregueEm ? dataBr(g.envio.entregueEm) : '',
+    ].map((v) => String(v).replace(/;/g, ',')).join(';'))
   )
+  // BOM para o Excel abrir com acentos certos; ';' e vírgula decimal no padrão brasileiro
+  const arquivo = new Blob(['\ufeff' + linhas.join('\r\n')], { type: 'text/csv;charset=utf-8' })
+  baixarArquivo(arquivo, `difal-atrasadas-${new Date().toISOString().slice(0, 10)}.csv`)
 }
 
 // cores do selo do tipo de envio do ML
