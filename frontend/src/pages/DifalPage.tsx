@@ -2,7 +2,7 @@ import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { difalApi } from '../lib/api'
 import type {
-  DifalNota, DifalResponsavel, DifalHistorico, DifalGuiaPendente, DifalFechamentoMes,
+  DifalHistorico, DifalGuiaPendente, DifalFechamentoMes,
   DifalLote, DifalAliquota, DifalReceitaUf, DifalItemNota,
 } from '../lib/api'
 import './difal.css'
@@ -121,29 +121,6 @@ function dataBr(iso: string) {
   return d.toLocaleDateString('pt-BR', { timeZone: 'UTC' })
 }
 
-const RESPONSAVEL: Record<DifalResponsavel, { texto: string; cor: string; ajuda: string }> = {
-  NOSSO: {
-    texto: 'Nós pagamos',
-    cor: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200',
-    ajuda: 'Venda de balcão ou Loja Integrada para quem não tem inscrição estadual: a guia é nossa',
-  },
-  ML_PAGA: {
-    texto: 'Mercado Livre',
-    cor: 'bg-blue-50 text-blue-700 ring-1 ring-blue-200',
-    ajuda: 'O ML recolhe e depois cobra de nós no faturamento',
-  },
-  CLIENTE: {
-    texto: 'Cliente',
-    cor: 'bg-slate-100 text-slate-600',
-    ajuda: 'Destinatário com inscrição estadual apura o próprio DIFAL',
-  },
-  SEM_DIFAL: {
-    texto: 'Sem DIFAL',
-    cor: 'bg-slate-100 text-slate-500',
-    ajuda: 'Venda dentro do Rio Grande do Sul: não há diferencial',
-  },
-}
-
 function Numero({
   titulo,
   valor,
@@ -211,17 +188,9 @@ function Abas({ aba, onTrocar }: { aba: NomeAba; onTrocar: (a: NomeAba) => void 
 
 // ---------------------------------------------------------------- Vendas de agora
 function Vendas() {
-  const [responsavel, setResponsavel] = useState('')
-  const [busca, setBusca] = useState('')
-  const [pagina, setPagina] = useState(1)
   const qc = useQueryClient()
 
   const { data: resumo } = useQuery({ queryKey: ['difal-resumo'], queryFn: () => difalApi.resumo() })
-  const { data: lista, isLoading } = useQuery({
-    queryKey: ['difal-notas', responsavel, busca, pagina],
-    queryFn: () =>
-      difalApi.listar({ responsavel: responsavel || undefined, busca: busca || undefined, pagina }),
-  })
   // A importação roda no servidor em segundo plano; aqui só consultamos o andamento a cada 3 s
   const { data: importacao } = useQuery({
     queryKey: ['difal-importacao'],
@@ -234,7 +203,6 @@ function Vendas() {
   const emAndamento = !!importacao?.emAndamento
   useEffect(() => {
     if (estavaImportando.current && !emAndamento) {
-      qc.invalidateQueries({ queryKey: ['difal-notas'] })
       qc.invalidateQueries({ queryKey: ['difal-resumo'] })
       qc.invalidateQueries({ queryKey: ['difal-guias-pendentes'] })
     }
@@ -252,8 +220,6 @@ function Vendas() {
     : null
   const errosImportacao = importacao?.resultado?.flatMap((r) => r.erros) ?? []
 
-  const notas = lista?.notas ?? []
-  const totalPaginas = lista ? Math.max(1, Math.ceil(lista.total / lista.porPagina)) : 1
 
   return (
     <div className="space-y-5">
@@ -311,113 +277,6 @@ function Vendas() {
 
       <FechamentoMensal />
 
-      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-3">
-        <select
-          value={responsavel}
-          onChange={(e) => { setResponsavel(e.target.value); setPagina(1) }}
-          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
-        >
-          <option value="">Todas as notas</option>
-          <option value="NOSSO">Só as que precisamos pagar</option>
-          <option value="ML_PAGA">Só as do Mercado Livre</option>
-          <option value="CLIENTE">Cliente é contribuinte</option>
-          <option value="SEM_DIFAL">Sem DIFAL</option>
-        </select>
-        <div className="relative min-w-[200px] flex-1">
-          <Icone nome="busca" className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-          <input
-            value={busca}
-            onChange={(e) => { setBusca(e.target.value); setPagina(1) }}
-            placeholder="Número da NF ou cliente"
-            className="w-full rounded-xl border border-slate-200 py-2 pl-9 pr-3 text-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
-          />
-        </div>
-        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600">{lista?.total ?? 0} notas</span>
-      </div>
-
-      {totalPaginas > 1 && (
-        <div className="flex items-center justify-end gap-2 text-sm text-slate-600">
-          <button onClick={() => setPagina((p) => Math.max(1, p - 1))} disabled={pagina <= 1} className="difal-btn rounded-lg border border-slate-200 bg-white px-3 py-1 hover:border-slate-300 disabled:opacity-40">
-            Anterior
-          </button>
-          <span>página {pagina} de {totalPaginas}</span>
-          <button onClick={() => setPagina((p) => Math.min(totalPaginas, p + 1))} disabled={pagina >= totalPaginas} className="difal-btn rounded-lg border border-slate-200 bg-white px-3 py-1 hover:border-slate-300 disabled:opacity-40">
-            Próxima
-          </button>
-        </div>
-      )}
-
-      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
-        <table className="min-w-full text-sm">
-          <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-            <tr>
-              <th className="px-3 py-2 text-left">NF</th>
-              <th className="px-3 py-2 text-left">Emissão</th>
-              <th className="px-3 py-2 text-left">Cliente</th>
-              <th className="px-3 py-2 text-left">UF</th>
-              <th className="px-3 py-2 text-left">Canal</th>
-              <th className="px-3 py-2 text-right">Valor da nota</th>
-              <th className="px-3 py-2 text-right">DIFAL</th>
-              <th className="px-3 py-2 text-left">Quem paga</th>
-            </tr>
-          </thead>
-          <tbody className="difal-escalonado divide-y divide-slate-100">
-            {isLoading && (
-              <tr>
-                <td colSpan={8} className="px-3 py-8 text-center text-gray-500">
-                  Carregando…
-                </td>
-              </tr>
-            )}
-            {!isLoading && notas.length === 0 && (
-              <tr>
-                <td colSpan={8} className="px-3 py-10 text-center">
-                  <p className="text-gray-600">Nenhuma nota importada ainda.</p>
-                  <p className="mt-1 text-sm text-gray-500">
-                    Clique em &ldquo;Atualizar do Bling&rdquo; para trazer as notas dos últimos 90 dias.
-                  </p>
-                </td>
-              </tr>
-            )}
-            {notas.map((n: DifalNota) => {
-              const r = RESPONSAVEL[n.responsavel]
-              return (
-                <tr key={n.id} className="transition-colors hover:bg-blue-50/40">
-                  <td className="whitespace-nowrap px-3 py-2.5 font-medium text-slate-900">
-                    <ComItens itens={n.itens as DifalItemNota[] | null}>
-                      <span className="cursor-help underline decoration-dotted decoration-slate-300 underline-offset-4">{n.nfNumero}</span>
-                    </ComItens>{' '}
-                    <SeloEmpresa empresa={n.empresa} />
-                  </td>
-                  <td className="px-3 py-2 text-gray-600">{dataBr(n.emitidaEm)}</td>
-                  <td className="max-w-[220px] truncate px-3 py-2 text-gray-700" title={n.clienteNome}>
-                    {n.clienteNome}
-                    {n.clienteTemIe && <span className="ml-1 text-xs text-gray-400">IE</span>}
-                  </td>
-                  <td className="px-3 py-2 text-gray-600">{n.clienteUf}</td>
-                  <td
-                    className="max-w-[140px] truncate px-3 py-2 text-gray-600"
-                    title={n.canalNome ?? undefined}
-                  >
-                    {n.canalNome ?? '—'}
-                  </td>
-                  <td className="px-3 py-2 text-right tabular-nums text-gray-700">
-                    {brl(n.valorNota)}
-                  </td>
-                  <td className="px-3 py-2 text-right font-medium tabular-nums text-gray-900">
-                    {brl(n.difalCalculado)}
-                  </td>
-                  <td className="px-3 py-2">
-                    <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${r.cor}`} title={r.ajuda}>
-                      {r.texto}
-                    </span>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
     </div>
   )
 }

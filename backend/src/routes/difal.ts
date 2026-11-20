@@ -8,7 +8,7 @@
 import { Router, Request, Response } from 'express'
 import { query, body, validationResult } from 'express-validator'
 import { prisma } from '../lib/prisma'
-import { DifalResponsavel, DifalSituacao, Prisma } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import { importarNotas, type ResultadoImportacao } from '../services/difal/importar'
 import { semearAliquotas } from '../services/difal/aliquotas'
 import { listarGuiasPendentes, gerarLoteDasNotas, classificarCamposExtras, marcarComprovanteMlEnviado, filtroVendasMl } from '../services/difal/guias'
@@ -29,65 +29,6 @@ const router = Router()
 const COM_DIFAL: Prisma.DifalNotaWhereInput = {
   OR: [{ difalCalculado: { gt: 0 } }, { situacao: 'DIVERGENTE' }, { difalCobradoMl: { gt: 0 } }],
 }
-
-// GET /difal — lista as notas do monitor
-router.get(
-  '/',
-  [
-    query('responsavel').optional().isIn(Object.values(DifalResponsavel)),
-    query('situacao').optional().isIn(Object.values(DifalSituacao)),
-    query('empresa').optional().trim(),
-    query('uf').optional().trim().isLength({ min: 2, max: 2 }),
-    query('desde').optional().isISO8601(),
-    query('ate').optional().isISO8601(),
-    query('busca').optional().trim(),
-    query('pagina').optional().isInt({ min: 1 }),
-  ],
-  async (req: Request, res: Response) => {
-    const erros = validationResult(req)
-    if (!erros.isEmpty()) return res.status(400).json({ errors: erros.array() })
-
-    const { responsavel, situacao, empresa, uf, desde, ate, busca } = req.query
-    const pagina = Number(req.query.pagina ?? 1)
-    const porPagina = 100
-
-    const where: Prisma.DifalNotaWhereInput = { AND: [COM_DIFAL] }
-    if (responsavel) where.responsavel = responsavel as DifalResponsavel
-    if (situacao) where.situacao = situacao as DifalSituacao
-    if (empresa) where.empresa = String(empresa).toUpperCase()
-    if (uf) where.clienteUf = String(uf).toUpperCase()
-    if (desde || ate) {
-      where.emitidaEm = {}
-      if (desde) where.emitidaEm.gte = new Date(String(desde))
-      if (ate) where.emitidaEm.lte = new Date(String(ate))
-    }
-    if (busca) {
-      const t = String(busca)
-      where.OR = [
-        { nfNumero: { contains: t } },
-        { clienteNome: { contains: t, mode: 'insensitive' } },
-      ]
-    }
-
-    try {
-    const [notas, total] = await Promise.all([
-      prisma.difalNota.findMany({
-        where,
-        orderBy: { emitidaEm: 'desc' },
-        skip: (pagina - 1) * porPagina,
-        take: porPagina,
-      }),
-      prisma.difalNota.count({ where }),
-    ])
-
-    // LGPD: o documento do destinatário existe só para montar a guia; não vai para a tela
-    const semDocumento = notas.map(({ documentoDestinatario: _doc, clienteIe: _ie, ...resto }) => resto)
-    res.json({ notas: semDocumento, total, pagina, porPagina })
-    } catch (e) {
-      res.status(500).json({ erro: (e as Error).message })
-    }
-  }
-)
 
 // GET /difal/resumo — os números do topo da tela
 router.get('/resumo', [query('desde').optional().isISO8601()], async (req: Request, res: Response) => {

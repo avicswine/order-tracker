@@ -155,34 +155,6 @@ export interface MlConversa {
 export type DifalResponsavel = 'ML_PAGA' | 'NOSSO' | 'CLIENTE' | 'SEM_DIFAL'
 export type DifalSituacao = 'PENDENTE' | 'CONFERIDO' | 'DIVERGENTE' | 'PAGO' | 'ATRASADO'
 
-export interface DifalNota {
-  id: string
-  empresa: string
-  nfNumero: string
-  nfChave: string | null
-  emitidaEm: string
-  clienteNome: string
-  clienteUf: string
-  clienteTemIe: boolean
-  valorProdutos: number
-  valorFrete: number
-  valorNota: number
-  valorComReducao: number
-  valorSemReducao: number
-  canalNome: string | null
-  canalTipo: string | null
-  difalCalculado: number
-  difalMetodo: string | null
-  difalCobradoMl: number | null
-  difalPagoGuia: number | null
-  responsavel: DifalResponsavel
-  situacao: DifalSituacao
-  divergencia: number | null
-  calculoDetalhe: Record<string, unknown> | null
-  /** itens da NF guardados na importação (tooltip) */
-  itens: unknown
-}
-
 export interface DifalImportacaoStatus {
   emAndamento: boolean
   iniciadaEm: string | null
@@ -387,18 +359,6 @@ export interface DifalLote {
 }
 
 export const difalApi = {
-  listar: (params?: {
-    responsavel?: string
-    situacao?: string
-    empresa?: string
-    uf?: string
-    desde?: string
-    busca?: string
-    pagina?: number
-  }) =>
-    api
-      .get<{ notas: DifalNota[]; total: number; pagina: number; porPagina: number }>('/difal', { params })
-      .then((r) => r.data),
   resumo: (params?: { desde?: string }) =>
     api.get<DifalResumo>('/difal/resumo', { params }).then((r) => r.data),
   aliquotas: () => api.get<DifalAliquota[]>('/difal/aliquotas').then((r) => r.data),
