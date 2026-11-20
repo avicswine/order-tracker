@@ -80,6 +80,8 @@ export interface GuiaGnre {
   destinatario: DestinatarioGnre
   /** exigências extras da UF, vindas do GnreConfigUF (no máximo 3) */
   camposExtras?: { codigo: string; valor: string }[]
+  /** AAAA-MM-DD; várias UFs exigem (exigeDataPagamento no GnreConfigUF). Deve ser >= hoje e <= vencimento */
+  dataPagamento?: string
   /** nosso identificador, para casar a resposta com a nota */
   identificadorGuia?: string
 }
@@ -234,6 +236,7 @@ function montarGuia(g: GuiaGnre, emitente: EmitenteGnre): string {
     `        </item>\n` +
     `      </itensGNRE>\n` +
     tag('valorGNRE', dinheiro(total), '      ') +
+    tag('dataPagamento', g.dataPagamento, '      ') +
     tag('identificadorGuia', g.identificadorGuia, '      ') +
     `    </TDadosGNRE>`
   )

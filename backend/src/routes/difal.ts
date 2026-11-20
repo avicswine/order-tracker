@@ -147,13 +147,14 @@ router.put(
     body('nota').optional().trim(),
     body('codigoReceitaGnre').optional().trim().matches(/^\d{6}$/).withMessage('código de receita tem 6 dígitos'),
     body('vencimentoRegra').optional().isIn(['saida', 'dia15']),
+    body('tipoDocOrigemGnre').optional().trim().matches(/^\d{2}$/).withMessage('tipo de documento de origem tem 2 dígitos'),
   ],
   async (req: Request, res: Response) => {
     const erros = validationResult(req)
     if (!erros.isEmpty()) return res.status(400).json({ errors: erros.array() })
 
     const uf = String(req.params.uf).toUpperCase()
-    const { aliquotaInterna, fcp, interestadual, metodo, nota, codigoReceitaGnre, vencimentoRegra } = req.body
+    const { aliquotaInterna, fcp, interestadual, metodo, nota, codigoReceitaGnre, vencimentoRegra, tipoDocOrigemGnre } = req.body
     try {
     const atualizada = await prisma.difalAliquota.update({
       where: { uf },
@@ -165,6 +166,7 @@ router.put(
         ...(nota !== undefined && { nota: String(nota) }),
         ...(codigoReceitaGnre !== undefined && { codigoReceitaGnre: String(codigoReceitaGnre) }),
         ...(vencimentoRegra !== undefined && { vencimentoRegra: String(vencimentoRegra) }),
+        ...(tipoDocOrigemGnre !== undefined && { tipoDocOrigemGnre: String(tipoDocOrigemGnre) }),
       },
     })
     res.json(atualizada)

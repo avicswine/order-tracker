@@ -26,12 +26,20 @@ export interface GuiaPendente {
   faltando: string[]
 }
 
+/** Tipos de documento de origem que usam a chave de 44 dígitos (GnreConfigUF): 22 = chave da NF-e, 24 = chave do DF-e */
+const TIPOS_DOC_COM_CHAVE = new Set(['22', '24'])
+
+function documentoOrigem(nota: DifalNota, tipo: string): string | null {
+  return TIPOS_DOC_COM_CHAVE.has(tipo) ? nota.nfChave : nota.nfNumero
+}
+
 function oQueFalta(nota: DifalNota, aliquota: DifalAliquota | undefined, emitente: DifalEmitente | undefined): string[] {
   const f: string[] = []
   if (!nota.municipioIbgeDestino) f.push('município do destinatário (reimportar a nota para ler o XML)')
   if (!nota.documentoDestinatario) f.push('CPF/CNPJ do destinatário (reimportar a nota para ler o XML)')
   if (!aliquota?.codigoReceitaGnre) f.push(`código de receita GNRE de ${nota.clienteUf} (vem do GnreConfigUF)`)
   if (!emitente) f.push(`dados do emitente ${nota.empresa} (reimportar uma nota da empresa)`)
+  if (aliquota && !documentoOrigem(nota, aliquota.tipoDocOrigemGnre)) f.push('chave de acesso da NF-e (reimportar a nota)')
   return f
 }
 
@@ -129,9 +137,10 @@ export async function gerarLoteDasNotas(prisma: PrismaClient, ids: string[], hoj
     return {
       ufFavorecida: n.clienteUf,
       receita: a.codigoReceitaGnre!,
-      documentoOrigem: n.nfNumero,
+      documentoOrigem: documentoOrigem(n, a.tipoDocOrigemGnre)!,
       tipoDocumentoOrigem: a.tipoDocOrigemGnre,
       dataVencimento: vencimento(a.vencimentoRegra, n.emitidaEm, hoje),
+      dataPagamento: aaaaMmDd(hoje),
       valorPrincipal: n.difalCalculado,
       referencia: {
         mes: String(n.emitidaEm.getUTCMonth() + 1).padStart(2, '0'),

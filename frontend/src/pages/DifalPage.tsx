@@ -6,6 +6,15 @@ import type {
   DifalLote, DifalAliquota, DifalReceitaUf,
 } from '../lib/api'
 
+/**
+ * Tipo de documento de origem que a UF aceita para a receita, na ordem que temos o dado:
+ * 10 = número da nota; 22 = chave da NF-e; 24 = chave do DF-e (as duas últimas usam a chave de 44 dígitos).
+ */
+function tipoDocPreferido(r: DifalReceitaUf): string | undefined {
+  const aceitos = r.tiposDocumentosOrigem.map((t) => t.codigo)
+  return ['10', '22', '24'].find((t) => aceitos.includes(t))
+}
+
 function brl(v: number | null | undefined) {
   return (v ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
@@ -654,7 +663,7 @@ function Configuracao() {
     onError: (e) => setErro(mensagemErro(e)),
   })
   const salvar = useMutation({
-    mutationFn: ({ uf, dados }: { uf: string; dados: { codigoReceitaGnre?: string; vencimentoRegra?: string } }) =>
+    mutationFn: ({ uf, dados }: { uf: string; dados: { codigoReceitaGnre?: string; vencimentoRegra?: string; tipoDocOrigemGnre?: string } }) =>
       difalApi.atualizarAliquota(uf, dados),
     onSuccess: () => { recarregar(); setUfAberta(null); buscar.reset() },
     onError: (e) => setErro(mensagemErro(e)),
@@ -754,7 +763,7 @@ function Configuracao() {
                         {buscar.data.receitas.map((r: DifalReceitaUf) => (
                           <li key={`${r.codigo}-${r.courier}`} className="flex flex-wrap items-center gap-2 text-xs">
                             <button
-                              onClick={() => salvar.mutate({ uf: a.uf, dados: { codigoReceitaGnre: r.codigo } })}
+                              onClick={() => salvar.mutate({ uf: a.uf, dados: { codigoReceitaGnre: r.codigo, tipoDocOrigemGnre: tipoDocPreferido(r) } })}
                               className="rounded bg-gray-900 px-2 py-0.5 text-white hover:bg-gray-800"
                             >
                               usar {r.codigo}
