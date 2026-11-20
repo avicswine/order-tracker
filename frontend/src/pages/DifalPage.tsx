@@ -27,6 +27,16 @@ function Icone({ nome, className = 'h-5 w-5' }: { nome: keyof typeof ICONES; cla
   )
 }
 
+// número da nota com o selo da empresa e, embaixo, o nome do cliente (ajuda a se organizar)
+function NotaCliente({ nf, empresa, cliente }: { nf: string; empresa: string; cliente: string }) {
+  return (
+    <span className="flex flex-col">
+      <span className="whitespace-nowrap font-medium text-slate-900">NF {nf} <SeloEmpresa empresa={empresa} /></span>
+      <span className="max-w-[220px] truncate text-xs font-normal text-slate-500" title={cliente}>{cliente}</span>
+    </span>
+  )
+}
+
 // selo da empresa (AVIC / AGRO)
 function SeloEmpresa({ empresa }: { empresa: string }) {
   const cor = empresa === 'AGRO' ? 'bg-violet-50 text-violet-700' : 'bg-sky-50 text-sky-700'
@@ -477,8 +487,8 @@ function GuiasPendentes() {
                     className="h-4 w-4 accent-blue-600"
                   />
                 </td>
-                <td className="px-2 py-2.5 whitespace-nowrap font-medium text-slate-900">
-                  NF {g.nfNumero} <SeloEmpresa empresa={g.empresa} />
+                <td className="px-2 py-2.5">
+                  <NotaCliente nf={g.nfNumero} empresa={g.empresa} cliente={g.clienteNome} />
                 </td>
                 <td className="px-2 py-2.5 text-slate-500">{dataBr(g.emitidaEm)}</td>
                 <td className="px-2 py-2.5 text-xs text-slate-500">vence {dataBr(g.prazo)}</td>
@@ -592,7 +602,7 @@ function VendasMlBarreira() {
                       title={bloqueada && v.pronta ? 'Lote de uma empresa só' : undefined} className="h-4 w-4 accent-blue-600" />
                   )}
                 </td>
-                <td className="whitespace-nowrap px-2 py-2.5 font-medium text-slate-900">NF {v.nfNumero} <SeloEmpresa empresa={v.empresa} /></td>
+                <td className="px-2 py-2.5"><NotaCliente nf={v.nfNumero} empresa={v.empresa} cliente={v.clienteNome} /></td>
                 <td className="px-2 py-2.5 text-slate-500">{dataBr(v.emitidaEm)}</td>
                 <td className="px-2 py-2.5 font-medium text-slate-700">{v.clienteUf}</td>
                 <td className="px-2 py-2.5 text-right font-semibold tabular-nums text-slate-900">{brl(v.difalCalculado)}</td>
@@ -693,7 +703,7 @@ function GuiasAtrasadas({ notas }: { notas: DifalGuiaPendente[] }) {
             <tbody className="divide-y divide-slate-100">
               {notas.map((g) => (
                 <tr key={g.id} className="transition-colors hover:bg-rose-50/40">
-                  <td className="whitespace-nowrap px-5 py-2 font-medium text-slate-900">NF {g.nfNumero} <SeloEmpresa empresa={g.empresa} /></td>
+                  <td className="px-5 py-2"><NotaCliente nf={g.nfNumero} empresa={g.empresa} cliente={g.clienteNome} /></td>
                   <td className="px-2 py-2 text-slate-500">{dataBr(g.emitidaEm)}</td>
                   <td className="px-2 py-2 text-rose-700">{dataBr(g.prazo)}</td>
                   <td className="px-2 py-2 font-medium text-slate-700">{g.clienteUf}</td>
