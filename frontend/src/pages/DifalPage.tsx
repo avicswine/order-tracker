@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { difalApi } from '../lib/api'
 import type {
@@ -103,13 +103,28 @@ function Vendas() {
     queryFn: () =>
       difalApi.listar({ responsavel: responsavel || undefined, busca: busca || undefined, pagina }),
   })
+  // A importação roda no servidor em segundo plano; aqui só consultamos o andamento a cada 3 s
+  const { data: importacao } = useQuery({
+    queryKey: ['difal-importacao'],
+    queryFn: () => difalApi.importarStatus(),
+    refetchInterval: (q) => (q.state.data?.emAndamento ? 3000 : false),
+  })
+  const terminadaEm = importacao?.terminadaEm ?? null
+  useEffect(() => {
+    if (!terminadaEm) return
+    qc.invalidateQueries({ queryKey: ['difal-notas'] })
+    qc.invalidateQueries({ queryKey: ['difal-resumo'] })
+    qc.invalidateQueries({ queryKey: ['difal-guias-pendentes'] })
+  }, [terminadaEm, qc])
   const importar = useMutation({
     mutationFn: () => difalApi.importar(90),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['difal-notas'] })
-      qc.invalidateQueries({ queryKey: ['difal-resumo'] })
-    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['difal-importacao'] }),
   })
+  const importando = importar.isPending || !!importacao?.emAndamento
+  const resumoImportacao = importacao?.resultado
+    ? importacao.resultado.map((r) => `${r.empresa}: ${r.gravadas} nova(s), ${r.atualizadas} atualizada(s), ${r.puladas} já completas, ${r.erros.length} erro(s)`).join(' · ')
+    : null
+  const errosImportacao = importacao?.resultado?.flatMap((r) => r.erros) ?? []
 
   const notas = lista?.notas ?? []
   const totalPaginas = lista ? Math.max(1, Math.ceil(lista.total / lista.porPagina)) : 1
@@ -123,16 +138,27 @@ function Vendas() {
         </p>
         <button
           onClick={() => importar.mutate()}
-          disabled={importar.isPending}
+          disabled={importando}
           className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
         >
-          {importar.isPending ? 'Buscando notas…' : 'Atualizar do Bling'}
+          {importando ? 'Buscando notas… (pode levar alguns minutos)' : 'Atualizar do Bling'}
         </button>
       </div>
 
-      {importar.isError && (
+      {(importar.isError || importacao?.erro) && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-          Não foi possível buscar as notas: {(importar.error as Error).message}
+          Não foi possível buscar as notas: {importacao?.erro ?? (importar.error as Error).message}
+        </div>
+      )}
+      {!importando && resumoImportacao && (
+        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+          <p>Última importação ({new Date(terminadaEm!).toLocaleString('pt-BR')}): {resumoImportacao}</p>
+          {errosImportacao.length > 0 && (
+            <ul className="mt-1 list-inside list-disc text-red-700">
+              {errosImportacao.slice(0, 5).map((e, i) => <li key={i}>{e}</li>)}
+              {errosImportacao.length > 5 && <li>… e mais {errosImportacao.length - 5}</li>}
+            </ul>
+          )}
         </div>
       )}
 

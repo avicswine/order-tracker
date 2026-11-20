@@ -9,7 +9,7 @@ import { Router, Request, Response } from 'express'
 import { query, body, validationResult } from 'express-validator'
 import { prisma } from '../lib/prisma'
 import { DifalResponsavel, DifalSituacao, Prisma } from '@prisma/client'
-import { importarNotas } from '../services/difal/importar'
+import { importarNotas, type ResultadoImportacao } from '../services/difal/importar'
 import { semearAliquotas } from '../services/difal/aliquotas'
 import { listarGuiasPendentes, gerarLoteDasNotas } from '../services/difal/guias'
 import { ErroMontagemGnre } from '../services/difal/gnre'
@@ -177,29 +177,55 @@ router.put(
   }
 )
 
-// POST /difal/importar — busca as notas do Bling e calcula (só leitura no Bling)
+// A importação roda em segundo plano: 90 dias de notas são minutos de chamadas ao Bling
+// (detalhe + XML por nota) e o proxy do Railway devolve 502 quando a requisição passa do
+// limite dele. O botão dispara e a tela consulta o andamento em /importar/status.
+interface EstadoImportacao {
+  emAndamento: boolean
+  iniciadaEm: Date | null
+  terminadaEm: Date | null
+  resultado: ResultadoImportacao[] | null
+  erro: string | null
+}
+let importacao: EstadoImportacao = { emAndamento: false, iniciadaEm: null, terminadaEm: null, resultado: null, erro: null }
+
+// POST /difal/importar — dispara a busca das notas do Bling (só leitura no Bling) e responde na hora
 router.post(
   '/importar',
   [body('dias').optional().isInt({ min: 1, max: 365 }), body('empresa').optional().trim(), body('forcar').optional().isBoolean()],
-  async (req: Request, res: Response) => {
+  (req: Request, res: Response) => {
     const erros = validationResult(req)
     if (!erros.isEmpty()) return res.status(400).json({ errors: erros.array() })
+    if (importacao.emAndamento) return res.status(409).json({ ok: false, erro: 'já existe uma importação em andamento' })
     const dias = Number(req.body?.dias ?? 90)
     const desde = new Date(Date.now() - dias * 24 * 60 * 60 * 1000)
-    try {
-      await semearAliquotas(prisma)
-      const resultado = await importarNotas(prisma, {
-        desde,
-        empresa: req.body?.empresa ? String(req.body.empresa) : undefined,
-        // forcar=true recalcula tudo (ex.: depois de mudar uma alíquota)
-        forcar: req.body?.forcar === true || req.body?.forcar === 'true',
-      })
-      res.json({ ok: true, desde, resultado })
-    } catch (e) {
-      res.status(500).json({ ok: false, erro: (e as Error).message })
+    const opcoes = {
+      desde,
+      empresa: req.body?.empresa ? String(req.body.empresa) : undefined,
+      // forcar=true recalcula tudo (ex.: depois de mudar uma alíquota)
+      forcar: req.body?.forcar === true || req.body?.forcar === 'true',
     }
+    importacao = { emAndamento: true, iniciadaEm: new Date(), terminadaEm: null, resultado: null, erro: null }
+    void (async () => {
+      try {
+        await semearAliquotas(prisma)
+        importacao.resultado = await importarNotas(prisma, opcoes)
+      } catch (e) {
+        importacao.erro = (e as Error).message
+        console.error('[DIFAL] importação falhou:', importacao.erro)
+      } finally {
+        importacao.emAndamento = false
+        importacao.terminadaEm = new Date()
+      }
+    })()
+    res.status(202).json({ ok: true, desde, iniciada: true })
   }
 )
+
+// GET /difal/importar/status — andamento e resultado da última importação
+router.get('/importar/status', (_req: Request, res: Response) => {
+  res.json(importacao)
+})
 
 // GET /difal/guias-pendentes — notas que precisam de guia nossa e o que falta em cada uma
 router.get('/guias-pendentes', [query('empresa').optional().trim()], async (req: Request, res: Response) => {
