@@ -13,7 +13,8 @@ import type {
 function tipoDocPreferido(r: DifalReceitaUf): string | undefined {
   if (!r.exigeDocumentoOrigem) return '' // a UF não exige: a guia vai sem documento de origem
   const aceitos = r.tiposDocumentosOrigem.map((t) => t.codigo)
-  return ['10', '22', '24'].find((t) => aceitos.includes(t))
+  // se a UF só aceita tipos que o sistema não preenche (ex.: 23 CT-e), grava o primeiro: a nota fica "falta"
+  return ['10', '22', '24'].find((t) => aceitos.includes(t)) ?? aceitos[0]
 }
 
 function brl(v: number | null | undefined) {

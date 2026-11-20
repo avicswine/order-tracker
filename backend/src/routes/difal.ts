@@ -155,6 +155,10 @@ router.put(
     body('vencimentoRegra').optional().isIn(['saida', 'dia15']),
     body('tipoDocOrigemGnre').optional().trim().matches(/^(\d{2})?$/).withMessage('tipo de documento de origem tem 2 dígitos (ou vazio, se a UF não exige)'),
     body('camposAdicionais').optional().isArray({ max: 20 }),
+    body('camposAdicionais.*.codigo').isString().trim().isLength({ min: 1, max: 10 }),
+    body('camposAdicionais.*.titulo').isString().isLength({ max: 120 }),
+    body('camposAdicionais.*.tipo').optional().isString().isLength({ max: 2 }),
+    body('camposAdicionais.*.obrigatorio').isBoolean(),
     body('exigeProduto').optional().isBoolean(),
   ],
   async (req: Request, res: Response) => {
