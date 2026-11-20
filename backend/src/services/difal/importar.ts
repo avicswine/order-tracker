@@ -59,7 +59,8 @@ interface NfeBlingDetalhe {
   serie?: string | number
   chaveAcesso?: string
   dataEmissao?: string
-  naturezaOperacao?: string
+  /** o Bling devolve um objeto { id, descricao? } (em produção veio só com id) */
+  naturezaOperacao?: string | { id?: number | string; descricao?: string }
   valorNota?: number
   valorFrete?: number
   situacao?: number
@@ -338,7 +339,8 @@ export async function importarNotas(
           nfChave: nf.chaveAcesso || null,
           blingId: nf.id != null ? String(nf.id) : null,
           emitidaEm: nf.dataEmissao ? new Date(nf.dataEmissao) : new Date(),
-          naturezaOperacao: nf.naturezaOperacao ?? null,
+          naturezaOperacao:
+            typeof nf.naturezaOperacao === 'string' ? nf.naturezaOperacao : nf.naturezaOperacao?.descricao ?? null,
           clienteNome: nf.contato?.nome ?? 'Não informado',
           clienteUf: uf,
           clienteTemIe: dados.temInscricaoEstadual,
@@ -376,7 +378,9 @@ export async function importarNotas(
             res.gravadas++
           }
         } catch (e) {
-          res.erros.push(`gravar NF ${numero}: ${(e as Error).message}`)
+          // só a última linha: o Prisma repete o registro inteiro (com CPF) na mensagem
+          const ultimaLinha = String((e as Error).message).trim().split('\n').pop() ?? 'erro'
+          res.erros.push(`gravar NF ${numero}: ${ultimaLinha}`)
         }
       }
 
