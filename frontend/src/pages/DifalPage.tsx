@@ -610,7 +610,8 @@ function LotesGnre() {
                       {consultar.isPending ? 'Consultando…' : 'Consultar resultado'}
                     </button>
                   )}
-                  {!l.numeroRecibo && (
+                  {/* mesma regra do servidor: não enviado, ou enviado com todas as guias invalidadas (1 portal, 2 UF) */}
+                  {(!l.numeroRecibo || (l.guiasResultado.length > 0 && l.guiasResultado.every((g) => ['1', '2'].includes(g.situacaoGuia)))) && (
                     <button
                       onClick={() => { setErro(null); if (window.confirm(`Desfazer o lote ${l.id}? As notas voltam para a fila de guias pendentes.`)) desfazer.mutate(l.id) }}
                       disabled={ocupado}
