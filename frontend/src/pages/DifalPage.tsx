@@ -472,6 +472,9 @@ function GuiasPendentes() {
         </div>
       )}
       <table className="min-w-full text-sm">
+        <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+          <tr><th className="w-10 px-5 py-2"></th><th className="px-2 py-2">Nota / cliente</th><th className="px-2 py-2">Emissão</th><th className="px-2 py-2">Prazo</th><th className="px-2 py-2">UF</th><th className="px-2 py-2">Envio</th><th className="px-2 py-2 text-right">DIFAL</th><th className="px-5 py-2">Situação</th></tr>
+        </thead>
         <tbody className="divide-y divide-gray-100">
           {noPrazo.map((g) => {
             const bloqueada = !g.pronta || (empresaEscolhida !== undefined && g.empresa !== empresaEscolhida && !escolhidas.has(g.id))
@@ -591,6 +594,9 @@ function VendasMlBarreira() {
         </div>
       )}
       <table className="min-w-full text-sm">
+        <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+          <tr><th className="w-10 px-5 py-2"></th><th className="px-2 py-2">Nota / cliente</th><th className="px-2 py-2">Emissão</th><th className="px-2 py-2">UF</th><th className="px-2 py-2 text-right">DIFAL</th><th className="px-2 py-2">Venda no ML</th><th className="px-5 py-2 text-right">Situação</th></tr>
+        </thead>
         <tbody className="divide-y divide-slate-100">
           {vendas.map((v) => {
             const bloqueada = !v.pronta || (empresaEscolhida !== undefined && v.empresa !== empresaEscolhida && !escolhidas.has(v.id))
@@ -692,7 +698,7 @@ function GuiasAtrasadas({ notas }: { notas: DifalGuiaPendente[] }) {
           <table className="min-w-full text-sm">
             <thead className="sticky top-0 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
               <tr>
-                <th className="px-5 py-2 text-left">NF</th>
+                <th className="px-5 py-2 text-left">Nota / cliente</th>
                 <th className="px-2 py-2 text-left">Emissão</th>
                 <th className="px-2 py-2 text-left">Venceu em</th>
                 <th className="px-2 py-2 text-left">UF</th>
