@@ -1344,7 +1344,8 @@ export function DifalPage() {
   const [aba, setAba] = useState<NomeAba>('vendas')
 
   return (
-    <div className="space-y-6">
+    // mesma margem das outras páginas (p-6): sem ela o conteúdo encosta na barra lateral
+    <div className="space-y-6 p-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-slate-900">DIFAL</h1>
         <p className="mt-1 max-w-3xl text-sm text-slate-500">
