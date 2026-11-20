@@ -8,7 +8,7 @@
  */
 import { writeFileSync } from 'fs'
 import { montarLoteGnre, dividirEmLotes, ErroMontagemGnre, textoGnre, type GuiaGnre, type EmitenteGnre } from './gnre'
-import { classificarCamposExtras, valorCampoExtra } from './guias'
+import { classificarCamposExtras, valorCampoExtra, prazoLegal } from './guias'
 import type { DifalNota } from '@prisma/client'
 
 // dados de exemplo — NÃO são de cliente real
@@ -111,6 +111,11 @@ caso('data de emissão de nota da 1h30 não volta um dia', valorCampoExtra({ cod
 caso('observação: DIFAL NF + número sem zeros à esquerda', valorCampoExtra({ codigo: '106', titulo: 'OBSERVAÇÃO', conteudo: 'observacao' }, notaMadrugada) === 'DIFAL NF 13234')
 caso('observação: número de 7 dígitos não é cortado', valorCampoExtra({ codigo: '106', titulo: 'OBSERVAÇÃO', conteudo: 'observacao' }, { ...notaMadrugada, nfNumero: '1234567' }) === 'NF 1234567')
 caso('chave da NF-e vai inteira', valorCampoExtra({ codigo: '107', titulo: 'Chave', conteudo: 'chaveNfe' }, notaMadrugada)?.length === 44)
+
+// prazo legal (guia atrasada vai para a contabilidade)
+caso('prazo "na saída" é o dia da nota, mesmo emitida de madrugada', prazoLegal('saida', new Date('2026-11-19T01:30:00Z')) === '2026-11-19')
+caso('prazo "dia 15" é o dia 15 do mês seguinte', prazoLegal('dia15', new Date('2026-11-30T23:00:00Z')) === '2026-12-15')
+caso('prazo "dia 15" de dezembro vira janeiro do ano seguinte', prazoLegal('dia15', new Date('2026-12-10T10:00:00Z')) === '2027-01-15')
 
 console.log(falhas === 0 ? '\nTodos os casos conferem.' : `\n${falhas} caso(s) com erro.`)
 process.exit(falhas === 0 ? 0 : 1)

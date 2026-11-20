@@ -12,6 +12,7 @@
 import type { PrismaClient, DifalNota, DifalAliquota, DifalEmitente } from '@prisma/client'
 import { montarLoteGnre, ErroMontagemGnre, LIMITE_GUIAS_POR_LOTE, type GuiaGnre } from './gnre'
 import { ambienteGnre } from './portalGnre'
+import { dataBR } from '../separacao/datas'
 
 export interface GuiaPendente {
   id: string
@@ -24,6 +25,10 @@ export interface GuiaPendente {
   pronta: boolean
   /** o que ainda falta, em linguagem simples */
   faltando: string[]
+  /** último dia para pagar sem multa/juros (AAAA-MM-DD), pela regra de vencimento da UF */
+  prazo: string
+  /** passou do prazo: não vai para lote GNRE, vai para a contabilidade (decisão do José, 20/11/2026) */
+  atrasada: boolean
 }
 
 /** Tipos de documento de origem que usam a chave de 44 dígitos (GnreConfigUF): 22 = chave da NF-e, 24 = chave do DF-e */
@@ -139,9 +144,11 @@ export async function listarGuiasPendentes(prisma: PrismaClient, empresa?: strin
   ])
   const porUf = new Map(aliquotas.map((a) => [a.uf, a]))
   const porEmpresa = new Map(emitentes.map((e) => [e.empresa, e]))
+  const hoje = dataBR()
 
   return notas.map((n) => {
     const faltando = oQueFalta(n, porUf.get(n.clienteUf), porEmpresa.get(n.empresa))
+    const prazo = prazoLegal(porUf.get(n.clienteUf)?.vencimentoRegra ?? REGRA_PADRAO, n.emitidaEm)
     return {
       id: n.id,
       empresa: n.empresa,
@@ -151,6 +158,8 @@ export async function listarGuiasPendentes(prisma: PrismaClient, empresa?: strin
       difalCalculado: n.difalCalculado,
       pronta: faltando.length === 0,
       faltando,
+      prazo,
+      atrasada: prazo < hoje,
     }
   })
 }
@@ -159,16 +168,19 @@ function aaaaMmDd(d: Date): string {
   return d.toISOString().slice(0, 10)
 }
 
+const REGRA_PADRAO = 'saida'
+
 /**
- * Vencimento conforme a regra da UF:
- *  - "saida": a guia deveria acompanhar a mercadoria; como a nota já saiu, vence hoje.
+ * Prazo legal para pagar sem multa e juros, pela regra da UF:
+ *  - "saida": a guia acompanha a mercadoria: o prazo é o dia da nota.
  *  - "dia15": até o dia 15 do mês seguinte ao da emissão.
+ * emitidaEm guarda o horário de Brasília como se fosse UTC: as partes UTC dão o dia da nota.
  */
-function vencimento(regra: string, emitidaEm: Date, hoje: Date): string {
+export function prazoLegal(regra: string, emitidaEm: Date): string {
   if (regra === 'dia15') {
     return aaaaMmDd(new Date(Date.UTC(emitidaEm.getUTCFullYear(), emitidaEm.getUTCMonth() + 1, 15)))
   }
-  return aaaaMmDd(hoje)
+  return aaaaMmDd(emitidaEm)
 }
 
 export interface LoteGerado {
@@ -207,10 +219,16 @@ export async function gerarLoteDasNotas(prisma: PrismaClient, ids: string[], hoj
   if (!emitente) throw new ErroMontagemGnre(`dados do emitente ${empresa} ainda não foram lidos de nenhuma nota`)
   const porUf = new Map(aliquotas.map((a) => [a.uf, a]))
 
+  const hojeBr = dataBR(hoje) // dia de hoje em Brasília (o servidor roda em UTC)
   const guias: GuiaGnre[] = notas.map((n) => {
     const faltando = oQueFalta(n, porUf.get(n.clienteUf), emitente)
     if (faltando.length) throw new ErroMontagemGnre(`nota ${n.nfNumero}: falta ${faltando.join('; ')}`)
     const a = porUf.get(n.clienteUf)!
+    const prazo = prazoLegal(a.vencimentoRegra, n.emitidaEm)
+    // guia atrasada sairia sem multa e juros: vai para a contabilidade, não para lote
+    if (prazo < hojeBr) {
+      throw new ErroMontagemGnre(`nota ${n.nfNumero} passou do prazo (vencia em ${prazo.split('-').reverse().join('/')}): vai para a contabilidade`)
+    }
     return {
       ufFavorecida: n.clienteUf,
       receita: a.codigoReceitaGnre!,
@@ -218,8 +236,8 @@ export async function gerarLoteDasNotas(prisma: PrismaClient, ids: string[], hoj
         documentoOrigem: documentoOrigem(n, a.tipoDocOrigemGnre)!,
         tipoDocumentoOrigem: a.tipoDocOrigemGnre,
       }),
-      dataVencimento: vencimento(a.vencimentoRegra, n.emitidaEm, hoje),
-      dataPagamento: aaaaMmDd(hoje),
+      dataVencimento: prazo,
+      dataPagamento: hojeBr,
       camposExtras: camposExtrasDaUf(a).map((c) => ({ codigo: c.codigo, valor: valorCampoExtra(c, n)! })),
       valorPrincipal: n.difalCalculado,
       referencia: {
