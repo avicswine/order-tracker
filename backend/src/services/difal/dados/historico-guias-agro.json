@@ -6,6 +6,7 @@
   "AGRO-2026-01.zip",
   "AGRO-2026-02.zip",
   "AGRO-2026-03.zip",
+  "AGRO-2026-04.zip",
   "AGRO-2026-05.zip",
   "AGRO-2026-06.zip",
   "AGRO-2026-07.zip",
@@ -101,6 +102,40 @@
    "reducao": true
   },
   {
+   "nf": "2251",
+   "uf": "PI",
+   "data": "2025-12-23",
+   "base": 112.93,
+   "difal_pago": 17.5,
+   "difal_devido": 1.69,
+   "diferenca": 15.81,
+   "encargos": 3.05,
+   "pct_pago": 15.5,
+   "pct_devido": 1.5,
+   "guia": "DAR/PI",
+   "autuacao": true,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "2257",
+   "uf": "PI",
+   "data": "2025-12-23",
+   "base": 193.36,
+   "difal_pago": 29.97,
+   "difal_devido": 2.9,
+   "diferenca": 27.07,
+   "encargos": 6.5,
+   "pct_pago": 15.5,
+   "pct_devido": 1.5,
+   "guia": "DAR/PI",
+   "autuacao": true,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
    "nf": "2389",
    "uf": "AM",
    "data": "2026-01-07",
@@ -112,6 +147,23 @@
    "pct_pago": 13.0,
    "pct_devido": 1.5,
    "guia": "DAR/AM",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "2410",
+   "uf": "PI",
+   "data": "2026-01-08",
+   "base": 394.18,
+   "difal_pago": 55.19,
+   "difal_devido": 5.91,
+   "diferenca": 49.28,
+   "encargos": 12.14,
+   "pct_pago": 14.0,
+   "pct_devido": 1.5,
+   "guia": "GNRE",
    "autuacao": false,
    "estimada": false,
    "metodo": "carga",
@@ -183,6 +235,23 @@
    "autuacao": false,
    "estimada": false,
    "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "2646",
+   "uf": "CE",
+   "data": "2026-01-27",
+   "base": 155.44,
+   "difal_pago": 20.21,
+   "difal_devido": 5.66,
+   "diferenca": 14.55,
+   "encargos": 0.84,
+   "pct_pago": 13.0,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
    "reducao": true
   },
   {
@@ -305,6 +374,23 @@
    "reducao": true
   },
   {
+   "nf": "3009",
+   "uf": "AL",
+   "data": "2026-02-26",
+   "base": 469.17,
+   "difal_pago": 15.76,
+   "difal_devido": 7.04,
+   "diferenca": 8.72,
+   "encargos": 3.43,
+   "pct_pago": 3.36,
+   "pct_devido": 1.5,
+   "guia": "DAR/AL",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
    "nf": "3078",
    "uf": "RN",
    "data": "2026-03-03",
@@ -350,6 +436,23 @@
    "pct_pago": 3.36,
    "pct_devido": 1.5,
    "guia": "DAR/AL",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "3239",
+   "uf": "AM",
+   "data": "2026-03-18",
+   "base": 293.7,
+   "difal_pago": 38.18,
+   "difal_devido": 4.41,
+   "diferenca": 33.77,
+   "encargos": 5.65,
+   "pct_pago": 13.0,
+   "pct_devido": 1.5,
+   "guia": "DAR/AM",
    "autuacao": false,
    "estimada": false,
    "metodo": "carga",
@@ -2015,6 +2118,38 @@
    "zip": "AGRO-2026-03.zip",
    "motivos": [
     "multa/juros de R$ 0.65 pela diferença do total (leitor não achou no PDF)"
+   ]
+  },
+  {
+   "nf": "3009",
+   "uf": "AL",
+   "zip": "AGRO-2026-04.zip",
+   "motivos": [
+    "multa/juros de R$ 3.43 pela diferença do total (leitor não achou no PDF)"
+   ]
+  },
+  {
+   "nf": "2251",
+   "uf": "PI",
+   "zip": "AGRO-2026-04.zip",
+   "motivos": [
+    "multa/juros de R$ 0.39 pela diferença do total (leitor não achou no PDF)"
+   ]
+  },
+  {
+   "nf": "2646",
+   "uf": "CE",
+   "zip": "AGRO-2026-04.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "2257",
+   "uf": "PI",
+   "zip": "AGRO-2026-04.zip",
+   "motivos": [
+    "multa/juros de R$ 0.66 pela diferença do total (leitor não achou no PDF)"
    ]
   },
   {
