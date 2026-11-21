@@ -197,7 +197,8 @@ export async function fechamentoMensal(prisma: PrismaClient, meses = 6): Promise
     prisma.difalCobrancaMl.findMany({ where: { periodo: { gte: `${desdeStr}-01` } } }),
     prisma.difalNota.findMany({
       // vendas em que nós pagamos a guia e mandamos o comprovante ao ML não são cobrança do ML
-      where: { responsavel: 'ML_PAGA', emitidaEm: { gte: desde }, comprovanteMlEnviadoEm: null },
+      // só vendas com DIFAL e que o ML recolhe: sem guia nossa (de 20/11/2026 em diante nós pagamos no dia)
+      where: { responsavel: 'ML_PAGA', emitidaEm: { gte: desde }, comprovanteMlEnviadoEm: null, guiaGeradaEm: null, difalCalculado: { gt: 0 } },
       select: { empresa: true, emitidaEm: true, difalCalculado: true },
     }),
   ])

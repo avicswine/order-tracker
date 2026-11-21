@@ -852,6 +852,12 @@ function FechamentoMensal() {
     onSettled: () => qc.invalidateQueries({ queryKey: ['difal-importacao'] }),
   })
   const importandoHistorico = importarHistorico.isPending || !!importacao?.emAndamento
+  // quando a importação termina, o fechamento é recarregado (a coluna 'Nossa conta' se completa sozinha)
+  const estavaImportando = useRef(false)
+  useEffect(() => {
+    if (estavaImportando.current && !importacao?.emAndamento) qc.invalidateQueries({ queryKey: ['difal-fechamento'] })
+    estavaImportando.current = !!importacao?.emAndamento
+  }, [importacao?.emAndamento, qc])
 
   return (
     <div className="difal-secao difal-secao-ciano overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -867,7 +873,7 @@ function FechamentoMensal() {
         <span className="flex flex-wrap items-center gap-2">
           {/* a conta do ML já foi bloqueada: o dia a dia lê só 2 meses; os 12 meses ficam num botão à parte, para usar uma vez */}
           <button
-            onClick={() => { if (window.confirm('Buscar no Bling as notas desde 01/12/2025 (só leitura)? São milhares de notas: roda em segundo plano e pode levar até 1 hora. Use uma vez, para completar a coluna \u201cNossa conta\u201d dos meses antigos.')) importarHistorico.mutate() }}
+            onClick={() => { if (window.confirm('Buscar no Bling as notas desde 01/12/2025 (só leitura)? São milhares de notas: roda em segundo plano e pode levar até 1 hora. Use uma vez, para completar a coluna \u201cNossa conta\u201d dos meses antigos. N\u00e3o use perto das 16h: a rotina di\u00e1ria importa no mesmo hor\u00e1rio.')) importarHistorico.mutate() }}
             disabled={importandoHistorico}
             className="difal-btn rounded-xl px-3 py-2 text-xs text-slate-500 hover:text-slate-800 disabled:opacity-50"
           >
@@ -914,6 +920,9 @@ function FechamentoMensal() {
         <div className="border-b border-indigo-100 bg-indigo-50 px-4 py-2 text-xs text-indigo-900">
           Importando notas do Bling em segundo plano… a coluna &ldquo;Nossa conta&rdquo; se completa quando terminar.
         </div>
+      )}
+      {!importacao?.emAndamento && importacao?.erro && (
+        <div className="border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800">Última importação do Bling falhou: {importacao.erro}</div>
       )}
       {importarHistorico.isError && (
         <div className="border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800">Não foi possível iniciar a importação: {mensagemErro(importarHistorico.error)}</div>

@@ -200,12 +200,12 @@ export async function marcarComprovanteMlEnviado(prisma: PrismaClient, id: strin
  */
 export const UFS_COM_COBRANCA = ['AC', 'AL', 'AM', 'CE', 'PB', 'PI', 'RN', 'TO']
 
-/** notas nossas entram na lista de Vendas se emitidas nos últimos 90 dias (a importação padrão); as mais antigas
- * ficam com a contabilidade e só servem ao fechamento */
-const JANELA_NOSSAS_DIAS = 90
-function limiteNossas(): Date {
-  return new Date(`${somarDias(dataBR(), -JANELA_NOSSAS_DIAS)}T00:00:00Z`) // emitidaEm guarda Brasília como UTC
-}
+/**
+ * Notas emitidas antes de o monitor começar a importar (a 1ª importação trouxe de 24/08/2026 em diante) ficam com a
+ * contabilidade: a importação histórica do fechamento (desde dez/2025) não pode encher a lista de Vendas nem os cards.
+ * Tudo o que já aparecia na lista continua aparecendo. emitidaEm guarda Brasília como UTC.
+ */
+export const INICIO_LISTA_NOTAS = new Date('2026-08-24T00:00:00Z')
 
 /** Vendas do ML que pagamos nós: sem guia e com nota de até 30 dias, ou com guia gerada e comprovante ainda não enviado */
 export function filtroVendasMl(): Prisma.DifalNotaWhereInput {
@@ -231,8 +231,8 @@ export async function listarGuiasPendentes(prisma: PrismaClient, empresa?: strin
         OR: [
           // as nossas: sem guia, ou com guia que ainda não foi aceita (recusada, erro de comunicação, sem resultado);
           // a aceita sai daqui (vai para 'O que já pagamos') — filtro logo abaixo, depois de ler o resultado do lote
-          // nota nossa de até 90 dias (a importação histórica do fechamento não pode encher a lista), ou já em lote
-          { responsavel: 'NOSSO', situacao: { in: [...SITUACOES_ABERTAS] }, OR: [{ emitidaEm: { gte: limiteNossas() } }, { guiaLoteId: { not: null } }] },
+          // nota nossa desde o início do monitor (a importação histórica não enche a lista), ou já em lote
+          { responsavel: 'NOSSO', situacao: { in: [...SITUACOES_ABERTAS] }, OR: [{ emitidaEm: { gte: INICIO_LISTA_NOTAS } }, { guiaLoteId: { not: null } }] },
           filtroVendasMl(),
         ],
       },
