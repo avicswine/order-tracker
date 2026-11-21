@@ -1,11 +1,15 @@
 /**
- * Tipo de envio das vendas do Mercado Livre na lista de guias do DIFAL (FULL, Coleta, A combinar, ME1...).
- * Pedido do José em 20/11/2026. Só leitura no ML, uma vez por venda e só nas vendas que aparecem na lista
- * (DIFAL > 0, nota de até 30 dias): a conta do ML já foi bloqueada, então chamadas são poucas e param no 429.
+ * Tipo de envio e rastreio do Mercado Livre das vendas da lista de guias do DIFAL (pedidos do José em 20/11/2026).
+ * Só leitura no ML e só nas vendas que aparecem na lista (DIFAL > 0, nota de até 30 dias): a conta do ML já foi
+ * bloqueada, então as chamadas são poucas, com pausa, no máximo LIMITE_POR_RODADA por vez, e param no primeiro 429.
+ *   1) venda sem tipo de envio: lê a venda e o envio uma vez (tipo + status do envio)
+ *   2) venda do Mercado Envios ainda não entregue: relê só o envio (status atual); entregue não é lida de novo
  *
- * Valores do ML como o projeto já usa (cmvsync/ml_client.py:438 e :1450; services/mlEnvios.ts:247):
+ * Valores do ML como o projeto já usa (cmvsync/ml_client.py:438 e :1450; services/mlEnvios.ts:67, :83 e :247):
  *   logistic_type: fulfillment (Full), cross_docking (Coleta), drop_off/xd_drop_off/places (agência), self_service (Flex)
  *   mode: me1 (logística própria ME1), custom/not_specified (a combinar)
+ *   status do envio: ready_to_ship, shipped (substatus out_for_delivery), delivered, not_delivered, cancelled
+ *   previsão: shipping_option.estimated_delivery_time.date
  */
 import axios from 'axios'
 import type { PrismaClient } from '@prisma/client'
@@ -16,9 +20,14 @@ import { JANELA_ML_DIAS } from './guias'
 const ML_API = 'https://api.mercadolibre.com'
 /** pausa entre chamadas, para não pressionar o limite do ML */
 const PAUSA_MS = 150
-/** no máximo por rodada: o resto fica para a próxima atualização */
+/** no máximo por rodada (tipo de envio + rastreio juntos): o resto fica para a próxima atualização */
 const LIMITE_POR_RODADA = 100
+/** envios do ML (a mercadoria vai pela logística do ML): só neles o rastreio vem do ML */
+export const LOGISTICAS_MERCADO_ENVIOS = ['FULL', 'Coleta', 'Agência', 'Flex']
+/** status em que o envio não muda mais: não se consulta de novo */
+const STATUS_FINAIS = ['delivered', 'not_delivered', 'cancelled']
 
+type Auth = { headers: Record<string, string>; timeout: number }
 const dorme = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 /** rótulo para a tela a partir do envio do ML */
@@ -34,7 +43,7 @@ export function rotuloLogistica(logisticType: string | null | undefined, mode: s
 
 class LimiteMl extends Error {}
 
-async function lerJson(url: string, auth: { headers: Record<string, string>; timeout: number }): Promise<Record<string, unknown> | null> {
+async function lerJson(url: string, auth: Auth): Promise<Record<string, unknown> | null> {
   try {
     const { data } = await axios.get(url, auth)
     return data as Record<string, unknown>
@@ -46,60 +55,94 @@ async function lerJson(url: string, auth: { headers: Record<string, string>; tim
   }
 }
 
-/** tipo de envio de uma venda; o número pode ser de venda ou de carrinho (pack) */
-async function logisticaDaVenda(id: string, auth: { headers: Record<string, string>; timeout: number }): Promise<string> {
+/** campos do envio que a tela mostra */
+function rastreioDoEnvio(envioId: string, envio: Record<string, unknown>) {
+  const opcao = envio.shipping_option as { estimated_delivery_time?: { date?: string } } | undefined
+  const previsao = opcao?.estimated_delivery_time?.date
+  return {
+    mlEnvioId: envioId,
+    mlEnvioStatus: envio.status ? String(envio.status) : null,
+    mlEnvioSubstatus: envio.substatus ? String(envio.substatus) : null,
+    mlPrevisao: previsao ? new Date(previsao) : null,
+    mlEnvioLidoEm: new Date(),
+  }
+}
+
+/** tipo de envio de uma venda (o número pode ser de venda ou de carrinho) e, havendo envio do ML, o rastreio */
+async function lerVenda(id: string, auth: Auth): Promise<{ mlLogistica: string } & Partial<ReturnType<typeof rastreioDoEnvio>>> {
   let venda = await lerJson(`${ML_API}/orders/${id}`, auth)
   if (!venda) {
     // número de carrinho: pega a primeira venda do pack
     const pack = await lerJson(`${ML_API}/packs/${id}`, auth)
     const primeira = (pack?.orders as { id?: unknown }[] | undefined)?.[0]?.id
-    if (!primeira) return 'não identificado'
+    if (!primeira) return { mlLogistica: 'não identificado' }
     await dorme(PAUSA_MS)
     venda = await lerJson(`${ML_API}/orders/${String(primeira)}`, auth)
-    if (!venda) return 'não identificado'
+    if (!venda) return { mlLogistica: 'não identificado' }
   }
   const envioId = (venda.shipping as { id?: unknown } | undefined)?.id
-  if (!envioId) return 'A combinar' // venda sem envio do ML: entrega combinada com o comprador
+  if (!envioId) return { mlLogistica: 'A combinar' } // venda sem envio do ML: entrega combinada com o comprador
   await dorme(PAUSA_MS)
   const envio = await lerJson(`${ML_API}/shipments/${String(envioId)}`, auth)
-  if (!envio) return 'não identificado'
-  return rotuloLogistica(envio.logistic_type as string | undefined, envio.mode as string | undefined)
+  if (!envio) return { mlLogistica: 'não identificado' }
+  return { mlLogistica: rotuloLogistica(envio.logistic_type as string | undefined, envio.mode as string | undefined), ...rastreioDoEnvio(String(envioId), envio) }
 }
 
-/** Preenche o tipo de envio das vendas do ML da lista que ainda não têm. Para no primeiro 429. */
+/**
+ * Preenche o tipo de envio das vendas do ML da lista que ainda não têm e atualiza o rastreio das vendas do
+ * Mercado Envios ainda não entregues. Para no primeiro 429.
+ */
 export async function preencherLogisticaMl(prisma: PrismaClient): Promise<{ lidas: number; erros: string[] }> {
   const limite = new Date(`${somarDias(dataBR(), -JANELA_ML_DIAS)}T00:00:00Z`) // emitidaEm guarda Brasília como UTC
-  const notas = await prisma.difalNota.findMany({
-    where: { responsavel: 'ML_PAGA', difalCalculado: { gt: 0 }, emitidaEm: { gte: limite }, mlLogistica: null, mlOrderId: { not: null } },
-    select: { id: true, empresa: true, nfNumero: true, mlOrderId: true },
+  const daLista = { responsavel: 'ML_PAGA' as const, difalCalculado: { gt: 0 }, emitidaEm: { gte: limite }, mlOrderId: { not: null } }
+  const semTipo = await prisma.difalNota.findMany({
+    // sem tipo de envio, ou do Mercado Envios lida antes de o rastreio existir (sem o número do envio)
+    where: { ...daLista, OR: [{ mlLogistica: null }, { mlLogistica: { in: LOGISTICAS_MERCADO_ENVIOS }, mlEnvioId: null }] },
+    select: { id: true, empresa: true, nfNumero: true, mlOrderId: true, mlEnvioId: true },
     orderBy: { emitidaEm: 'desc' },
     take: LIMITE_POR_RODADA,
   })
+  // rastreio: Mercado Envios, já com o envio conhecido e ainda não entregue; o que foi lido há mais tempo primeiro
+  const emAndamento = await prisma.difalNota.findMany({
+    where: {
+      ...daLista, mlLogistica: { in: LOGISTICAS_MERCADO_ENVIOS }, mlEnvioId: { not: null },
+      OR: [{ mlEnvioStatus: null }, { mlEnvioStatus: { notIn: STATUS_FINAIS } }],
+    },
+    select: { id: true, empresa: true, nfNumero: true, mlOrderId: true, mlEnvioId: true },
+    orderBy: { mlEnvioLidoEm: { sort: 'asc', nulls: 'first' } },
+    take: Math.max(0, LIMITE_POR_RODADA - semTipo.length),
+  })
+
   const res = { lidas: 0, erros: [] as string[] }
-  const acessos = new Map<string, Awaited<ReturnType<typeof mlAuth>>>()
-  for (const n of notas) {
+  const acessos = new Map<string, Auth | null>()
+  for (const [n, soRastreio] of [...semTipo.map((n) => [n, false] as const), ...emAndamento.map((n) => [n, true] as const)]) {
     const conta = n.empresa.toLowerCase() as MlCompany
     if (!acessos.has(conta)) {
       try {
-        acessos.set(conta, await mlAuth(conta))
+        const a = await mlAuth(conta)
+        acessos.set(conta, a ? (a.H as Auth) : null)
       } catch (e) {
-        // sem acesso ao ML desta conta (ex.: renovação do token falhou): segue sem o tipo de envio, sem derrubar a importação
-        res.erros.push(`tipo de envio ML (${conta}): ${String((e as Error).message).split('\n')[0]}`)
-        acessos.set(conta, null as unknown as Awaited<ReturnType<typeof mlAuth>>)
+        // sem acesso ao ML desta conta (ex.: renovação do token falhou): segue sem, sem derrubar a importação
+        res.erros.push(`envio ML (${conta}): ${String((e as Error).message).split('\n')[0]}`)
+        acessos.set(conta, null)
       }
     }
     const acesso = acessos.get(conta)
     if (!acesso) continue // conta do ML sem token (ex.: no PC): fica para quando houver
     try {
-      const rotulo = await logisticaDaVenda(n.mlOrderId!, acesso.H as { headers: Record<string, string>; timeout: number })
-      await prisma.difalNota.update({ where: { id: n.id }, data: { mlLogistica: rotulo } })
+      if (soRastreio) {
+        const envio = await lerJson(`${ML_API}/shipments/${n.mlEnvioId}`, acesso)
+        if (envio) await prisma.difalNota.update({ where: { id: n.id }, data: rastreioDoEnvio(n.mlEnvioId!, envio) })
+      } else {
+        await prisma.difalNota.update({ where: { id: n.id }, data: await lerVenda(n.mlOrderId!, acesso) })
+      }
       res.lidas++
     } catch (e) {
       if (e instanceof LimiteMl) {
-        res.erros.push(`tipo de envio ML: ${e.message}; o resto fica para a próxima atualização`)
+        res.erros.push(`envio ML: ${e.message}; o resto fica para a próxima atualização`)
         break
       }
-      res.erros.push(`tipo de envio ML da NF ${n.nfNumero}: ${String((e as Error).message).split('\n')[0]}`)
+      res.erros.push(`envio ML da NF ${n.nfNumero}: ${String((e as Error).message).split('\n')[0]}`)
     }
     await dorme(PAUSA_MS)
   }

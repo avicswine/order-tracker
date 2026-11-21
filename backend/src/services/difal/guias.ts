@@ -36,6 +36,8 @@ export interface GuiaPendente {
   atrasada: boolean
   /** envio da nota no order-tracker; null quando a nota não está lá (retirada, Mercado Envios, Shopee…) */
   envio: EnvioDaNota | null
+  /** rastreio do Mercado Envios (venda do ML que não passa pelo order-tracker); null se não houver */
+  envioMl: { status: string | null; substatus: string | null; previsao: Date | null; lidoEm: Date | null } | null
   /** venda do Mercado Livre: depois de pagar, anexar o comprovante na venda do ML */
   ml: boolean
   mlOrderId: string | null
@@ -288,6 +290,7 @@ export async function listarGuiasPendentes(prisma: PrismaClient, empresa?: strin
       canal: n.canalNome,
       mlLogistica: n.mlLogistica,
       envio: envioPorPedido.get(numeroDoPedido(n.empresa, n.nfNumero)) ?? null,
+      envioMl: n.mlEnvioId ? { status: n.mlEnvioStatus, substatus: n.mlEnvioSubstatus, previsao: n.mlPrevisao, lidoEm: n.mlEnvioLidoEm } : null,
     }
   })
 }
