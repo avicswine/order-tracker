@@ -423,6 +423,8 @@ function GuiasPendentes({ lugarCards, acaoExtra }: { lugarCards: HTMLElement | n
   const prontas = mostradas.filter((g) => g.pronta)
   // o lote leva só as marcadas que estão na tela: busca, datas ou estado não podem esconder uma nota que vai para a guia
   const marcadas = mostradas.filter((g) => escolhidas.has(g.id)).map((g) => g.id)
+  // quanto vai sair nas guias marcadas (aparece no botão do lote)
+  const totalMarcado = mostradas.filter((g) => escolhidas.has(g.id)).reduce((s, g) => s + g.difalCalculado, 0)
   function trocarLista(nova: 'prazo' | 'atrasadas') {
     setLista(nova)
     setEscolhidas(new Set()) // não mistura no lote o que foi marcado na outra lista
@@ -588,7 +590,7 @@ function GuiasPendentes({ lugarCards, acaoExtra }: { lugarCards: HTMLElement | n
           disabled={marcadas.length === 0 || gerar.isPending}
           className={`difal-btn rounded-xl bg-gradient-to-r ${verAtrasadas ? 'from-rose-600 to-orange-500 shadow-rose-500/30' : 'from-indigo-600 to-violet-600 shadow-indigo-500/30 hover:from-indigo-500 hover:to-violet-500'} px-4 py-2 text-sm font-medium text-white shadow-md disabled:opacity-40`}
         >
-          {gerar.isPending ? 'Montando lote…' : `Baixar lote GNRE (${marcadas.length})`}
+          {gerar.isPending ? 'Montando lote…' : marcadas.length ? `Baixar lote GNRE (${marcadas.length} · ${brl(totalMarcado)})` : 'Baixar lote GNRE (0)'}
         </button>
         </span>
       </div>
