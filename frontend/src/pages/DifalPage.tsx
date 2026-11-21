@@ -405,9 +405,12 @@ function GuiasPendentes({ lugarCards, acaoExtra }: { lugarCards: HTMLElement | n
   const semFiltroDeEstado = guias.filter(noPeriodo)
     .filter((g) => bateBusca(busca, g, [g.envio?.transportadora]))
     .filter((g) => !canal || nomeCanal(g.canal) === canal)
-  const visiveis = soComCobranca ? semFiltroDeEstado.filter((g) => g.estadoComCobranca) : semFiltroDeEstado
+  const filtradas = soComCobranca ? semFiltroDeEstado.filter((g) => g.estadoComCobranca) : semFiltroDeEstado
+  // nota marcada continua na tela mesmo que a busca/filtros não a mostrassem: dá para buscar uma por uma e ir
+  // marcando, e o lote (que leva só as marcadas visíveis) nunca leva nota escondida
+  const visiveis = escolhidas.size ? guias.filter((g) => escolhidas.has(g.id) || filtradas.includes(g)) : filtradas
   // só as escondidas pelo filtro de estado (o aviso diz "de outros estados")
-  const escondidas = semFiltroDeEstado.length - visiveis.length
+  const escondidas = semFiltroDeEstado.length - filtradas.length
   const ufsComCobranca = [...new Set(guias.filter((g) => g.estadoComCobranca).map((g) => g.clienteUf))].sort().join(', ')
   // no prazo: entram em lote GNRE; atrasadas: vão para a contabilidade (sairiam sem multa e juros)
   const noPrazo = visiveis.filter((g) => !g.atrasada)
@@ -632,9 +635,9 @@ function GuiasPendentes({ lugarCards, acaoExtra }: { lugarCards: HTMLElement | n
                     {g.situacao === 'DIVERGENTE' ? (
                       <span title={g.observacao ?? undefined} className="rounded-full bg-rose-50 px-2.5 py-1 font-medium text-rose-700">● nota divergente (cancelada?) — conferir</span>
                     ) : g.guiaGeradaEm && ['1', '2'].includes(g.situacaoGuia ?? '') ? (
-                      <span className="rounded-full bg-rose-50 px-2.5 py-1 font-medium text-rose-700">guia recusada · em Lotes GNRE, &ldquo;Devolver recusadas à fila&rdquo;</span>
+                      <span className="rounded-full bg-rose-50 px-2.5 py-1 font-medium text-rose-700">guia recusada · em Lotes GNRE, &ldquo;Devolver à fila&rdquo;</span>
                     ) : g.guiaGeradaEm && g.situacaoGuia === '3' ? (
-                      <span className="rounded-full bg-amber-50 px-2.5 py-1 font-medium text-amber-800">erro de comunicação com o estado · consulte o lote de novo</span>
+                      <span className="rounded-full bg-amber-50 px-2.5 py-1 font-medium text-amber-800">erro de comunicação com o estado · consulte de novo ou, em Lotes GNRE, &ldquo;Devolver à fila&rdquo;</span>
                     ) : g.guiaGeradaEm && !g.guiaAceita ? (
                       <span className="rounded-full bg-blue-50 px-2.5 py-1 font-medium text-blue-700">guia gerada · envie ao portal e consulte</span>
                     ) : g.guiaGeradaEm ? (
@@ -1015,6 +1018,9 @@ function LotesGnre() {
     )
   }
   const ocupado = enviar.isPending || consultar.isPending || desfazer.isPending || devolver.isPending
+  // guia que não pode ser paga: recusada (1/2) ou erro de comunicação (3) sem código de barras (mesma regra do servidor)
+  const naoPagavel = (g: { situacaoGuia: string; linhaDigitavel?: string | null }) =>
+    ['1', '2'].includes(g.situacaoGuia) || (g.situacaoGuia === '3' && !g.linhaDigitavel)
 
   return (
     <div className="difal-secao difal-secao-violeta overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -1087,18 +1093,19 @@ function LotesGnre() {
                       Desfazer
                     </button>
                   )}
-                  {/* lote misto (umas aceitas, outras recusadas): devolve à fila só as recusadas, para gerar de novo */}
-                  {l.guiasResultado.some((g) => ['1', '2'].includes(g.situacaoGuia)) && !l.guiasResultado.every((g) => ['1', '2'].includes(g.situacaoGuia)) && (
+                  {/* lote misto: devolve à fila só as guias que não podem ser pagas (recusadas, ou erro de comunicação sem
+                      código de barras), para gerar de novo */}
+                  {l.guiasResultado.some(naoPagavel) && !l.guiasResultado.every((g) => ['1', '2'].includes(g.situacaoGuia)) && (
                     <button
                       onClick={() => {
                         setErro(null)
-                        const n = l.guiasResultado.filter((g) => ['1', '2'].includes(g.situacaoGuia)).length
-                        if (window.confirm(`Devolver à fila as ${n} nota(s) com guia recusada pelo portal? As guias aceitas continuam neste lote. Depois, gere um lote novo com elas.`)) devolver.mutate(l.id)
+                        const n = l.guiasResultado.filter(naoPagavel).length
+                        if (window.confirm(`Devolver à fila as ${n} nota(s) com guia recusada ou com erro de comunicação (sem código de barras, não podem ser pagas)? As guias aceitas continuam neste lote. Depois, gere um lote novo com elas.`)) devolver.mutate(l.id)
                       }}
                       disabled={ocupado}
                       className="difal-btn rounded-lg border border-amber-200 bg-white px-3 py-1.5 text-xs text-amber-800 hover:bg-amber-50 disabled:opacity-50"
                     >
-                      {devolver.isPending ? 'Devolvendo…' : 'Devolver recusadas à fila'}
+                      {devolver.isPending ? 'Devolvendo…' : 'Devolver à fila as que não podem ser pagas'}
                     </button>
                   )}
                   {l.temPdf && (
