@@ -2,7 +2,9 @@
  "empresa": "AGRO",
  "apuradoEm": "2026-11-20",
  "zips": [
+  "AGRO-2025-12.zip",
   "AGRO-2026-01.zip",
+  "AGRO-2026-02.zip",
   "AGRO-2026-03.zip",
   "AGRO-2026-05.zip",
   "AGRO-2026-06.zip",
@@ -13,6 +15,23 @@
   "AGRO-2026-11.zip"
  ],
  "notas": [
+  {
+   "nf": "2112",
+   "uf": "PB",
+   "data": "2025-12-05",
+   "base": 1174.44,
+   "difal_pago": 21.12,
+   "difal_devido": 17.62,
+   "diferenca": 3.5,
+   "encargos": 0.0,
+   "pct_pago": 1.8,
+   "pct_devido": 1.5,
+   "guia": "PB",
+   "autuacao": false,
+   "estimada": true,
+   "metodo": "carga",
+   "reducao": true
+  },
   {
    "nf": "2117",
    "uf": "PI",
@@ -28,6 +47,57 @@
    "autuacao": true,
    "estimada": false,
    "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "2170",
+   "uf": "AM",
+   "data": "2025-12-15",
+   "base": 1642.04,
+   "difal_pago": 213.46,
+   "difal_devido": 24.63,
+   "diferenca": 188.83,
+   "encargos": 49.8,
+   "pct_pago": 13.0,
+   "pct_devido": 1.5,
+   "guia": "DAR/AM",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "2190",
+   "uf": "CE",
+   "data": "2025-12-17",
+   "base": 3479.0,
+   "difal_pago": 126.64,
+   "difal_devido": 126.64,
+   "diferenca": 0.0,
+   "encargos": 0.0,
+   "pct_pago": 3.64,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "2225",
+   "uf": "CE",
+   "data": "2025-12-22",
+   "base": 312.0,
+   "difal_pago": 40.56,
+   "difal_devido": 11.36,
+   "diferenca": 29.2,
+   "encargos": 0.0,
+   "pct_pago": 13.0,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
    "reducao": true
   },
   {
@@ -65,6 +135,23 @@
    "reducao": true
   },
   {
+   "nf": "2490",
+   "uf": "AM",
+   "data": "2026-01-14",
+   "base": 97.9,
+   "difal_pago": 12.72,
+   "difal_devido": 1.47,
+   "diferenca": 11.25,
+   "encargos": 3.33,
+   "pct_pago": 12.99,
+   "pct_devido": 1.5,
+   "guia": "DAR/AM",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
    "nf": "2506",
    "uf": "TO",
    "data": "2026-01-15",
@@ -74,6 +161,57 @@
    "diferenca": 72.45,
    "encargos": 0.0,
    "pct_pago": 7.61,
+   "pct_devido": 1.5,
+   "guia": "DARE/TO",
+   "autuacao": false,
+   "estimada": true,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "2629",
+   "uf": "AL",
+   "data": "2026-01-26",
+   "base": 99.9,
+   "difal_pago": 3.89,
+   "difal_devido": 1.5,
+   "diferenca": 2.39,
+   "encargos": 0.0,
+   "pct_pago": 3.89,
+   "pct_devido": 1.5,
+   "guia": "DAR/AL",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "2769",
+   "uf": "TO",
+   "data": "2026-02-09",
+   "base": 1481.83,
+   "difal_pago": 112.83,
+   "difal_devido": 22.23,
+   "diferenca": 90.6,
+   "encargos": 0.0,
+   "pct_pago": 7.61,
+   "pct_devido": 1.5,
+   "guia": "DARE/TO",
+   "autuacao": false,
+   "estimada": true,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "2794",
+   "uf": "TO",
+   "data": "2026-02-11",
+   "base": 6482.19,
+   "difal_pago": 712.68,
+   "difal_devido": 97.23,
+   "diferenca": 615.45,
+   "encargos": 0.0,
+   "pct_pago": 10.99,
    "pct_devido": 1.5,
    "guia": "DARE/TO",
    "autuacao": false,
@@ -1784,11 +1922,51 @@
  ],
  "conferir": [
   {
+   "nf": "2112",
+   "uf": "PB",
+   "zip": "AGRO-2025-12.zip",
+   "motivos": [
+    "PB: valores fora do texto do PDF; usado o valor do nome do arquivo"
+   ]
+  },
+  {
+   "nf": "2225",
+   "uf": "CE",
+   "zip": "AGRO-2025-12.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "2190",
+   "uf": "CE",
+   "zip": "AGRO-2025-12.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
    "nf": "2454",
    "uf": "CE",
    "zip": "AGRO-2026-01.zip",
    "motivos": [
     "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "2794",
+   "uf": "TO",
+   "zip": "AGRO-2026-02.zip",
+   "motivos": [
+    "DARE/TO: valores fora do texto do PDF; usado o valor do nome do arquivo"
+   ]
+  },
+  {
+   "nf": "2769",
+   "uf": "TO",
+   "zip": "AGRO-2026-02.zip",
+   "motivos": [
+    "DARE/TO: valores fora do texto do PDF; usado o valor do nome do arquivo"
    ]
   },
   {
