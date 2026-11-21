@@ -125,7 +125,7 @@ router.put(
         ...(codigoReceitaGnre !== undefined && { codigoReceitaGnre: String(codigoReceitaGnre) }),
         ...(vencimentoRegra !== undefined && { vencimentoRegra: String(vencimentoRegra) }),
         ...(tipoDocOrigemGnre !== undefined && { tipoDocOrigemGnre: String(tipoDocOrigemGnre) }),
-        ...(exigePeriodo !== undefined && { exigePeriodoGnre: exigePeriodo === true }),
+        ...(exigePeriodo !== undefined && { exigePeriodoGnre: exigePeriodo === true || exigePeriodo === 'true' }),
         ...(camposAdicionais !== undefined && {
           camposExtrasGnre: classificarCamposExtras(
             (camposAdicionais as Record<string, unknown>[]).map((c) => ({
@@ -407,7 +407,7 @@ router.post('/lotes/:id/devolver-recusadas', async (req: Request, res: Response)
     const notas = await prisma.difalNota.findMany({ where: { guiaLoteId: lote.id, comprovanteMlEnviadoEm: null }, select: { id: true, nfNumero: true } })
     // mesmo identificadorGuia da montagem do lote: dígitos da NF, até 10
     const ids = notas.filter((n) => recusadas.has(n.nfNumero.replace(/\D/g, '').slice(-10))).map((n) => n.id)
-    const r = await prisma.difalNota.updateMany({ where: { id: { in: ids }, guiaLoteId: lote.id }, data: { guiaGeradaEm: null, guiaLoteId: null } })
+    const r = await prisma.difalNota.updateMany({ where: { id: { in: ids }, guiaLoteId: lote.id, comprovanteMlEnviadoEm: null }, data: { guiaGeradaEm: null, guiaLoteId: null } })
     res.json({ ok: true, notasDevolvidas: r.count })
   } catch (e) {
     res.status(500).json({ erro: (e as Error).message })
