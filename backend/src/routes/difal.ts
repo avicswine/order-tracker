@@ -105,13 +105,14 @@ router.put(
     body('camposAdicionais.*.tipo').optional().isString().isLength({ max: 2 }),
     body('camposAdicionais.*.obrigatorio').isBoolean(),
     body('exigeProduto').optional().isBoolean(),
+    body('exigePeriodo').optional().isBoolean(),
   ],
   async (req: Request, res: Response) => {
     const erros = validationResult(req)
     if (!erros.isEmpty()) return res.status(400).json({ errors: erros.array() })
 
     const uf = String(req.params.uf).toUpperCase()
-    const { aliquotaInterna, fcp, interestadual, metodo, nota, codigoReceitaGnre, vencimentoRegra, tipoDocOrigemGnre, camposAdicionais, exigeProduto } = req.body
+    const { aliquotaInterna, fcp, interestadual, metodo, nota, codigoReceitaGnre, vencimentoRegra, tipoDocOrigemGnre, camposAdicionais, exigeProduto, exigePeriodo } = req.body
     try {
     const atualizada = await prisma.difalAliquota.update({
       where: { uf },
@@ -124,6 +125,7 @@ router.put(
         ...(codigoReceitaGnre !== undefined && { codigoReceitaGnre: String(codigoReceitaGnre) }),
         ...(vencimentoRegra !== undefined && { vencimentoRegra: String(vencimentoRegra) }),
         ...(tipoDocOrigemGnre !== undefined && { tipoDocOrigemGnre: String(tipoDocOrigemGnre) }),
+        ...(exigePeriodo !== undefined && { exigePeriodoGnre: exigePeriodo === true }),
         ...(camposAdicionais !== undefined && {
           camposExtrasGnre: classificarCamposExtras(
             (camposAdicionais as Record<string, unknown>[]).map((c) => ({
@@ -392,6 +394,25 @@ router.post('/lotes/:id/enviar', async (req: Request, res: Response) => {
 // Situações da guia que garantem que ela NÃO vale para pagamento (manual GNRE): 1 = invalidada pelo
 // Portal, 2 = invalidada pela UF. Erro de comunicação (3) e pendência (4) ficam de fora: a guia ainda pode valer.
 const GUIA_INVALIDADA = new Set(['1', '2'])
+
+// POST /difal/lotes/:id/devolver-recusadas — num lote com guias aceitas E recusadas, devolve à fila só as notas
+// cuja guia foi INVALIDADA (1 portal, 2 UF), para gerar de novo. As aceitas ficam; erro de comunicação (3) e
+// pendência (4) também ficam: a guia ainda pode valer e devolver arriscaria guia em dobro.
+router.post('/lotes/:id/devolver-recusadas', async (req: Request, res: Response) => {
+  try {
+    const lote = await prisma.difalLoteGnre.findUnique({ where: { id: String(req.params.id) }, select: { id: true, resultadoXml: true } })
+    if (!lote) return res.status(404).json({ erro: 'lote não encontrado' })
+    if (!lote.resultadoXml) return res.status(409).json({ erro: 'consulte o resultado do lote antes' })
+    const recusadas = new Set(lerResultadoLote(lote.resultadoXml).guias.filter((g) => GUIA_INVALIDADA.has(g.situacaoGuia)).map((g) => g.identificadorGuia))
+    const notas = await prisma.difalNota.findMany({ where: { guiaLoteId: lote.id, comprovanteMlEnviadoEm: null }, select: { id: true, nfNumero: true } })
+    // mesmo identificadorGuia da montagem do lote: dígitos da NF, até 10
+    const ids = notas.filter((n) => recusadas.has(n.nfNumero.replace(/\D/g, '').slice(-10))).map((n) => n.id)
+    const r = await prisma.difalNota.updateMany({ where: { id: { in: ids }, guiaLoteId: lote.id }, data: { guiaGeradaEm: null, guiaLoteId: null } })
+    res.json({ ok: true, notasDevolvidas: r.count })
+  } catch (e) {
+    res.status(500).json({ erro: (e as Error).message })
+  }
+})
 
 // POST /difal/lotes/:id/desfazer — apaga o lote e devolve as notas à fila. Vale para lote que ainda não foi ao
 // portal, ou que foi e teve TODAS as guias invalidadas (senão a nota ficaria presa num lote recusado).

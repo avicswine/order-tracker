@@ -432,6 +432,8 @@ export async function gerarLoteDasNotas(prisma: PrismaClient, ids: string[], hoj
       camposExtras: camposExtrasDaUf(a).map((c) => ({ codigo: c.codigo, valor: valorCampoExtra(c, n)! })),
       valorPrincipal: n.difalCalculado,
       referencia: {
+        // período mensal ('0', XSD dados_gnre_v2.00) só onde o estado exige: o AM recusou sem ele (220)
+        ...(a.exigePeriodoGnre && { periodo: '0' }),
         mes: String(n.emitidaEm.getUTCMonth() + 1).padStart(2, '0'),
         ano: String(n.emitidaEm.getUTCFullYear()),
       },
