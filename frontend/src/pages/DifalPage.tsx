@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { difalApi } from '../lib/api'
 import type {
@@ -191,14 +192,14 @@ function FiltroCanal({ canais, valor, onTrocar }: { canais: (string | null)[]; v
   const opcoes = [...new Set(canais.map(nomeCanal))].sort()
   return (
     <select value={valor} onChange={(e) => onTrocar(e.target.value)}
-      className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:ring-4 focus:ring-blue-100">
+      className="max-w-40 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:ring-4 focus:ring-blue-100">
       <option value="">Todos os canais</option>
       {opcoes.map((c) => <option key={c} value={c}>{c}</option>)}
     </select>
   )
 }
 
-const CAMPO_BUSCA = 'w-64 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm outline-none focus:ring-4 focus:ring-blue-100'
+const CAMPO_BUSCA = 'w-36 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-4 focus:ring-blue-100'
 const DICA_BUSCA = 'Buscar NF, cliente, empresa, UF, canal, produto…'
 
 function pct(v: number | null | undefined) {
@@ -229,13 +230,13 @@ function Numero({
   const cor = tom === 'alerta' ? 'text-amber-700' : tom === 'ok' ? 'text-emerald-700' : 'text-slate-900'
   const fundoIcone = tom === 'alerta' ? 'bg-amber-50 text-amber-600' : tom === 'ok' ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue-600'
   return (
-    <div className={`difal-cartao difal-kpi rounded-2xl border p-5 ${borda}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="text-sm text-slate-500">{titulo}</div>
-        {icone && <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${fundoIcone}`}><Icone nome={icone} /></span>}
+    <div className={`difal-cartao difal-kpi flex items-center gap-3 rounded-xl border px-4 py-2.5 ${borda}`}>
+      {icone && <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${fundoIcone}`}><Icone nome={icone} className="h-4 w-4" /></span>}
+      <div className="min-w-0">
+        <div className="text-xs text-slate-500">{titulo}</div>
+        <div className={`text-xl font-semibold leading-tight tracking-tight tabular-nums ${cor}`}>{valor}</div>
+        {detalhe && <div className="truncate text-[11px] text-slate-500" title={detalhe}>{detalhe}</div>}
       </div>
-      <div className={`mt-2 text-3xl font-semibold tracking-tight tabular-nums ${cor}`}>{valor}</div>
-      {detalhe && <div className="mt-1 text-xs text-slate-500">{detalhe}</div>}
     </div>
   )
 }
@@ -286,7 +287,7 @@ function Abas({ aba, onTrocar }: { aba: NomeAba; onTrocar: (a: NomeAba) => void 
 }
 
 // ---------------------------------------------------------------- Vendas de agora
-function Vendas() {
+function Vendas({ lugarCards }: { lugarCards: HTMLElement | null }) {
   const qc = useQueryClient()
 
   // A importação roda no servidor em segundo plano; aqui só consultamos o andamento a cada 3 s
@@ -319,40 +320,36 @@ function Vendas() {
   const errosImportacao = importacao?.resultado?.flatMap((r) => r.erros) ?? []
 
 
-  return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="max-w-3xl text-sm text-slate-500">
-          Notas emitidas nos últimos 90 dias, com o DIFAL calculado por NCM e estado. Notas com DIFAL zero não aparecem (exceto divergentes ou cobradas pelo ML).
-        </p>
-        <button
-          onClick={() => importar.mutate()}
-          disabled={importando}
-          className="difal-btn inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-sky-500 px-4 py-2.5 text-sm font-medium text-white shadow-md shadow-indigo-500/30 hover:from-indigo-500 hover:to-sky-400 disabled:opacity-60"
-        >
-          <Icone nome="atualizar" className={`h-4 w-4 ${importando ? 'animate-spin' : ''}`} />
-          {importando ? 'Buscando notas… (pode levar alguns minutos)' : 'Atualizar do Bling'}
-        </button>
-      </div>
+  // botão do Bling vai para a barra de filtros; o resumo da última importação fica na dica dele
+  const botaoBling = (
+    <button
+      onClick={() => importar.mutate()}
+      disabled={importando}
+      title={`Atualizar do Bling: busca as notas dos últimos 90 dias e calcula o DIFAL por NCM e estado (só leitura no Bling).${
+        !importando && resumoImportacao ? `\nÚltima importação (${new Date(terminadaEm!).toLocaleString('pt-BR')}): ${resumoImportacao}` : ''}`}
+      aria-label="Atualizar do Bling"
+      className="difal-btn ml-auto inline-flex h-9 items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-sky-500 px-2.5 text-sm font-medium text-white shadow-md shadow-indigo-500/30 hover:from-indigo-500 hover:to-sky-400 disabled:opacity-60"
+    >
+      <Icone nome="atualizar" className={`h-4 w-4 ${importando ? 'animate-spin' : ''}`} />
+      {importando && <span>Buscando notas…</span>}
+    </button>
+  )
 
+  return (
+    <div className="space-y-3">
       {(importar.isError || importacao?.erro) && (
         <div className="difal-entrar rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">
           Não foi possível buscar as notas: {importacao?.erro ?? erroDoClique?.response?.data?.erro ?? erroDoClique?.message}
         </div>
       )}
-      {!importando && resumoImportacao && (
-        <div className="difal-entrar rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700">
-          <p>Última importação ({new Date(terminadaEm!).toLocaleString('pt-BR')}): {resumoImportacao}</p>
-          {errosImportacao.length > 0 && (
-            <ul className="mt-1 list-inside list-disc text-red-700">
-              {errosImportacao.slice(0, 5).map((e, i) => <li key={i}>{e}</li>)}
-              {errosImportacao.length > 5 && <li>… e mais {errosImportacao.length - 5}</li>}
-            </ul>
-          )}
+      {/* erro de importação nunca fica escondido: só o resumo de sucesso vai para a dica do botão */}
+      {!importando && errosImportacao.length > 0 && (
+        <div className="difal-entrar rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
+          Última importação com {errosImportacao.length} erro(s): {errosImportacao.slice(0, 3).join(' · ')}{errosImportacao.length > 3 ? ' …' : ''}
         </div>
       )}
 
-      <GuiasPendentes />
+      <GuiasPendentes lugarCards={lugarCards} acaoExtra={botaoBling} />
 
 
 
@@ -384,7 +381,7 @@ async function erroDoLote(e: unknown): Promise<string> {
   return (e as Error).message
 }
 
-function GuiasPendentes() {
+function GuiasPendentes({ lugarCards, acaoExtra }: { lugarCards: HTMLElement | null; acaoExtra: React.ReactNode }) {
   const qc = useQueryClient()
   const [escolhidas, setEscolhidas] = useState<Set<string>>(new Set())
   const [aviso, setAviso] = useState<string | null>(null)
@@ -475,11 +472,11 @@ function GuiasPendentes() {
     })
   }
 
-  if (isLoading) return null
+  if (isLoading) return <div className="flex">{acaoExtra}</div>
 
-  return (
-    <>
-      <div className="difal-escalonado grid gap-4 sm:grid-cols-3">
+  // os cards seguem os filtros desta lista, mas aparecem no topo da página, acima das abas
+  const cards = (
+      <div className="difal-escalonado grid gap-3 sm:grid-cols-3">
         <Numero
           icone="documento"
           titulo="Guias que precisamos emitir"
@@ -501,43 +498,49 @@ function GuiasPendentes() {
           tom={(resumo?.divergentes.notas ?? 0) > 0 ? 'alerta' : 'ok'}
         />
       </div>
-    <div className="flex flex-wrap items-center gap-3">
+  )
+
+  return (
+    <>
+    {lugarCards && createPortal(cards, lugarCards)}
+    <div className="flex flex-wrap items-center gap-2">
+    <div className="inline-flex rounded-xl bg-slate-100 p-1 text-sm">
+        <button onClick={() => trocarLista('prazo')}
+          className={`rounded-lg px-2.5 py-1 transition-colors ${lista === 'prazo' ? 'bg-white font-semibold text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>
+          No prazo <span className="ml-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-[11px] tabular-nums">{noPrazo.length}</span>
+        </button>
+        <button onClick={() => trocarLista('atrasadas')}
+          className={`rounded-lg px-2.5 py-1 transition-colors ${lista === 'atrasadas' ? 'bg-white font-semibold text-rose-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>
+          Atrasadas <span className="ml-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-[11px] tabular-nums">{atrasadas.length}</span>
+        </button>
+    </div>
     <input type="search" value={busca} onChange={(e) => setBusca(e.target.value)} placeholder={DICA_BUSCA} className={CAMPO_BUSCA} />
     <FiltroCanal canais={guias.map((g) => g.canal)} valor={canal} onTrocar={(c) => { setCanal(c); setEscolhidas(new Set()) }} />
-    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700">
-      <span>Emitidas de</span>
-      <input type="date" value={de} onChange={(e) => setDe(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1 text-sm outline-none focus:ring-4 focus:ring-blue-100" />
+    <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1 text-sm text-slate-700">
+      <span title="data de emissão da NF">De</span>
+      <input type="date" value={de} onChange={(e) => setDe(e.target.value)} className="w-[8.5rem] rounded-lg border border-slate-200 px-1.5 py-0.5 text-sm outline-none focus:ring-4 focus:ring-blue-100" />
       <span>até</span>
-      <input type="date" value={ate} onChange={(e) => setAte(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1 text-sm outline-none focus:ring-4 focus:ring-blue-100" />
+      <input type="date" value={ate} onChange={(e) => setAte(e.target.value)} className="w-[8.5rem] rounded-lg border border-slate-200 px-1.5 py-0.5 text-sm outline-none focus:ring-4 focus:ring-blue-100" />
       <span className="ml-1 inline-flex rounded-lg bg-slate-100 p-0.5 text-xs">
         {atalhosPeriodo().map(([rotulo, d, a]) => (
           <button key={rotulo} onClick={() => { setDe(d); setAte(a) }}
-            className={`rounded-md px-2.5 py-1 transition-colors ${de === d && ate === a ? 'bg-white font-medium text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>
+            className={`rounded-md px-1.5 py-0.5 text-[11px] transition-colors ${de === d && ate === a ? 'bg-white font-medium text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>
             {rotulo}
           </button>
         ))}
       </span>
     </div>
-    <label className="flex w-fit cursor-pointer select-none items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700">
+    <label title={`${ufsComCobranca ? `Estados com cobrança: ${ufsComCobranca}.` : ''}${soComCobranca && escondidas ? ` ${escondidas} nota(s) de outros estados ocultas.` : ''}`}
+      className="flex w-fit cursor-pointer select-none items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
       <input type="checkbox" checked={soComCobranca} onChange={(e) => setSoComCobranca(e.target.checked)} className="h-4 w-4 accent-blue-600" />
       <span>
-        Só estados com cobrança de DIFAL{ufsComCobranca && <span className="text-slate-500"> ({ufsComCobranca})</span>}
-        {soComCobranca && escondidas > 0 && <span className="ml-2 text-xs text-slate-400">· {escondidas} nota(s) de outros estados escondidas</span>}
+        Estados c/ cobrança
       </span>
     </label>
+    {acaoExtra}
     </div>
     {aviso && <div className="difal-entrar rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-2.5 text-sm text-emerald-900">{aviso}</div>}
     {erroTexto && <div className="difal-entrar rounded-xl border border-red-200 bg-red-50 px-5 py-2.5 text-sm text-red-800">{erroTexto}</div>}
-    <div className="inline-flex w-fit rounded-xl bg-slate-100 p-1 text-sm">
-        <button onClick={() => trocarLista('prazo')}
-          className={`rounded-lg px-4 py-1.5 transition-colors ${lista === 'prazo' ? 'bg-white font-semibold text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>
-          No prazo <span className="ml-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-[11px] tabular-nums">{noPrazo.length}</span>
-        </button>
-        <button onClick={() => trocarLista('atrasadas')}
-          className={`rounded-lg px-4 py-1.5 transition-colors ${lista === 'atrasadas' ? 'bg-white font-semibold text-rose-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>
-          Atrasadas <span className="ml-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-[11px] tabular-nums">{atrasadas.length}</span>
-        </button>
-    </div>
     {mostradas.length === 0 ? (
       <div className="difal-entrar flex items-center gap-3 rounded-2xl border border-emerald-200 bg-white p-4 text-sm text-emerald-900">
         <span className="grid h-8 w-8 place-items-center rounded-xl bg-emerald-50 text-emerald-600"><Icone nome="ok" className="h-4 w-4" /></span>
@@ -784,7 +787,6 @@ function envioTexto(e: DifalGuiaPendente['envio']): string {
 }
 
 // ------------------------------------------------- Fechamento mensal: ML cobrou x calculamos
-const TOLERANCIA_FECHAMENTO = 0.05 // até 5% de diferença é normal (arredondamentos, estornos)
 
 function mesBr(aaaaMm: string) {
   const [ano, mes] = aaaaMm.split('-')
@@ -794,7 +796,7 @@ function mesBr(aaaaMm: string) {
 
 function FechamentoMensal() {
   const qc = useQueryClient()
-  const { data: linhas = [] } = useQuery({ queryKey: ['difal-fechamento'], queryFn: difalApi.fechamentoMensal })
+  const { data: linhas = [], isLoading, isError, error } = useQuery({ queryKey: ['difal-fechamento'], queryFn: difalApi.fechamentoMensal })
   const sincronizar = useMutation({
     mutationFn: difalApi.sincronizarCobrancasMl,
     onSuccess: () => qc.invalidateQueries({ queryKey: ['difal-fechamento'] }),
@@ -805,20 +807,34 @@ function FechamentoMensal() {
     <div className="difal-secao difal-secao-ciano overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="difal-cab-ciano flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
         <div>
-          <p className="text-base font-semibold text-slate-900">Fechamento mensal: o que o Mercado Livre cobrou × o que calculamos</p>
+          <p className="text-base font-semibold text-slate-900">Fechamento mensal: o que o Mercado Livre pagou e cobrou × o que era devido</p>
           <p className="text-xs text-gray-500">
-            Lançamentos CDIFAL da fatura do ML (sem número de pedido, por isso o fechamento é por mês).
-            Verde até {TOLERANCIA_FECHAMENTO * 100}% de diferença.
+            Todos os meses desde a primeira guia dos ZIPs de comprovantes do ML (AVIC e AGRO). &ldquo;Fatura ML&rdquo; são os
+            lançamentos CDIFAL (sem número de pedido, por isso o fechamento é por mês).
           </p>
         </div>
-        <button
-          onClick={() => sincronizar.mutate()}
-          disabled={sincronizar.isPending}
-          className="difal-btn rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 hover:border-slate-300 disabled:opacity-50"
-        >
-          {sincronizar.isPending ? 'Buscando na fatura…' : 'Atualizar cobranças do ML'}
-        </button>
+        <span className="flex flex-wrap items-center gap-2">
+          {/* a conta do ML já foi bloqueada: o dia a dia lê só 2 meses; os 12 meses ficam num botão à parte, para usar uma vez */}
+          <button
+            onClick={() => { if (window.confirm('Ler os 12 meses da fatura do ML? São bem mais chamadas à API; use só para completar o histórico.')) sincronizar.mutate(12) }}
+            disabled={sincronizar.isPending}
+            className="difal-btn rounded-xl px-3 py-2 text-xs text-slate-500 hover:text-slate-800 disabled:opacity-50"
+          >
+            Buscar 12 meses (uma vez)
+          </button>
+          <button
+            onClick={() => sincronizar.mutate(2)}
+            disabled={sincronizar.isPending}
+            className="difal-btn rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 hover:border-slate-300 disabled:opacity-50"
+          >
+            {sincronizar.isPending ? 'Buscando na fatura…' : 'Atualizar cobranças do ML'}
+          </button>
+        </span>
       </div>
+      {isLoading && <p className="px-5 py-6 text-center text-sm text-slate-500">Carregando o fechamento…</p>}
+      {isError && (
+        <div className="border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800">Não foi possível carregar o fechamento: {mensagemErro(error)}</div>
+      )}
       {sincronizar.isError && (
         <div className="border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800">
           Não foi possível buscar a fatura: {(sincronizar.error as Error).message}
@@ -829,51 +845,53 @@ function FechamentoMensal() {
           {a.empresa}: {a.erro}
         </div>
       ))}
-      {linhas.length === 0 ? (
-        <p className="px-4 py-6 text-center text-sm text-gray-500">
-          Nenhuma cobrança do ML importada ainda. Clique em &ldquo;Atualizar cobranças do ML&rdquo;.
-        </p>
-      ) : (
+      {!isLoading && !isError && (() => {
+        const tot = (k: 'guiasZip' | 'pagoZip' | 'devidoZip' | 'aMaisZip' | 'encargosZip') => linhas.reduce((s, l) => s + l[k], 0)
+        return (
+          <div className="grid gap-3 border-b border-slate-100 px-5 py-3 text-sm sm:grid-cols-4">
+            <div><p className="text-xs text-slate-500">ML pagou de DIFAL (guias dos ZIPs)</p><p className="text-lg font-semibold tabular-nums">{brl(tot('pagoZip'))}</p><p className="text-[11px] text-slate-400">{tot('guiasZip')} nota(s) com guia</p></div>
+            <div><p className="text-xs text-slate-500">Devido pela nossa conta</p><p className="text-lg font-semibold tabular-nums">{brl(tot('devidoZip'))}</p></div>
+            <div><p className="text-xs text-slate-500">Pago a mais</p><p className="text-lg font-semibold tabular-nums text-rose-700">{brl(tot('aMaisZip'))}</p></div>
+            <div><p className="text-xs text-slate-500">Multa e juros</p><p className="text-lg font-semibold tabular-nums text-amber-700">{brl(tot('encargosZip'))}</p></div>
+          </div>
+        )
+      })()}
+      {!isLoading && !isError && <div className="overflow-x-auto">
         <table className="min-w-full text-sm">
           <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-5 py-2.5 text-left">Mês</th>
               <th className="px-2 py-2 text-left">Empresa</th>
-              <th className="px-2 py-2 text-right">ML cobrou</th>
-              <th className="px-2 py-2 text-right">Calculamos</th>
-              <th className="px-2 py-2 text-right">Diferença</th>
-              <th className="px-4 py-2 text-left">Situação</th>
+              <th className="px-2 py-2 text-right" title="notas com guia de DIFAL paga pelo ML, lidas dos ZIPs de comprovantes (sem autuações); mês = emissão da NF">Notas</th>
+              <th className="px-2 py-2 text-right" title="DIFAL principal que o ML pagou nas guias">ML pagou</th>
+              <th className="px-2 py-2 text-right" title="o que era devido pela regra do NCM 8436 (1,5% ou método do estado)">Devido</th>
+              <th className="px-2 py-2 text-right">Pago a mais</th>
+              <th className="px-2 py-2 text-right" title="multa e juros pagos nessas guias">Multa/juros</th>
+              <th className="px-2 py-2 text-right" title="lançamentos CDIFAL da fatura do ML (o que ele cobrou de nós)">Fatura ML</th>
+              <th className="px-4 py-2 text-right" title="nosso cálculo nas vendas do ML importadas do Bling (últimos 90 dias)">Calculamos</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {linhas.map((l: DifalFechamentoMes) => {
-              const base = Math.max(l.calculado, l.cobradoMl)
-              const ok = base === 0 || Math.abs(l.diferenca) / base <= TOLERANCIA_FECHAMENTO
-              const semDados = l.lancamentos === 0 || l.notas === 0
+              const vazio = !l.guiasZip && !l.lancamentos && !l.notas
+              const traco = <span className="text-slate-300">—</span>
               return (
-                <tr key={`${l.mes}-${l.empresa}`} className="transition-colors hover:bg-slate-50">
-                  <td className="px-5 py-2.5 font-medium text-slate-900">{mesBr(l.mes)}</td>
-                  <td className="px-2 py-2.5"><SeloEmpresa empresa={l.empresa} /></td>
-                  <td className="px-2 py-2 text-right tabular-nums" title={`${l.lancamentos} lançamento(s)`}>{brl(l.cobradoMl)}</td>
-                  <td className="px-2 py-2 text-right tabular-nums" title={`${l.notas} nota(s)`}>{brl(l.calculado)}</td>
-                  <td className="px-2 py-2 text-right tabular-nums">{brl(l.diferenca)}</td>
-                  <td className="px-4 py-2">
-                    {semDados ? (
-                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-600">
-                        {l.lancamentos === 0 ? 'ML ainda não cobrou' : 'sem notas importadas'}
-                      </span>
-                    ) : ok ? (
-                      <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">● fecha</span>
-                    ) : (
-                      <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">● conferir</span>
-                    )}
-                  </td>
+                <tr key={`${l.mes}-${l.empresa}`} className={`transition-colors hover:bg-slate-50 ${vazio ? 'text-slate-400' : ''}`}>
+                  <td className="px-5 py-2 font-medium text-slate-900">{mesBr(l.mes)}</td>
+                  <td className="px-2 py-2"><SeloEmpresa empresa={l.empresa} /></td>
+                  <td className="px-2 py-2 text-right tabular-nums">{l.guiasZip || traco}</td>
+                  <td className="px-2 py-2 text-right tabular-nums">{l.guiasZip ? brl(l.pagoZip) : traco}</td>
+                  <td className="px-2 py-2 text-right tabular-nums">{l.guiasZip ? brl(l.devidoZip) : traco}</td>
+                  <td className={`px-2 py-2 text-right tabular-nums ${l.aMaisZip > 0.01 ? 'font-medium text-rose-700' : ''}`}>{l.guiasZip ? brl(l.aMaisZip) : traco}</td>
+                  <td className="px-2 py-2 text-right tabular-nums text-amber-700">{l.guiasZip ? brl(l.encargosZip) : traco}</td>
+                  <td className="px-2 py-2 text-right tabular-nums" title={`${l.lancamentos} lançamento(s) CDIFAL`}>{l.lancamentos ? brl(l.cobradoMl) : traco}</td>
+                  <td className="px-4 py-2 text-right tabular-nums" title={`${l.notas} venda(s) do ML`}>{l.notas ? brl(l.calculado) : traco}</td>
                 </tr>
               )
             })}
           </tbody>
         </table>
-      )}
+      </div>}
     </div>
   )
 }
@@ -1595,10 +1613,12 @@ function Historico() {
 
 export function DifalPage() {
   const [aba, setAba] = useState<NomeAba>('vendas')
+  // lugar dos cards da aba Vendas: acima das abas (a aba Vendas desenha neles com createPortal)
+  const [lugarCards, setLugarCards] = useState<HTMLDivElement | null>(null)
 
   return (
     // mesma margem das outras páginas (p-6): sem ela o conteúdo encosta na barra lateral
-    <div className="difal-fundo min-h-screen space-y-6 p-6">
+    <div className="difal-fundo min-h-screen space-y-4 p-6">
       {/* cabeçalho numa linha só; a engrenagem fica dentro da linha (antes, absoluta, o título passava por cima e engolia o clique) */}
       <div className="difal-hero flex flex-wrap items-center gap-x-4 gap-y-2 px-6 py-4">
         <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/10 ring-1 ring-white/20 backdrop-blur"><Icone nome="documento" className="h-5 w-5 text-sky-300" /></span>
@@ -1618,11 +1638,13 @@ export function DifalPage() {
         </button>
       </div>
 
+      <div ref={setLugarCards} className={aba === 'vendas' ? '' : 'hidden'} />
+
       <Abas aba={aba} onTrocar={setAba} />
 
       {/* a chave muda a cada aba: a tela nova entra com a animação de entrada */}
       <div key={aba} className="difal-entrar">
-        {aba === 'vendas' ? <Vendas /> : aba === 'lotes' ? <LotesGnre /> : aba === 'fechamento' ? <FechamentoMensal /> : aba === 'config' ? <Configuracao /> : <Historico />}
+        {aba === 'vendas' ? <Vendas lugarCards={lugarCards} /> : aba === 'lotes' ? <LotesGnre /> : aba === 'fechamento' ? <FechamentoMensal /> : aba === 'config' ? <Configuracao /> : <Historico />}
       </div>
     </div>
   )
