@@ -2,15 +2,15 @@
  "empresa": "AGRO",
  "apuradoEm": "2026-11-20",
  "zips": [
-  "2026-01-01_2026-01-31_-_Comprovantes_do_DIFAL (1).zip",
-  "2026-03-01_2026-03-31_-_Comprovantes_do_DIFAL (1).zip",
-  "2026-05-01_2026-05-31_-_Comprovantes_do_DIFAL (1).zip",
-  "2026-06-01_2026-06-30_-_Comprovantes_do_DIFAL (1).zip",
-  "2026-07-01_2026-07-31_-_Comprovantes_do_DIFAL (1).zip",
-  "2026-08-01_2026-08-31_-_Comprovantes_do_DIFAL (1).zip",
-  "2026-09-01_2026-09-30_-_Comprovantes_do_DIFAL (1).zip",
-  "2026-10-01_2026-10-31_-_Comprovantes_do_DIFAL.zip",
-  "2026-11-01_2026-11-20_-_Comprovantes_do_DIFAL.zip"
+  "AGRO-2026-01.zip",
+  "AGRO-2026-03.zip",
+  "AGRO-2026-05.zip",
+  "AGRO-2026-06.zip",
+  "AGRO-2026-07.zip",
+  "AGRO-2026-08.zip",
+  "AGRO-2026-09.zip",
+  "AGRO-2026-10.zip",
+  "AGRO-2026-11.zip"
  ],
  "notas": [
   {
@@ -80,40 +80,6 @@
    "estimada": true,
    "metodo": "carga",
    "reducao": true
-  },
-  {
-   "nf": "2815",
-   "uf": "AM",
-   "data": "2026-02-12",
-   "base": 125.8,
-   "difal_pago": 16.35,
-   "difal_devido": 16.35,
-   "diferenca": -0.0,
-   "encargos": 3.63,
-   "pct_pago": 13.0,
-   "pct_devido": 13.0,
-   "guia": "DAR/AM",
-   "autuacao": false,
-   "estimada": false,
-   "metodo": "sem redução",
-   "reducao": false
-  },
-  {
-   "nf": "2881",
-   "uf": "TO",
-   "data": "2026-02-16",
-   "base": 314.5,
-   "difal_pago": 40.89,
-   "difal_devido": 40.89,
-   "diferenca": 0.01,
-   "encargos": 0.0,
-   "pct_pago": 13.0,
-   "pct_devido": 13.0,
-   "guia": "DARE/TO",
-   "autuacao": false,
-   "estimada": true,
-   "metodo": "sem redução",
-   "reducao": false
   },
   {
    "nf": "2858",
@@ -694,23 +660,6 @@
    "reducao": true
   },
   {
-   "nf": "4512",
-   "uf": "AM",
-   "data": "2026-06-26",
-   "base": 78.9,
-   "difal_pago": 10.25,
-   "difal_devido": 10.26,
-   "diferenca": -0.01,
-   "encargos": 3.61,
-   "pct_pago": 12.99,
-   "pct_devido": 13.0,
-   "guia": "DAR/AM",
-   "autuacao": false,
-   "estimada": false,
-   "metodo": "sem redução",
-   "reducao": false
-  },
-  {
    "nf": "4511",
    "uf": "PB",
    "data": "2026-06-26",
@@ -1134,23 +1083,6 @@
    "estimada": false,
    "metodo": "carga",
    "reducao": true
-  },
-  {
-   "nf": "5268",
-   "uf": "CE",
-   "data": "2026-08-18",
-   "base": 376.0,
-   "difal_pago": 48.88,
-   "difal_devido": 48.88,
-   "diferenca": 0.0,
-   "encargos": 1.03,
-   "pct_pago": 13.0,
-   "pct_devido": 13.0,
-   "guia": "DAE/CE",
-   "autuacao": false,
-   "estimada": false,
-   "metodo": "sem redução",
-   "reducao": false
   },
   {
    "nf": "5288",
@@ -1854,7 +1786,7 @@
   {
    "nf": "2454",
    "uf": "CE",
-   "zip": "2026-01-01_2026-01-31_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-01.zip",
    "motivos": [
     "multa maior que o principal: campos trocados no PDF (corrigido)"
    ]
@@ -1862,7 +1794,7 @@
   {
    "nf": "3131",
    "uf": "CE",
-   "zip": "2026-03-01_2026-03-31_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-03.zip",
    "motivos": [
     "multa maior que o principal: campos trocados no PDF (corrigido)"
    ]
@@ -1870,7 +1802,7 @@
   {
    "nf": "2881",
    "uf": "TO",
-   "zip": "2026-03-01_2026-03-31_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-03.zip",
    "motivos": [
     "DARE/TO: valores fora do texto do PDF; usado o valor do nome do arquivo"
    ]
@@ -1878,7 +1810,7 @@
   {
    "nf": "2858",
    "uf": "CE",
-   "zip": "2026-03-01_2026-03-31_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-03.zip",
    "motivos": [
     "multa maior que o principal: campos trocados no PDF (corrigido)"
    ]
@@ -1886,7 +1818,7 @@
   {
    "nf": "2909",
    "uf": "CE",
-   "zip": "2026-03-01_2026-03-31_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-03.zip",
    "motivos": [
     "multa maior que o principal: campos trocados no PDF (corrigido)"
    ]
@@ -1894,7 +1826,7 @@
   {
    "nf": "2506",
    "uf": "TO",
-   "zip": "2026-03-01_2026-03-31_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-03.zip",
    "motivos": [
     "DARE/TO: valores fora do texto do PDF; usado o valor do nome do arquivo"
    ]
@@ -1902,7 +1834,7 @@
   {
    "nf": "3276",
    "uf": "AL",
-   "zip": "2026-03-01_2026-03-31_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-03.zip",
    "motivos": [
     "multa/juros de R$ 0.65 pela diferença do total (leitor não achou no PDF)"
    ]
@@ -1910,7 +1842,7 @@
   {
    "nf": "3573",
    "uf": "TO",
-   "zip": "2026-05-01_2026-05-31_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-05.zip",
    "motivos": [
     "DARE/TO: valores fora do texto do PDF; usado o valor do nome do arquivo"
    ]
@@ -1918,7 +1850,7 @@
   {
    "nf": "2993",
    "uf": "CE",
-   "zip": "2026-05-01_2026-05-31_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-05.zip",
    "motivos": [
     "multa maior que o principal: campos trocados no PDF (corrigido)"
    ]
@@ -1926,7 +1858,7 @@
   {
    "nf": "3626",
    "uf": "CE",
-   "zip": "2026-05-01_2026-05-31_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-05.zip",
    "motivos": [
     "multa maior que o principal: campos trocados no PDF (corrigido)"
    ]
@@ -1934,7 +1866,7 @@
   {
    "nf": "2869",
    "uf": "AL",
-   "zip": "2026-05-01_2026-05-31_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-05.zip",
    "motivos": [
     "multa/juros de R$ 2.16 pela diferença do total (leitor não achou no PDF)"
    ]
@@ -1942,7 +1874,7 @@
   {
    "nf": "3520",
    "uf": "CE",
-   "zip": "2026-05-01_2026-05-31_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-05.zip",
    "motivos": [
     "multa maior que o principal: campos trocados no PDF (corrigido)"
    ]
@@ -1950,7 +1882,7 @@
   {
    "nf": "3156",
    "uf": "AL",
-   "zip": "2026-05-01_2026-05-31_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-05.zip",
    "motivos": [
     "multa/juros de R$ 23.47 pela diferença do total (leitor não achou no PDF)"
    ]
@@ -1958,7 +1890,7 @@
   {
    "nf": "3600",
    "uf": "AM",
-   "zip": "2026-05-01_2026-05-31_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-05.zip",
    "motivos": [
     "DAR/AM: valores fora do texto do PDF; usado o valor do nome do arquivo"
    ]
@@ -1966,7 +1898,7 @@
   {
    "nf": "3634",
    "uf": "CE",
-   "zip": "2026-05-01_2026-05-31_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-05.zip",
    "motivos": [
     "multa maior que o principal: campos trocados no PDF (corrigido)"
    ]
@@ -1974,7 +1906,7 @@
   {
    "nf": "4110",
    "uf": "AL",
-   "zip": "2026-06-01_2026-06-30_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-06.zip",
    "motivos": [
     "multa/juros de R$ 4.48 pela diferença do total (leitor não achou no PDF)"
    ]
@@ -1982,7 +1914,7 @@
   {
    "nf": "3855",
    "uf": "CE",
-   "zip": "2026-06-01_2026-06-30_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-06.zip",
    "motivos": [
     "multa maior que o principal: campos trocados no PDF (corrigido)"
    ]
@@ -1990,7 +1922,7 @@
   {
    "nf": "4109",
    "uf": "AL",
-   "zip": "2026-06-01_2026-06-30_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-06.zip",
    "motivos": [
     "multa/juros de R$ 4.48 pela diferença do total (leitor não achou no PDF)"
    ]
@@ -1998,7 +1930,7 @@
   {
    "nf": "3938",
    "uf": "CE",
-   "zip": "2026-06-01_2026-06-30_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-06.zip",
    "motivos": [
     "multa maior que o principal: campos trocados no PDF (corrigido)"
    ]
@@ -2006,7 +1938,7 @@
   {
    "nf": "4480",
    "uf": "CE",
-   "zip": "2026-07-01_2026-07-31_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-07.zip",
    "motivos": [
     "multa maior que o principal: campos trocados no PDF (corrigido)"
    ]
@@ -2014,7 +1946,7 @@
   {
    "nf": "4700",
    "uf": "CE",
-   "zip": "2026-07-01_2026-07-31_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-07.zip",
    "motivos": [
     "multa maior que o principal: campos trocados no PDF (corrigido)"
    ]
@@ -2022,7 +1954,7 @@
   {
    "nf": "3395",
    "uf": "AL",
-   "zip": "2026-07-01_2026-07-31_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-07.zip",
    "motivos": [
     "multa/juros de R$ 5.40 pela diferença do total (leitor não achou no PDF)"
    ]
@@ -2030,7 +1962,7 @@
   {
    "nf": "3625",
    "uf": "CE",
-   "zip": "2026-07-01_2026-07-31_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-07.zip",
    "motivos": [
     "multa maior que o principal: campos trocados no PDF (corrigido)"
    ]
@@ -2038,7 +1970,7 @@
   {
    "nf": "4691",
    "uf": "CE",
-   "zip": "2026-07-01_2026-07-31_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-07.zip",
    "motivos": [
     "multa maior que o principal: campos trocados no PDF (corrigido)"
    ]
@@ -2046,7 +1978,7 @@
   {
    "nf": "4734",
    "uf": "CE",
-   "zip": "2026-07-01_2026-07-31_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-07.zip",
    "motivos": [
     "multa maior que o principal: campos trocados no PDF (corrigido)"
    ]
@@ -2054,7 +1986,7 @@
   {
    "nf": "4648",
    "uf": "CE",
-   "zip": "2026-07-01_2026-07-31_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-07.zip",
    "motivos": [
     "multa maior que o principal: campos trocados no PDF (corrigido)"
    ]
@@ -2062,7 +1994,7 @@
   {
    "nf": "2937",
    "uf": "CE",
-   "zip": "2026-08-01_2026-08-31_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-08.zip",
    "motivos": [
     "multa maior que o principal: campos trocados no PDF (corrigido)"
    ]
@@ -2070,7 +2002,7 @@
   {
    "nf": "3990",
    "uf": "CE",
-   "zip": "2026-08-01_2026-08-31_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-08.zip",
    "motivos": [
     "multa maior que o principal: campos trocados no PDF (corrigido)"
    ]
@@ -2078,7 +2010,7 @@
   {
    "nf": "4933",
    "uf": "CE",
-   "zip": "2026-08-01_2026-08-31_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-08.zip",
    "motivos": [
     "multa maior que o principal: campos trocados no PDF (corrigido)"
    ]
@@ -2086,7 +2018,7 @@
   {
    "nf": "4254",
    "uf": "TO",
-   "zip": "2026-08-01_2026-08-31_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-08.zip",
    "motivos": [
     "DARE/TO: valores fora do texto do PDF; usado o valor do nome do arquivo"
    ]
@@ -2094,7 +2026,7 @@
   {
    "nf": "4982",
    "uf": "CE",
-   "zip": "2026-08-01_2026-08-31_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-08.zip",
    "motivos": [
     "multa maior que o principal: campos trocados no PDF (corrigido)"
    ]
@@ -2102,7 +2034,7 @@
   {
    "nf": "5039",
    "uf": "CE",
-   "zip": "2026-08-01_2026-08-31_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-08.zip",
    "motivos": [
     "multa maior que o principal: campos trocados no PDF (corrigido)"
    ]
@@ -2110,7 +2042,7 @@
   {
    "nf": "5107",
    "uf": "CE",
-   "zip": "2026-08-01_2026-08-31_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-08.zip",
    "motivos": [
     "multa maior que o principal: campos trocados no PDF (corrigido)"
    ]
@@ -2118,7 +2050,7 @@
   {
    "nf": "4611",
    "uf": "CE",
-   "zip": "2026-09-01_2026-09-30_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-09.zip",
    "motivos": [
     "multa maior que o principal: campos trocados no PDF (corrigido)"
    ]
@@ -2126,7 +2058,7 @@
   {
    "nf": "4747",
    "uf": "CE",
-   "zip": "2026-09-01_2026-09-30_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-09.zip",
    "motivos": [
     "multa maior que o principal: campos trocados no PDF (corrigido)"
    ]
@@ -2134,7 +2066,7 @@
   {
    "nf": "5149",
    "uf": "CE",
-   "zip": "2026-09-01_2026-09-30_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-09.zip",
    "motivos": [
     "multa maior que o principal: campos trocados no PDF (corrigido)"
    ]
@@ -2142,7 +2074,7 @@
   {
    "nf": "5801",
    "uf": "CE",
-   "zip": "2026-09-01_2026-09-30_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-09.zip",
    "motivos": [
     "multa maior que o principal: campos trocados no PDF (corrigido)"
    ]
@@ -2150,7 +2082,7 @@
   {
    "nf": "4779",
    "uf": "AL",
-   "zip": "2026-09-01_2026-09-30_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-09.zip",
    "motivos": [
     "multa/juros de R$ 2.11 pela diferença do total (leitor não achou no PDF)"
    ]
@@ -2158,7 +2090,7 @@
   {
    "nf": "5268",
    "uf": "CE",
-   "zip": "2026-09-01_2026-09-30_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-09.zip",
    "motivos": [
     "multa maior que o principal: campos trocados no PDF (corrigido)"
    ]
@@ -2166,7 +2098,7 @@
   {
    "nf": "5496",
    "uf": "CE",
-   "zip": "2026-09-01_2026-09-30_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-09.zip",
    "motivos": [
     "multa maior que o principal: campos trocados no PDF (corrigido)"
    ]
@@ -2174,7 +2106,7 @@
   {
    "nf": "4861",
    "uf": "CE",
-   "zip": "2026-09-01_2026-09-30_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-09.zip",
    "motivos": [
     "multa maior que o principal: campos trocados no PDF (corrigido)"
    ]
@@ -2182,7 +2114,7 @@
   {
    "nf": "5365",
    "uf": "CE",
-   "zip": "2026-09-01_2026-09-30_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-09.zip",
    "motivos": [
     "multa maior que o principal: campos trocados no PDF (corrigido)"
    ]
@@ -2190,7 +2122,7 @@
   {
    "nf": "3420",
    "uf": "PI",
-   "zip": "2026-09-01_2026-09-30_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-09.zip",
    "motivos": [
     "multa/juros de R$ 2.59 pela diferença do total (leitor não achou no PDF)"
    ]
@@ -2198,7 +2130,7 @@
   {
    "nf": "5407",
    "uf": "CE",
-   "zip": "2026-09-01_2026-09-30_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-09.zip",
    "motivos": [
     "multa maior que o principal: campos trocados no PDF (corrigido)"
    ]
@@ -2206,7 +2138,7 @@
   {
    "nf": "5450",
    "uf": "TO",
-   "zip": "2026-09-01_2026-09-30_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-09.zip",
    "motivos": [
     "DARE/TO: valores fora do texto do PDF; usado o valor do nome do arquivo"
    ]
@@ -2214,7 +2146,7 @@
   {
    "nf": "5084",
    "uf": "CE",
-   "zip": "2026-09-01_2026-09-30_-_Comprovantes_do_DIFAL (1).zip",
+   "zip": "AGRO-2026-09.zip",
    "motivos": [
     "multa maior que o principal: campos trocados no PDF (corrigido)"
    ]
@@ -2222,7 +2154,7 @@
   {
    "nf": "5334",
    "uf": "CE",
-   "zip": "2026-10-01_2026-10-31_-_Comprovantes_do_DIFAL.zip",
+   "zip": "AGRO-2026-10.zip",
    "motivos": [
     "multa maior que o principal: campos trocados no PDF (corrigido)"
    ]
@@ -2230,7 +2162,7 @@
   {
    "nf": "5839",
    "uf": "CE",
-   "zip": "2026-10-01_2026-10-31_-_Comprovantes_do_DIFAL.zip",
+   "zip": "AGRO-2026-10.zip",
    "motivos": [
     "multa maior que o principal: campos trocados no PDF (corrigido)"
    ]
@@ -2238,7 +2170,7 @@
   {
    "nf": "6233",
    "uf": "AL",
-   "zip": "2026-10-01_2026-10-31_-_Comprovantes_do_DIFAL.zip",
+   "zip": "AGRO-2026-10.zip",
    "motivos": [
     "multa/juros de R$ 0.99 pela diferença do total (leitor não achou no PDF)"
    ]
@@ -2246,7 +2178,7 @@
   {
    "nf": "5793",
    "uf": "CE",
-   "zip": "2026-10-01_2026-10-31_-_Comprovantes_do_DIFAL.zip",
+   "zip": "AGRO-2026-10.zip",
    "motivos": [
     "multa maior que o principal: campos trocados no PDF (corrigido)"
    ]
@@ -2254,7 +2186,7 @@
   {
    "nf": "6169",
    "uf": "CE",
-   "zip": "2026-10-01_2026-10-31_-_Comprovantes_do_DIFAL.zip",
+   "zip": "AGRO-2026-10.zip",
    "motivos": [
     "multa maior que o principal: campos trocados no PDF (corrigido)"
    ]
@@ -2262,7 +2194,7 @@
   {
    "nf": "5590",
    "uf": "CE",
-   "zip": "2026-10-01_2026-10-31_-_Comprovantes_do_DIFAL.zip",
+   "zip": "AGRO-2026-10.zip",
    "motivos": [
     "multa maior que o principal: campos trocados no PDF (corrigido)"
    ]
@@ -2270,7 +2202,7 @@
   {
    "nf": "5825",
    "uf": "AL",
-   "zip": "2026-10-01_2026-10-31_-_Comprovantes_do_DIFAL.zip",
+   "zip": "AGRO-2026-10.zip",
    "motivos": [
     "multa/juros de R$ 0.41 pela diferença do total (leitor não achou no PDF)"
    ]
@@ -2278,7 +2210,7 @@
   {
    "nf": "5986",
    "uf": "AL",
-   "zip": "2026-10-01_2026-10-31_-_Comprovantes_do_DIFAL.zip",
+   "zip": "AGRO-2026-10.zip",
    "motivos": [
     "multa/juros de R$ 0.44 pela diferença do total (leitor não achou no PDF)"
    ]
@@ -2286,7 +2218,7 @@
   {
    "nf": "5871",
    "uf": "CE",
-   "zip": "2026-10-01_2026-10-31_-_Comprovantes_do_DIFAL.zip",
+   "zip": "AGRO-2026-10.zip",
    "motivos": [
     "multa maior que o principal: campos trocados no PDF (corrigido)"
    ]
@@ -2294,7 +2226,7 @@
   {
    "nf": "6018",
    "uf": "CE",
-   "zip": "2026-10-01_2026-10-31_-_Comprovantes_do_DIFAL.zip",
+   "zip": "AGRO-2026-10.zip",
    "motivos": [
     "multa maior que o principal: campos trocados no PDF (corrigido)"
    ]
@@ -2302,7 +2234,7 @@
   {
    "nf": "5763",
    "uf": "CE",
-   "zip": "2026-10-01_2026-10-31_-_Comprovantes_do_DIFAL.zip",
+   "zip": "AGRO-2026-10.zip",
    "motivos": [
     "multa maior que o principal: campos trocados no PDF (corrigido)"
    ]
@@ -2310,7 +2242,7 @@
   {
    "nf": "6033",
    "uf": "CE",
-   "zip": "2026-10-01_2026-10-31_-_Comprovantes_do_DIFAL.zip",
+   "zip": "AGRO-2026-10.zip",
    "motivos": [
     "multa maior que o principal: campos trocados no PDF (corrigido)"
    ]
@@ -2318,7 +2250,7 @@
   {
    "nf": "6163",
    "uf": "CE",
-   "zip": "2026-11-01_2026-11-20_-_Comprovantes_do_DIFAL.zip",
+   "zip": "AGRO-2026-11.zip",
    "motivos": [
     "multa maior que o principal: campos trocados no PDF (corrigido)"
    ]
@@ -2326,7 +2258,7 @@
   {
    "nf": "6319",
    "uf": "AL",
-   "zip": "2026-11-01_2026-11-20_-_Comprovantes_do_DIFAL.zip",
+   "zip": "AGRO-2026-11.zip",
    "motivos": [
     "multa/juros de R$ 0.59 pela diferença do total (leitor não achou no PDF)"
    ]
@@ -2334,10 +2266,37 @@
   {
    "nf": "6059",
    "uf": "CE",
-   "zip": "2026-11-01_2026-11-20_-_Comprovantes_do_DIFAL.zip",
+   "zip": "AGRO-2026-11.zip",
    "motivos": [
     "multa maior que o principal: campos trocados no PDF (corrigido)"
    ]
+  }
+ ],
+ "regra": "comparação só com notas em que todos os itens têm NCM 8436 (igual ao histórico da AVIC); autuações à parte",
+ "foraDaComparacao": [
+  {
+   "nf": "2815",
+   "uf": "AM",
+   "data": "2026-02-12",
+   "difal_pago": 16.35
+  },
+  {
+   "nf": "2881",
+   "uf": "TO",
+   "data": "2026-02-16",
+   "difal_pago": 40.89
+  },
+  {
+   "nf": "4512",
+   "uf": "AM",
+   "data": "2026-06-26",
+   "difal_pago": 10.25
+  },
+  {
+   "nf": "5268",
+   "uf": "CE",
+   "data": "2026-08-18",
+   "difal_pago": 48.88
   }
  ]
 }
