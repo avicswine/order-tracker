@@ -15,13 +15,17 @@ import axios from 'axios'
 import type { PrismaClient } from '@prisma/client'
 import { mlAuth, type MlCompany } from '../mercadolivre'
 import { dataBR, somarDias } from '../separacao/datas'
-import { JANELA_ML_DIAS } from './guias'
+import { JANELA_ML_DIAS, filtroVendasMl } from './guias'
 
 const ML_API = 'https://api.mercadolibre.com'
 /** pausa entre chamadas, para não pressionar o limite do ML */
 const PAUSA_MS = 150
-/** no máximo por rodada (tipo de envio + rastreio juntos): o resto fica para a próxima atualização */
+/** no máximo por rodada (tipo de envio + rastreio juntos), em VENDAS: o resto fica para a próxima atualização */
 const LIMITE_POR_RODADA = 100
+/** e no máximo estas CHAMADAS ao ML por rodada (venda de carrinho pode gastar até 4 na primeira leitura) */
+const LIMITE_CHAMADAS = 150
+/** envio em andamento só é relido depois deste intervalo (vários cliques seguidos não gastam chamadas) */
+const RELER_APOS_HORAS = 6
 /** envios do ML (a mercadoria vai pela logística do ML): só neles o rastreio vem do ML */
 export const LOGISTICAS_MERCADO_ENVIOS = ['FULL', 'Coleta', 'Agência', 'Flex']
 /** status em que o envio não muda mais: não se consulta de novo */
@@ -43,7 +47,12 @@ export function rotuloLogistica(logisticType: string | null | undefined, mode: s
 
 class LimiteMl extends Error {}
 
+/** chamadas ao ML feitas nesta rodada (zerado no começo de preencherLogisticaMl) */
+let chamadas = 0
+
 async function lerJson(url: string, auth: Auth): Promise<Record<string, unknown> | null> {
+  if (chamadas >= LIMITE_CHAMADAS) throw new LimiteMl(`limite de ${LIMITE_CHAMADAS} chamadas por atualização`)
+  chamadas++
   try {
     const { data } = await axios.get(url, auth)
     return data as Record<string, unknown>
@@ -93,22 +102,36 @@ async function lerVenda(id: string, auth: Auth): Promise<{ mlLogistica: string }
  * Mercado Envios ainda não entregues. Para no primeiro 429.
  */
 export async function preencherLogisticaMl(prisma: PrismaClient): Promise<{ lidas: number; erros: string[] }> {
+  chamadas = 0
   const limite = new Date(`${somarDias(dataBR(), -JANELA_ML_DIAS)}T00:00:00Z`) // emitidaEm guarda Brasília como UTC
-  const daLista = { responsavel: 'ML_PAGA' as const, difalCalculado: { gt: 0 }, emitidaEm: { gte: limite }, mlOrderId: { not: null } }
+  // só as vendas que aparecem na lista de guias (mesmo filtro da tela): comprovante enviado, nota cancelada ou
+  // divergente saem da lista e não gastam chamada
+  const daLista = { AND: [filtroVendasMl(), { emitidaEm: { gte: limite }, difalCalculado: { gt: 0 }, mlOrderId: { not: null } }] }
   const semTipo = await prisma.difalNota.findMany({
-    // sem tipo de envio, ou do Mercado Envios lida antes de o rastreio existir (sem o número do envio)
-    where: { ...daLista, OR: [{ mlLogistica: null }, { mlLogistica: { in: LOGISTICAS_MERCADO_ENVIOS }, mlEnvioId: null }] },
-    select: { id: true, empresa: true, nfNumero: true, mlOrderId: true, mlEnvioId: true },
+    // sem tipo de envio, ou do Mercado Envios lida antes de o rastreio existir (sem o número do envio, tentada uma vez)
+    where: {
+      ...daLista,
+      OR: [
+        // sem tipo: tenta de novo só depois do intervalo, se a última tentativa deu erro
+        { mlLogistica: null, OR: [{ mlEnvioLidoEm: null }, { mlEnvioLidoEm: { lt: new Date(Date.now() - RELER_APOS_HORAS * 3600_000) } }] },
+        { mlLogistica: { in: LOGISTICAS_MERCADO_ENVIOS }, mlEnvioId: null, mlEnvioLidoEm: null },
+      ],
+    },
+    select: { id: true, empresa: true, nfNumero: true, mlOrderId: true, mlEnvioId: true, mlLogistica: true },
     orderBy: { emitidaEm: 'desc' },
     take: LIMITE_POR_RODADA,
   })
   // rastreio: Mercado Envios, já com o envio conhecido e ainda não entregue; o que foi lido há mais tempo primeiro
   const emAndamento = await prisma.difalNota.findMany({
     where: {
-      ...daLista, mlLogistica: { in: LOGISTICAS_MERCADO_ENVIOS }, mlEnvioId: { not: null },
-      OR: [{ mlEnvioStatus: null }, { mlEnvioStatus: { notIn: STATUS_FINAIS } }],
+      mlLogistica: { in: LOGISTICAS_MERCADO_ENVIOS }, mlEnvioId: { not: null },
+      AND: [
+        ...daLista.AND, // filtro da lista + as condições abaixo (um AND só: dois AND, um apagaria o outro)
+        { OR: [{ mlEnvioStatus: null }, { mlEnvioStatus: { notIn: STATUS_FINAIS } }] },
+        { OR: [{ mlEnvioLidoEm: null }, { mlEnvioLidoEm: { lt: new Date(Date.now() - RELER_APOS_HORAS * 3600_000) } }] },
+      ],
     },
-    select: { id: true, empresa: true, nfNumero: true, mlOrderId: true, mlEnvioId: true },
+    select: { id: true, empresa: true, nfNumero: true, mlOrderId: true, mlEnvioId: true, mlLogistica: true },
     orderBy: { mlEnvioLidoEm: { sort: 'asc', nulls: 'first' } },
     take: Math.max(0, LIMITE_POR_RODADA - semTipo.length),
   })
@@ -132,9 +155,13 @@ export async function preencherLogisticaMl(prisma: PrismaClient): Promise<{ lida
     try {
       if (soRastreio) {
         const envio = await lerJson(`${ML_API}/shipments/${n.mlEnvioId}`, acesso)
-        if (envio) await prisma.difalNota.update({ where: { id: n.id }, data: rastreioDoEnvio(n.mlEnvioId!, envio) })
+        // envio sumido (404): só marca a leitura, para não voltar à frente da fila a cada rodada
+        await prisma.difalNota.update({ where: { id: n.id }, data: envio ? rastreioDoEnvio(n.mlEnvioId!, envio) : { mlEnvioLidoEm: new Date() } })
       } else {
-        await prisma.difalNota.update({ where: { id: n.id }, data: await lerVenda(n.mlOrderId!, acesso) })
+        const lido = await lerVenda(n.mlOrderId!, acesso)
+        // venda já rotulada (ex.: 'Coleta') que não devolveu envio: mantém o rótulo bom e não tenta de novo
+        const dados = n.mlLogistica && !lido.mlEnvioId ? { mlEnvioLidoEm: new Date() } : lido
+        await prisma.difalNota.update({ where: { id: n.id }, data: dados })
       }
       res.lidas++
     } catch (e) {
@@ -143,6 +170,8 @@ export async function preencherLogisticaMl(prisma: PrismaClient): Promise<{ lida
         break
       }
       res.erros.push(`envio ML da NF ${n.nfNumero}: ${String((e as Error).message).split('\n')[0]}`)
+      // erro dessa venda (403, 500...): marca a leitura, para ela não ser tentada de novo a cada rodada
+      await prisma.difalNota.update({ where: { id: n.id }, data: { mlEnvioLidoEm: new Date() } })
     }
     await dorme(PAUSA_MS)
   }

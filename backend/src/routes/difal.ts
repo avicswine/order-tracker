@@ -179,7 +179,8 @@ router.post(
         importacao.resultado = await importarNotas(prisma, opcoes)
         // tipo de envio das vendas do ML que aparecem na lista (uma vez por venda; para no 429)
         const logistica = await preencherLogisticaMl(prisma)
-        importacao.resultado[0]?.erros.push(...logistica.erros)
+        if (importacao.resultado[0]) importacao.resultado[0].erros.push(...logistica.erros)
+        else if (logistica.erros.length) importacao.erro = logistica.erros.join(' · ')
       } catch (e) {
         importacao.erro = (e as Error).message
         console.error('[DIFAL] importação falhou:', importacao.erro)
