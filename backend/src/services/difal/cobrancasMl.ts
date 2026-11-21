@@ -14,6 +14,9 @@
 import axios, { AxiosError } from 'axios'
 import type { PrismaClient } from '@prisma/client'
 import { mlAuth, type MlCompany } from '../mercadolivre'
+// apuração dos ZIPs de comprovantes que o ML mandou (guias que ele pagou), por empresa
+import historicoAvic from './dados/historico-guias.json'
+import historicoAgro from './dados/historico-guias-agro.json'
 
 const ML_API = 'https://api.mercadolibre.com'
 const PAGINA = 1000
@@ -141,13 +144,52 @@ export interface FechamentoMes {
   calculado: number // soma do nosso cálculo nas notas em que o ML recolhe
   notas: number
   diferenca: number // cobrado − calculado
+  // guias que o ML pagou, lidas dos ZIPs de comprovantes (0 = mês sem ZIP)
+  guiasZip: number
+  pagoZip: number // DIFAL principal pago pelo ML (sem multa e juros; autuações fora)
+  devidoZip: number // o que era devido pela nossa conta (1,5% / método do estado)
+  aMaisZip: number // pago − devido
+  encargosZip: number // multa e juros pagos nessas guias
 }
 
-/** Fechamento por mês e empresa: o que o ML cobrou × o que calculamos para as vendas dele. */
+interface NotaHistorico { data: string; difal_pago: number; difal_devido: number; encargos: number; autuacao: boolean }
+interface Historico { notas: NotaHistorico[] }
+
+/** empresa → apuração dos ZIPs */
+const HISTORICOS: { empresa: string; dados: Historico }[] = [
+  { empresa: 'AVIC', dados: historicoAvic as Historico },
+  { empresa: 'AGRO', dados: historicoAgro as Historico },
+]
+
+/** primeiro mês com guia nos ZIPs: o fechamento começa nele */
+function primeiroMesZip(): string | null {
+  const meses = HISTORICOS.flatMap((h) => h.dados.notas.map((n) => n.data.slice(0, 7))).sort()
+  return meses[0] ?? null
+}
+
+/** AAAA-MM de 'desde' até o mês atual */
+function mesesAte(desde: string, ate: string): string[] {
+  const lista: string[] = []
+  let [a, m] = desde.split('-').map(Number)
+  for (;;) {
+    const mes = `${a}-${String(m).padStart(2, '0')}`
+    lista.push(mes)
+    if (mes >= ate) return lista
+    m++
+    if (m > 12) { m = 1; a++ }
+  }
+}
+
+/**
+ * Fechamento por mês e empresa, de todos os meses possíveis (desde a primeira guia dos ZIPs, ou os últimos 6 meses):
+ * guias que o ML pagou (ZIPs) × devido pela nossa conta, cobrança CDIFAL da fatura × calculado nas notas.
+ */
 export async function fechamentoMensal(prisma: PrismaClient, meses = 6): Promise<FechamentoMes[]> {
   const agora = new Date()
-  const desde = new Date(Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth() - (meses - 1), 1))
-  const desdeStr = desde.toISOString().slice(0, 7)
+  const janela = new Date(Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth() - (meses - 1), 1)).toISOString().slice(0, 7)
+  const doZip = primeiroMesZip()
+  const desdeStr = doZip && doZip < janela ? doZip : janela
+  const desde = new Date(`${desdeStr}-01T00:00:00Z`)
 
   const [cobrancas, notas] = await Promise.all([
     prisma.difalCobrancaMl.findMany({ where: { periodo: { gte: `${desdeStr}-01` } } }),
@@ -161,8 +203,23 @@ export async function fechamentoMensal(prisma: PrismaClient, meses = 6): Promise
   const mapa = new Map<string, FechamentoMes>()
   const linha = (mes: string, empresa: string) => {
     const k = `${mes}|${empresa}`
-    if (!mapa.has(k)) mapa.set(k, { mes, empresa, cobradoMl: 0, lancamentos: 0, calculado: 0, notas: 0, diferenca: 0 })
+    if (!mapa.has(k)) {
+      mapa.set(k, { mes, empresa, cobradoMl: 0, lancamentos: 0, calculado: 0, notas: 0, diferenca: 0,
+        guiasZip: 0, pagoZip: 0, devidoZip: 0, aMaisZip: 0, encargosZip: 0 })
+    }
     return mapa.get(k)!
+  }
+  // todos os meses aparecem, para as duas empresas, mesmo sem dado (o mês vazio também é informação)
+  for (const mes of mesesAte(desdeStr, agora.toISOString().slice(0, 7))) for (const emp of Object.keys(CONTA_ML)) linha(mes, emp)
+  for (const h of HISTORICOS) {
+    for (const n of h.dados.notas) {
+      if (n.autuacao) continue // autuação é lançamento do fisco, não DIFAL normal (fica no histórico à parte)
+      const l = linha(n.data.slice(0, 7), h.empresa)
+      l.guiasZip++
+      l.pagoZip += n.difal_pago
+      l.devidoZip += n.difal_devido
+      l.encargosZip += n.encargos
+    }
   }
   for (const c of cobrancas) {
     const l = linha(c.periodo.slice(0, 7), c.empresa)
@@ -174,7 +231,12 @@ export async function fechamentoMensal(prisma: PrismaClient, meses = 6): Promise
     l.calculado += n.difalCalculado
     l.notas++
   }
+  const r2 = (v: number) => Math.round(v * 100) / 100
   return [...mapa.values()]
-    .map((l) => ({ ...l, diferenca: l.cobradoMl - l.calculado }))
+    .map((l) => ({
+      ...l,
+      cobradoMl: r2(l.cobradoMl), calculado: r2(l.calculado), diferenca: r2(l.cobradoMl - l.calculado),
+      pagoZip: r2(l.pagoZip), devidoZip: r2(l.devidoZip), aMaisZip: r2(l.pagoZip - l.devidoZip), encargosZip: r2(l.encargosZip),
+    }))
     .sort((a, b) => b.mes.localeCompare(a.mes) || a.empresa.localeCompare(b.empresa))
 }
