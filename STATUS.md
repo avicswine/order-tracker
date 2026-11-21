@@ -1,6 +1,6 @@
 # STATUS — Order Tracker
 
-Última atualização: 2026-11-20 (DIFAL: primeira guia GNRE aceita em homologação; campos extras por UF; atrasadas vão para a contabilidade; visual novo; desenvolvimento passa a ser testado no PC)
+Última atualização: 2026-11-20 (DIFAL em produção no portal GNRE; primeira guia real; base pelo valor da NF; pagar no dia da emissão; Fechamento ML com AVIC e AGRO; DIFAL pago no cmvsync)
 
 ## Regra de trabalho (definida por José em 2026-11-07)
 
@@ -12,66 +12,73 @@ retrabalho e custo.
 
 ## Monitor de DIFAL — ESTADO ATUAL (2026-11-20, tudo na `main` e em produção)
 
-PRs mergeados: #2 a #6 (monitor, auditoria, portal GNRE, TLS, cadeia ICP-Brasil), #8 (importação em segundo plano),
-#9 a #13 e #15 (formato do lote GNRE até a guia ser aceita), #12 (desfazer lote invalidado), #14 (esconde DIFAL zero),
-#16 (visual novo), #17 (atrasadas para a contabilidade).
+PRs mergeados: #2 a #22 (monitor, portal GNRE, formato do lote até a guia ser aceita, visual), #23 (base pelo valor da
+NF, pagar no dia da emissão, rotina diária, abas novas, registro de guias pagas), #24 (filtro por canal, lote só com as
+notas visíveis), #25 (leitura do DIFAL pago para o cmvsync), #26 (engrenagem e cabeçalho), #27 (topo compacto,
+Fechamento ML com todos os meses, histórico da AGRO). cmvsync: PR #3 (DIFAL pago nas Vendas).
+
+### Em produção desde 20/11/2026
+
+- **Portal GNRE em PRODUÇÃO** (`GNRE_AMBIENTE=producao`; AVIC 47.715.256/0001-49 e AGRO 54.695.386/0001-22
+  autorizadas pelo portal). **Primeira guia real:** AGRO NF 6541 (CE), R$ 8,29, lote `AGRO-20261120235417-TPIY`,
+  processada, pagar em **23/11/2026**. A guia em PDF é o modelo oficial gerado pelo próprio portal.
+- **Regras de dinheiro** (decisões do José):
+  - Base do DIFAL = **valor total da NF** (já com desconto, frete, outras despesas e IPI), repartida entre itens
+    8436 e demais na proporção dos produtos (LC 87/96, art. 13). Notas em aberto recalculadas no Railway em 20/11
+    (`backend/src/_recalcula_base_nf.ts`, com backup); 92 notas mudaram, −R$ 218,06.
+  - **Todo DIFAL vence no dia da emissão da NF, de qualquer canal** (sem separar "o ML paga"). Nota emitida a partir
+    das **17h**, ou em fim de semana/feriado, vence no próximo dia útil (`prazoDoDifal` em `guias.ts`).
+    Vendas do ML dos últimos **30 dias** entram na lista.
+  - Nota com guia gerada nunca tem o valor reescrito (nem numa nova leitura do Bling).
+  - Marcar como paga: só guia aceita pelo portal em produção.
+- **Rotina diária** às **16h** (dias úteis), resumo no WhatsApp da AVIC: **DESLIGADA** até criar no Railway
+  `DIFAL_ROTINA=1` e `DIFAL_WHATSAPP_NUMERO`. `DIFAL_ROTINA_ENVIAR=1` também gera/envia lotes (só age em produção).
+  Lista à parte as notas que venceram no último dia útil e seguem sem guia (emitidas entre 16h e 17h).
+- **Tela `/difal`:** cabeçalho numa linha com a engrenagem (Configuração); cards (guias a emitir, valor das notas e
+  DIFAL médio %, cobrança do ML divergente) acima das abas e seguindo os filtros; abas Vendas · Lotes GNRE ·
+  O que já pagamos · Fechamento ML; barra de filtros (No prazo | Atrasadas, busca, canal, datas, estados com cobrança,
+  ↻ Bling); colunas de envio iguais à tela de Pedidos; Valor da NF; dicas com itens e a conta do DIFAL.
+- **cmvsync:** painel de Vendas mostra o DIFAL **só nas vendas com guia paga** e desconta do lucro. Lê
+  `GET /api/difal-externo/pagas` com a chave `DIFAL_CHAVE_CMVSYNC` (igual no Railway e no `.env` do cmvsync).
+
+### Histórico das guias pagas pelo ML (ZIPs de comprovantes)
+
+- ZIPs em `Downloads\DIFAL-comprovantes\AVIC` e `\AGRO` (`EMPRESA-AAAA-MM.zip`). **O ML baixa os arquivos das duas
+  empresas com o mesmo nome:** salvar com o nome da empresa (um sobrescreveu o outro em out/2026).
+- Dados no repositório: `backend/src/services/difal/dados/historico-guias.json` (AVIC) e `historico-guias-agro.json`.
+  Comparação só com notas 100% NCM 8436; autuações (PI) à parte. Correções de leitura: DAE/CE com o principal no
+  campo da multa; DAR/AL e PI com multa/juros pela diferença do total; 8 guias da AGRO (TO/AM/PB) estimadas pelo
+  valor do nome do arquivo.
+- **Dez/2025 a 20/11/2026:** ML pagou **R$ 20.712,42**, devido **R$ 5.604,71**, **pago a mais R$ 15.107,71**
+  (AVIC R$ 9.084,43 · AGRO R$ 6.023,28), multa/juros R$ 1.539,86.
+- Planilha para pedir restituição (por empresa e estado): `Downloads\DIFAL-comprovantes\DIFAL-restituicao-por-estado.xlsx`.
+  Base: CTN arts. 165, 166 (provar que arcamos com o encargo: o ML cobrou de nós pelo CDIFAL) e 168 (5 anos).
 
 ### Como trabalhar (decisão do José, 20/11/2026)
 
-**Desenvolver e testar no PC; Railway só depois de pronto (PR + "pode" do José).**
-- Banco local recebe **só as tabelas `difal_*`** copiadas da produção: `backend/src/_copia_difal_local.ts`
-  (PROD_DATABASE_URL = `DATABASE_PUBLIC_URL` do serviço Postgres-PsBX). Não versionado.
-- **Nunca usar no PC os tokens do Bling/ML de produção**: renovar no PC derruba o token do Railway.
-  "Atualizar do Bling" não funciona no PC.
-- Subir: backend `npm run dev` (3001) e frontend `npx vite --port 5174`; abrir **http://localhost:5174**.
-  Login local em `backend/.env.acesso-local`. O portal GNRE de homologação funciona do PC (certificados no `.env`).
-
-### O que já existe
-
-| parte | onde | estado |
-|---|---|---|
-| Tabelas `difal_notas`, `difal_aliquotas`, `difal_emitentes`, `difal_cobrancas_ml`, `difal_lotes_gnre` | `backend/prisma/schema.prisma` + 5 migrações `202611*` | em produção (a última acrescenta `difal_aliquotas.camposExtrasGnre`) |
-| Cálculo (carga/prop, redução NCM 8436, quem paga) | `services/difal/calculo.ts` | 8 casos em `verificar.ts` |
-| Importação do Bling (AVIC e AGRO; EQUI fora) | `importar.ts`, rota em segundo plano + `GET /difal/importar/status` | 90 dias levam minutos; erro 504 do Bling em algumas notas: repetir |
-| Painel | `frontend/src/pages/DifalPage.tsx` + `difal.css` | esconde DIFAL zero (menos divergentes/cobradas pelo ML); visual novo |
-| Guias no prazo × atrasadas | `guias.ts` (`prazoLegal`) | atrasadas não entram em lote; "Baixar lista" (CSV sem nome/CPF) para a contabilidade |
-| Lote GNRE (layout 2.00) | `gnre.ts`, `guias.ts`, `portalGnre.ts` | conferido campo a campo contra os XSD oficiais; `verificarGnre.ts` e `verificarPortalGnre.ts` |
-| Configuração por UF | `difal_aliquotas`: receita, `tipoDocOrigemGnre`, `camposExtrasGnre` | gravada lendo o GnreConfigUF (`backend/src/_grava_config_gnre.ts`, não versionado) |
-| Histórico auditado | `dados/historico-guias.json` | 94 guias; pago a mais R$ 6.677,44 |
-
-### Portal GNRE — o que já se sabe (testado em homologação)
-
-- `GNRE_AMBIENTE=homologacao`. Certificados A1: **AVIC vence 15/01/2027**, **AGRO vence 09/06/2027**
-  (AGRO ainda sem as variáveis `GNRE_PFX_BASE64_AGRO`/`GNRE_PFX_SENHA_AGRO` no Railway; no PC funciona).
-- **Primeira guia aceita: 20/11/2026** (PI, NF 12962). Também aceitas: PB, RJ, SC, GO, RO, MS.
-  PR e BA deram 703 (sistema do estado fora do ar em homologação); MA exige "produto" (trava a nota).
-- Regras que custaram tentativas (manual GNRE v2.17 + XSD + GnreConfigUF):
-  resposta do envio é `processarResponse`; `identificadorGuia` só dígitos (número da NF); razão social/endereço
-  ≤ 60 caracteres latinos; documento de origem no tipo que a UF aceita (10 número, 22 chave NF-e, 24 chave DF-e,
-  ou nenhum em MS/PB); `dataPagamento` obrigatória (= hoje em Brasília); emitente **só com CNPJ** (IE só se inscrito
-  na UF favorecida, regra 202); campos extras obrigatórios por UF (chave da NF-e, data de emissão no RJ,
-  observação "DIFAL NF <n>" no TO).
-- O `.pfx` da AVIC vem sem a cadeia: a cadeia ICP-Brasil está embutida em `dados/cadeiaIcpBrasilRfb.ts`.
-- `emitidaEm` guarda o horário de Brasília **como se fosse UTC** (Bling manda sem fuso): usar as partes UTC.
-- SP e ES: "UF não habilitada" em homologação. SP tem DIFAL só em produto sem NCM 8436.
+**Desenvolver e testar no PC; Railway só depois de pronto (PR + revisão por agente separado + "pode" do José).**
+- Banco local com as tabelas `difal_*` copiadas da produção (`backend/src/_copia_difal_local.ts`, não versionado).
+  O PC fica em homologação no portal GNRE; o José testa a produção em rastreio.avicswine.com.br.
+- **Nunca usar no PC os tokens do Bling/ML de produção.** Scripts que só leem produção usam a `DATABASE_PUBLIC_URL`
+  do serviço Postgres-PsBX.
+- Subir: backend `npm run dev` (3001) e frontend `npx vite --port 5174`; abrir http://localhost:5174.
+- Conferência: `npx tsx src/services/difal/verificar.ts` (15 casos: valor e prazo), `verificarGnre.ts`,
+  `verificarPortalGnre.ts`; no cmvsync, `python -m pytest -q tests`.
 
 ### O que falta (em ordem)
 
-1. **Contabilidade** (José leva a planilha de atrasadas): como regularizar as atrasadas (multa/juros) e se alguma já
-   foi paga à mão; se pagar 1–5 dias após a emissão, antes da entrega, gera multa; categoria de "produto" do MA.
-2. **Habilitação de produção** no portal GNRE (AVIC e AGRO) → `GNRE_AMBIENTE=producao` → primeira guia real com
-   **uma** nota só, paga pelo José, conferida no portal.
-3. AGRO no Railway: variáveis do certificado.
-4. Ideia em aberto (depende da contabilidade): usar o rastreio de entregas do order-tracker para separar atrasadas
-   ainda em trânsito (pagar já) das já entregues.
-5. ES e SP: reconsultar em produção.
-
-### Como conferir
-
-- `/difal`: cartões do topo, "Guias para emitir agora (no prazo)", "Atrasadas: com a contabilidade" (Baixar lista),
-  "Lotes GNRE gerados" (cartões verde/vermelho), fechamento mensal, tabela de notas.
-- Configuração → "Buscar receitas no portal" em uma UF → lista de receitas (prova de que o portal responde).
-- `npx tsx src/services/difal/verificar.ts`, `verificarGnre.ts` e `verificarPortalGnre.ts` no backend.
+1. **23/11:** pagar a guia da NF 6541 (R$ 8,29) e marcar como paga em "O que já pagamos"; conferir que aparece no cmvsync.
+2. **Fim de nov/2026:** José baixa os ZIPs restantes de novembro (AVIC e AGRO, nomes separados) → conferir se as guias
+   de NFs emitidas **depois de 16/11** (regras fiscais dos anúncios corrigidas) saíram com o devido (1,5%; CE 3,64%)
+   e se o ML pagou alguma nota que nós já pagamos (dobro).
+3. **Contabilidade:** pedidos de restituição por estado (planilha); atrasadas (multa/juros); regra "dia 15" só vale
+   com inscrição estadual no destino (Convênio ICMS 236/21, cláusula sexta); cálculo "por dentro" (LC 87/96, art. 13,
+   § 1º, I) no DIFAL com redução; categoria de "produto" do MA.
+4. Ligar a rotina diária (variáveis no Railway) quando o José passar o número do WhatsApp.
+5. cmvsync no PC: a pasta está na branch `fix-historico-cliente-perguntas` (outra tarefa); o DIFAL nas Vendas aparece
+   quando ela voltar para a `main`.
+6. Venda de balcão no cmvsync (sem número de pedido na loja): ligar ao DIFAL numa segunda etapa.
+7. Certificados A1: **AVIC vence 15/01/2027**, AGRO 09/06/2027.
 
 ### Regras aprendidas na planilha fiscal do ML (16–17/11/2026)
 
@@ -79,6 +86,13 @@ PRs mergeados: #2 a #6 (monitor, auditoria, portal GNRE, TLS, cadeia ICP-Brasil)
 - NCM nunca vai sem regra; "Código do produto" = SKU do Bling; um SKU pode estar em vários anúncios.
 - Aba Kits: "Preço do item no kit" é percentual (100); a aba **não aceita** Regra tributária.
 - Regras de Transferência/Remessa nas 4 regras (AVIC 821700/821701, AGRO 828518/828519): CST 41 + PIS/COFINS CST 49, padrão da granja.
+
+### Portal GNRE — regras que custaram tentativas (manual v2.17 + XSD + GnreConfigUF)
+
+Resposta do envio é `processarResponse`; `identificadorGuia` só dígitos (número da NF); textos ≤ 60 caracteres latinos;
+documento de origem no tipo que a UF aceita (10 número, 22 chave NF-e, 24 chave DF-e, nenhum em MS/PB);
+`dataPagamento` obrigatória; emitente só com CNPJ (IE só se inscrito na UF, regra 202); campos extras por UF;
+cadeia ICP-Brasil embutida (`dados/cadeiaIcpBrasilRfb.ts`); `emitidaEm` guarda Brasília como se fosse UTC.
 
 ---
 
