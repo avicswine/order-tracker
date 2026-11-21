@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { difalApi } from '../lib/api'
 import type {
   DifalHistorico, DifalGuiaPendente, DifalFechamentoMes,
-  DifalLote, DifalAliquota, DifalReceitaUf, DifalItemNota, DifalCalculoDetalhe,
+  DifalLote, DifalAliquota, DifalReceitaUf, DifalItemNota, DifalCalculoDetalhe, DifalGuiaResultado,
 } from '../lib/api'
 import './difal.css'
 import { StatusBadge } from '../components/ui/Badge'
@@ -637,7 +637,7 @@ function GuiasPendentes({ lugarCards, acaoExtra }: { lugarCards: HTMLElement | n
                     ) : g.guiaGeradaEm && ['1', '2'].includes(g.situacaoGuia ?? '') ? (
                       <span className="rounded-full bg-rose-50 px-2.5 py-1 font-medium text-rose-700">guia recusada · em Lotes GNRE, &ldquo;Devolver à fila&rdquo;</span>
                     ) : g.guiaGeradaEm && g.situacaoGuia === '3' ? (
-                      <span className="rounded-full bg-amber-50 px-2.5 py-1 font-medium text-amber-800">erro de comunicação com o estado · consulte de novo ou, em Lotes GNRE, &ldquo;Devolver à fila&rdquo;</span>
+                      <span className="rounded-full bg-amber-50 px-2.5 py-1 font-medium text-amber-800">erro de comunicação com o estado · consulte o lote de novo; sem código de barras, &ldquo;Devolver à fila&rdquo;</span>
                     ) : g.guiaGeradaEm && !g.guiaAceita ? (
                       <span className="rounded-full bg-blue-50 px-2.5 py-1 font-medium text-blue-700">guia gerada · envie ao portal e consulte</span>
                     ) : g.guiaGeradaEm ? (
@@ -1019,8 +1019,8 @@ function LotesGnre() {
   }
   const ocupado = enviar.isPending || consultar.isPending || desfazer.isPending || devolver.isPending
   // guia que não pode ser paga: recusada (1/2) ou erro de comunicação (3) sem código de barras (mesma regra do servidor)
-  const naoPagavel = (g: { situacaoGuia: string; linhaDigitavel?: string | null }) =>
-    ['1', '2'].includes(g.situacaoGuia) || (g.situacaoGuia === '3' && !g.linhaDigitavel)
+  const naoPagavel = (g: DifalGuiaResultado) =>
+    !g.devolvida && (['1', '2'].includes(g.situacaoGuia) || (g.situacaoGuia === '3' && !g.linhaDigitavel && !g.codigoBarras && !g.qrcodePayload))
 
   return (
     <div className="difal-secao difal-secao-violeta overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -1119,13 +1119,14 @@ function LotesGnre() {
                 <ul className="mt-3 space-y-1 border-t border-slate-200/70 pt-2 text-xs text-slate-600">
                   {l.guiasResultado.map((g, i) => (
                     <li key={i}>
-                      <span className={g.situacaoGuia === '0' ? 'text-emerald-700' : 'text-red-700'}>{g.situacaoTexto}</span>
+                      {g.devolvida && <span className="mr-1 rounded bg-slate-800 px-1.5 py-0.5 font-semibold text-white">devolvida à fila · NÃO PAGAR</span>}
+                      <span className={g.devolvida ? 'text-slate-400 line-through' : g.situacaoGuia === '0' ? 'text-emerald-700' : 'text-red-700'}>{g.situacaoTexto}</span>
                       {' · '}{g.identificadorGuia ? `NF ${g.identificadorGuia}` : g.ufFavorecida}
                       {g.valorGNRE && <> · R$ {g.valorGNRE}</>}
                       {g.dataLimitePagamento && <> · pagar até {g.dataLimitePagamento}</>}
                       {g.linhaDigitavel && <> · linha digitável <code className="select-all break-all rounded bg-white px-1 py-0.5 ring-1 ring-slate-200">{g.linhaDigitavel}</code></>}
                       {g.motivos.map((m) => <span key={m.codigo} className="text-red-700"> · {m.codigo} {m.descricao}{m.campo ? ` (${m.campo})` : ''}</span>)}
-                      {(g.linhaDigitavel || g.qrcodePayload) && (
+                      {!g.devolvida && (g.linhaDigitavel || g.qrcodePayload) && (
                         <span className="mt-1.5 flex flex-wrap gap-2">
                           {g.linhaDigitavel && <BotaoCopiar texto={g.linhaDigitavel} rotulo="Copiar código de barras" />}
                           {g.qrcodePayload && <BotaoCopiar texto={g.qrcodePayload} rotulo="Copiar PIX" />}

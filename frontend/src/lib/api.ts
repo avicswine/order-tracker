@@ -413,7 +413,10 @@ export interface DifalGuiaResultado {
   valorGNRE?: string
   linhaDigitavel?: string
   qrcodePayload?: string
+  codigoBarras?: string
   dataLimitePagamento?: string
+  /** a nota desta guia foi devolvida à fila: NÃO pagar por este lote */
+  devolvida?: boolean
   motivos: { codigo: string; descricao: string; campo?: string }[]
 }
 
