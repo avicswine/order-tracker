@@ -539,6 +539,8 @@ model DifalAliquota {
   // campos extras OBRIGATÓRIOS da receita nesta UF (GnreConfigUF), já classificados:
   // [{ codigo, titulo, conteudo: "chaveNfe" | "dataEmissao" | "observacao" | "desconhecido" }]
   camposExtrasGnre   Json?
+  // GnreConfigUF exigePeriodoReferencia: a guia leva referencia.periodo = 0 (mensal, XSD dados_gnre_v2.00)
+  exigePeriodoGnre   Boolean  @default(false)
 
   atualizadoEm    DateTime @updatedAt
 

@@ -43,6 +43,8 @@ export interface GuiaPendente {
   mlOrderId: string | null
   /** venda do ML com guia já gerada, esperando pagamento e comprovante */
   guiaGeradaEm: Date | null
+  /** situação da guia no portal: 0 aceita, 1/2 recusada, 3 erro de comunicação, 4 pendente; null = sem resultado */
+  situacaoGuia: string | null
   /** a guia foi processada com sucesso pelo portal (libera 'Comprovante enviado') */
   guiaAceita: boolean
   situacao: string
@@ -220,7 +222,9 @@ export async function listarGuiasPendentes(prisma: PrismaClient, empresa?: strin
         ...(empresa && { empresa }),
         // nós pagamos todas (decisão do José, 20/11/2026): as nossas em aberto e as do ML dos últimos 30 dias
         OR: [
-          { responsavel: 'NOSSO', situacao: { in: [...SITUACOES_ABERTAS] }, guiaGeradaEm: null },
+          // as nossas: sem guia, ou com guia que ainda não foi aceita (recusada, erro de comunicação, sem resultado);
+          // a aceita sai daqui (vai para 'O que já pagamos') — filtro logo abaixo, depois de ler o resultado do lote
+          { responsavel: 'NOSSO', situacao: { in: [...SITUACOES_ABERTAS] } },
           filtroVendasMl(),
         ],
       },
@@ -283,6 +287,7 @@ export async function listarGuiasPendentes(prisma: PrismaClient, empresa?: strin
       mlOrderId: n.mlOrderId,
       guiaGeradaEm: n.guiaGeradaEm,
       guiaAceita: situacaoDaGuia(n, n.guiaLoteId ? resultadoPorLote.get(n.guiaLoteId) : null) === '0',
+      situacaoGuia: n.guiaLoteId ? situacaoDaGuia(n, resultadoPorLote.get(n.guiaLoteId)) : null,
       situacao: n.situacao,
       observacao: n.observacao,
       estadoComCobranca: UFS_COM_COBRANCA.includes(n.clienteUf),
@@ -293,6 +298,8 @@ export async function listarGuiasPendentes(prisma: PrismaClient, empresa?: strin
       envioMl: n.mlEnvioId ? { status: n.mlEnvioStatus, substatus: n.mlEnvioSubstatus, previsao: n.mlPrevisao, lidoEm: n.mlEnvioLidoEm } : null,
     }
   })
+    // a nossa com guia aceita sai de Vendas (está em 'O que já pagamos'); a do ML fica até o comprovante ser enviado
+    .filter((g) => g.ml || !g.guiaAceita)
 }
 
 function aaaaMmDd(d: Date): string {
@@ -432,6 +439,8 @@ export async function gerarLoteDasNotas(prisma: PrismaClient, ids: string[], hoj
       camposExtras: camposExtrasDaUf(a).map((c) => ({ codigo: c.codigo, valor: valorCampoExtra(c, n)! })),
       valorPrincipal: n.difalCalculado,
       referencia: {
+        // período mensal ('0', XSD dados_gnre_v2.00) só onde o estado exige: o AM recusou sem ele (220)
+        ...(a.exigePeriodoGnre && { periodo: '0' }),
         mes: String(n.emitidaEm.getUTCMonth() + 1).padStart(2, '0'),
         ano: String(n.emitidaEm.getUTCFullYear()),
       },

@@ -631,6 +631,10 @@ function GuiasPendentes({ lugarCards, acaoExtra }: { lugarCards: HTMLElement | n
                   <span className="flex flex-wrap items-center gap-2">
                     {g.situacao === 'DIVERGENTE' ? (
                       <span title={g.observacao ?? undefined} className="rounded-full bg-rose-50 px-2.5 py-1 font-medium text-rose-700">● nota divergente (cancelada?) — conferir</span>
+                    ) : g.guiaGeradaEm && ['1', '2'].includes(g.situacaoGuia ?? '') ? (
+                      <span className="rounded-full bg-rose-50 px-2.5 py-1 font-medium text-rose-700">guia recusada · em Lotes GNRE, &ldquo;Devolver recusadas à fila&rdquo;</span>
+                    ) : g.guiaGeradaEm && g.situacaoGuia === '3' ? (
+                      <span className="rounded-full bg-amber-50 px-2.5 py-1 font-medium text-amber-800">erro de comunicação com o estado · consulte o lote de novo</span>
                     ) : g.guiaGeradaEm && !g.guiaAceita ? (
                       <span className="rounded-full bg-blue-50 px-2.5 py-1 font-medium text-blue-700">guia gerada · envie ao portal e consulte</span>
                     ) : g.guiaGeradaEm ? (
@@ -991,6 +995,15 @@ function LotesGnre() {
     },
     onError: (e) => setErro(mensagemErro(e)),
   })
+  const devolver = useMutation({
+    mutationFn: difalApi.devolverRecusadas,
+    onSuccess: (r) => {
+      setErro(r.notasDevolvidas ? null : 'Nenhuma nota a devolver: as recusadas deste lote já voltaram para a fila.')
+      recarregar()
+      qc.invalidateQueries({ queryKey: ['difal-guias-pendentes'] })
+    },
+    onError: (e) => setErro(mensagemErro(e)),
+  })
   const xml = useMutation({ mutationFn: difalApi.baixarXmlLote, onSuccess: (r) => baixarArquivo(r.arquivo, r.nome) })
   const pdf = useMutation({ mutationFn: difalApi.baixarPdfLote, onSuccess: (r) => baixarArquivo(r.arquivo, r.nome), onError: (e) => setErro(mensagemErro(e)) })
 
@@ -1001,7 +1014,7 @@ function LotesGnre() {
       </div>
     )
   }
-  const ocupado = enviar.isPending || consultar.isPending || desfazer.isPending
+  const ocupado = enviar.isPending || consultar.isPending || desfazer.isPending || devolver.isPending
 
   return (
     <div className="difal-secao difal-secao-violeta overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -1072,6 +1085,20 @@ function LotesGnre() {
                       className="difal-btn rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-xs text-rose-700 hover:bg-rose-50 disabled:opacity-50"
                     >
                       Desfazer
+                    </button>
+                  )}
+                  {/* lote misto (umas aceitas, outras recusadas): devolve à fila só as recusadas, para gerar de novo */}
+                  {l.guiasResultado.some((g) => ['1', '2'].includes(g.situacaoGuia)) && !l.guiasResultado.every((g) => ['1', '2'].includes(g.situacaoGuia)) && (
+                    <button
+                      onClick={() => {
+                        setErro(null)
+                        const n = l.guiasResultado.filter((g) => ['1', '2'].includes(g.situacaoGuia)).length
+                        if (window.confirm(`Devolver à fila as ${n} nota(s) com guia recusada pelo portal? As guias aceitas continuam neste lote. Depois, gere um lote novo com elas.`)) devolver.mutate(l.id)
+                      }}
+                      disabled={ocupado}
+                      className="difal-btn rounded-lg border border-amber-200 bg-white px-3 py-1.5 text-xs text-amber-800 hover:bg-amber-50 disabled:opacity-50"
+                    >
+                      {devolver.isPending ? 'Devolvendo…' : 'Devolver recusadas à fila'}
                     </button>
                   )}
                   {l.temPdf && (
@@ -1165,7 +1192,7 @@ function Configuracao() {
     onError: (e) => setErro(mensagemErro(e)),
   })
   const salvar = useMutation({
-    mutationFn: ({ uf, dados }: { uf: string; dados: { codigoReceitaGnre?: string; vencimentoRegra?: string; tipoDocOrigemGnre?: string; camposAdicionais?: DifalReceitaUf['camposAdicionais']; exigeProduto?: boolean } }) =>
+    mutationFn: ({ uf, dados }: { uf: string; dados: { codigoReceitaGnre?: string; vencimentoRegra?: string; tipoDocOrigemGnre?: string; camposAdicionais?: DifalReceitaUf['camposAdicionais']; exigeProduto?: boolean; exigePeriodo?: boolean } }) =>
       difalApi.atualizarAliquota(uf, dados),
     onSuccess: () => { recarregar(); setUfAberta(null); buscar.reset() },
     onError: (e) => setErro(mensagemErro(e)),
@@ -1270,7 +1297,7 @@ function Configuracao() {
                         {buscar.data.receitas.map((r: DifalReceitaUf) => (
                           <li key={`${r.codigo}-${r.courier}`} className="flex flex-wrap items-center gap-2 text-xs">
                             <button
-                              onClick={() => salvar.mutate({ uf: a.uf, dados: { codigoReceitaGnre: r.codigo, tipoDocOrigemGnre: tipoDocPreferido(r), camposAdicionais: r.camposAdicionais, exigeProduto: r.exigeProduto } })}
+                              onClick={() => salvar.mutate({ uf: a.uf, dados: { codigoReceitaGnre: r.codigo, tipoDocOrigemGnre: tipoDocPreferido(r), camposAdicionais: r.camposAdicionais, exigeProduto: r.exigeProduto, exigePeriodo: r.exigePeriodoReferencia } })}
                               className="difal-btn rounded-lg bg-slate-900 px-2.5 py-1 text-white hover:bg-slate-800"
                             >
                               usar {r.codigo}

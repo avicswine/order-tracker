@@ -265,6 +265,8 @@ export interface DifalGuiaPendente {
   mlOrderId: string | null
   guiaGeradaEm: string | null
   /** guia processada pelo portal: libera 'Comprovante enviado' */
+  /** situação da guia no portal: 0 aceita, 1/2 recusada, 3 erro de comunicação, 4 pendente; null = sem resultado */
+  situacaoGuia: string | null
   guiaAceita: boolean
   situacao: string
   observacao: string | null
@@ -450,6 +452,8 @@ export const difalApi = {
   consultarLote: (id: string) =>
     api.post<{ situacao: { codigo: string; descricao: string }; guias: DifalGuiaResultado[]; temPdf: boolean }>(`/difal/lotes/${id}/consultar`).then((r) => r.data),
   // downloads passam pelo axios para levar o token de login
+  devolverRecusadas: (id: string) =>
+    api.post<{ ok: boolean; notasDevolvidas: number }>(`/difal/lotes/${id}/devolver-recusadas`).then((r) => r.data),
   desfazerLote: (id: string) =>
     api.post<{ ok: boolean; notasDevolvidas: number }>(`/difal/lotes/${id}/desfazer`).then((r) => r.data),
   baixarXmlLote: (id: string) =>
