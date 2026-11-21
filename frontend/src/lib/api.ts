@@ -247,6 +247,8 @@ export interface DifalGuiaPendente {
   prazo: string
   /** passou do prazo: vai para a contabilidade, não para lote */
   atrasada: boolean
+  /** rastreio do Mercado Envios lido da API do ML (vendas por Coleta, Agência, FULL, Flex) */
+  envioMl: { status: string | null; substatus: string | null; previsao: string | null; lidoEm: string | null } | null
   /** envio no order-tracker; null = nota não está lá (retirada, Mercado Envios, Shopee…) */
   envio: {
     pedidoId: string

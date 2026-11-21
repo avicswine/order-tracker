@@ -423,6 +423,8 @@ function GuiasPendentes({ lugarCards, acaoExtra }: { lugarCards: HTMLElement | n
   const prontas = mostradas.filter((g) => g.pronta)
   // o lote leva só as marcadas que estão na tela: busca, datas ou estado não podem esconder uma nota que vai para a guia
   const marcadas = mostradas.filter((g) => escolhidas.has(g.id)).map((g) => g.id)
+  // quanto vai sair nas guias marcadas (aparece no botão do lote)
+  const totalMarcado = mostradas.filter((g) => escolhidas.has(g.id)).reduce((s, g) => s + g.difalCalculado, 0)
   function trocarLista(nova: 'prazo' | 'atrasadas') {
     setLista(nova)
     setEscolhidas(new Set()) // não mistura no lote o que foi marcado na outra lista
@@ -588,7 +590,7 @@ function GuiasPendentes({ lugarCards, acaoExtra }: { lugarCards: HTMLElement | n
           disabled={marcadas.length === 0 || gerar.isPending}
           className={`difal-btn rounded-xl bg-gradient-to-r ${verAtrasadas ? 'from-rose-600 to-orange-500 shadow-rose-500/30' : 'from-indigo-600 to-violet-600 shadow-indigo-500/30 hover:from-indigo-500 hover:to-violet-500'} px-4 py-2 text-sm font-medium text-white shadow-md disabled:opacity-40`}
         >
-          {gerar.isPending ? 'Montando lote…' : `Baixar lote GNRE (${marcadas.length})`}
+          {gerar.isPending ? 'Montando lote…' : marcadas.length ? `Baixar lote GNRE (${marcadas.length} · ${brl(totalMarcado)})` : 'Baixar lote GNRE (0)'}
         </button>
         </span>
       </div>
@@ -618,7 +620,7 @@ function GuiasPendentes({ lugarCards, acaoExtra }: { lugarCards: HTMLElement | n
                 <td className={`px-2 py-2.5 text-xs ${g.atrasada ? 'font-medium text-rose-700' : 'text-slate-500'}`}>{g.atrasada ? `venceu ${dataBr(g.prazo)}` : g.prazo === isoDia(new Date()) ? 'pagar hoje' : `vence ${dataBr(g.prazo)}`}</td>
                 <td className="px-2 py-2.5"><span className="rounded-md bg-indigo-50 px-1.5 py-0.5 text-xs font-semibold text-indigo-700 ring-1 ring-indigo-100">{g.clienteUf}</span></td>
                 <CelulaCanal g={g} />
-                <CelulasEnvio envio={g.envio} />
+                <CelulasEnvio envio={g.envio} envioMl={g.envioMl} />
                 <td className="px-2 py-2.5 text-right tabular-nums text-slate-600">{brl(g.valorNota)}</td>
                 <td className="px-2 py-2.5 text-right font-semibold tabular-nums text-indigo-700">
                   <ComDica largura={460} altura={340} conteudo={<CalculoDaNota d={g.calculoDetalhe} total={g.difalCalculado} />}>
@@ -742,7 +744,18 @@ function CelulaCanal({ g }: { g: DifalGuiaPendente }) {
 }
 
 // Envio da nota como na tela de Pedidos: transportadora, status (mesmo selo), data de envio e previsão/entrega
-function CelulasEnvio({ envio }: { envio: DifalGuiaPendente['envio'] }) {
+// status do envio do Mercado Envios (API do ML) → texto e cor do selo
+const STATUS_ENVIO_ML: Record<string, [string, string]> = {
+  pending: ['Em preparação', 'bg-slate-100 text-slate-600'],
+  handling: ['Em preparação', 'bg-slate-100 text-slate-600'],
+  ready_to_ship: ['Pronto para enviar', 'bg-amber-50 text-amber-700'],
+  shipped: ['A caminho', 'bg-sky-50 text-sky-700'],
+  delivered: ['Entregue', 'bg-emerald-50 text-emerald-700'],
+  not_delivered: ['Não entregue', 'bg-rose-50 text-rose-700'],
+  cancelled: ['Cancelado', 'bg-slate-100 text-slate-500'],
+}
+
+function CelulasEnvio({ envio, envioMl }: { envio: DifalGuiaPendente['envio']; envioMl: DifalGuiaPendente['envioMl'] }) {
   // clicar no status abre a mesma janela 'Detalhes do Pedido' da tela de Pedidos
   const [pedido, setPedido] = useState<Order | null>(null)
   const [abrindo, setAbrindo] = useState(false)
@@ -754,9 +767,27 @@ function CelulasEnvio({ envio }: { envio: DifalGuiaPendente['envio'] }) {
       setAbrindo(false)
     }
   }
+  if (!envio && envioMl?.status) {
+    // venda pelo Mercado Envios: rastreio do próprio ML (status atual, sem o histórico de cada movimentação)
+    const [texto, cor] = envioMl.substatus === 'out_for_delivery'
+      ? ['Saiu para entrega', 'bg-sky-100 text-sky-800']
+      : STATUS_ENVIO_ML[envioMl.status] ?? [envioMl.status, 'bg-slate-100 text-slate-600']
+    const lido = envioMl.lidoEm ? `rastreio do ML · lido em ${new Date(envioMl.lidoEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}` : 'rastreio do ML'
+    return (
+      <>
+        <td className="px-2 py-2.5 text-xs text-slate-600">
+          Mercado Envios
+          <span className="block text-[10px] text-slate-400">{lido}</span>
+        </td>
+        <td className="px-2 py-2.5"><span className={`rounded-full px-2.5 py-1 text-xs font-medium ${cor}`}>{texto}</span></td>
+        <td className="px-2 py-2.5 text-xs text-slate-400">—</td>
+        <td className="px-2 py-2.5 text-xs text-slate-600">{envioMl.previsao ? new Date(envioMl.previsao).toLocaleDateString('pt-BR') : '—'}</td>
+      </>
+    )
+  }
   if (!envio) {
     return (
-      <td colSpan={4} className="px-2 py-2.5 text-xs text-slate-400" title="Nota não está no order-tracker (retirada, Mercado Envios, Shopee…)">sem rastreio</td>
+      <td colSpan={4} className="px-2 py-2.5 text-xs text-slate-400" title="Nota não está no order-tracker nem tem envio do ML lido (retirada, Shopee, venda do ML ainda não consultada…)">sem rastreio</td>
     )
   }
   return (
