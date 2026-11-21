@@ -9,7 +9,7 @@
  * O detalhe traz TODAS as tarifas do período; guardamos só as de sub_type CDIFAL.
  *
  * Só leitura no ML. Poucas chamadas: 1 de períodos + as páginas de detalhe (1.000 por
- * página) de cada mês pedido — por isso o padrão é só 2 meses (atual e anterior).
+ * página) de cada mês pedido — por isso o dia a dia lê só 2 meses; 12 meses só num botão à parte, uma vez.
  */
 import axios, { AxiosError } from 'axios'
 import type { PrismaClient } from '@prisma/client'
@@ -143,7 +143,6 @@ export interface FechamentoMes {
   lancamentos: number
   calculado: number // soma do nosso cálculo nas notas em que o ML recolhe
   notas: number
-  diferenca: number // cobrado − calculado
   // guias que o ML pagou, lidas dos ZIPs de comprovantes (0 = mês sem ZIP)
   guiasZip: number
   pagoZip: number // DIFAL principal pago pelo ML (sem multa e juros; autuações fora)
@@ -204,7 +203,7 @@ export async function fechamentoMensal(prisma: PrismaClient, meses = 6): Promise
   const linha = (mes: string, empresa: string) => {
     const k = `${mes}|${empresa}`
     if (!mapa.has(k)) {
-      mapa.set(k, { mes, empresa, cobradoMl: 0, lancamentos: 0, calculado: 0, notas: 0, diferenca: 0,
+      mapa.set(k, { mes, empresa, cobradoMl: 0, lancamentos: 0, calculado: 0, notas: 0,
         guiasZip: 0, pagoZip: 0, devidoZip: 0, aMaisZip: 0, encargosZip: 0 })
     }
     return mapa.get(k)!
@@ -235,7 +234,7 @@ export async function fechamentoMensal(prisma: PrismaClient, meses = 6): Promise
   return [...mapa.values()]
     .map((l) => ({
       ...l,
-      cobradoMl: r2(l.cobradoMl), calculado: r2(l.calculado), diferenca: r2(l.cobradoMl - l.calculado),
+      cobradoMl: r2(l.cobradoMl), calculado: r2(l.calculado),
       pagoZip: r2(l.pagoZip), devidoZip: r2(l.devidoZip), aMaisZip: r2(l.pagoZip - l.devidoZip), encargosZip: r2(l.encargosZip),
     }))
     .sort((a, b) => b.mes.localeCompare(a.mes) || a.empresa.localeCompare(b.empresa))

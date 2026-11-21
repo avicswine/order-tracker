@@ -472,7 +472,7 @@ function GuiasPendentes({ lugarCards, acaoExtra }: { lugarCards: HTMLElement | n
     })
   }
 
-  if (isLoading) return null
+  if (isLoading) return <div className="flex">{acaoExtra}</div>
 
   // os cards seguem os filtros desta lista, mas aparecem no topo da página, acima das abas
   const cards = (
@@ -796,7 +796,7 @@ function mesBr(aaaaMm: string) {
 
 function FechamentoMensal() {
   const qc = useQueryClient()
-  const { data: linhas = [] } = useQuery({ queryKey: ['difal-fechamento'], queryFn: difalApi.fechamentoMensal })
+  const { data: linhas = [], isLoading, isError, error } = useQuery({ queryKey: ['difal-fechamento'], queryFn: difalApi.fechamentoMensal })
   const sincronizar = useMutation({
     mutationFn: difalApi.sincronizarCobrancasMl,
     onSuccess: () => qc.invalidateQueries({ queryKey: ['difal-fechamento'] }),
@@ -810,17 +810,31 @@ function FechamentoMensal() {
           <p className="text-base font-semibold text-slate-900">Fechamento mensal: o que o Mercado Livre pagou e cobrou × o que era devido</p>
           <p className="text-xs text-gray-500">
             Todos os meses desde a primeira guia dos ZIPs de comprovantes do ML (AVIC e AGRO). &ldquo;Fatura ML&rdquo; são os
-            lançamentos CDIFAL (sem número de pedido, por isso o fechamento é por mês); o botão busca os 12 meses da fatura.
+            lançamentos CDIFAL (sem número de pedido, por isso o fechamento é por mês).
           </p>
         </div>
-        <button
-          onClick={() => sincronizar.mutate()}
-          disabled={sincronizar.isPending}
-          className="difal-btn rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 hover:border-slate-300 disabled:opacity-50"
-        >
-          {sincronizar.isPending ? 'Buscando na fatura…' : 'Atualizar cobranças do ML'}
-        </button>
+        <span className="flex flex-wrap items-center gap-2">
+          {/* a conta do ML já foi bloqueada: o dia a dia lê só 2 meses; os 12 meses ficam num botão à parte, para usar uma vez */}
+          <button
+            onClick={() => { if (window.confirm('Ler os 12 meses da fatura do ML? São bem mais chamadas à API; use só para completar o histórico.')) sincronizar.mutate(12) }}
+            disabled={sincronizar.isPending}
+            className="difal-btn rounded-xl px-3 py-2 text-xs text-slate-500 hover:text-slate-800 disabled:opacity-50"
+          >
+            Buscar 12 meses (uma vez)
+          </button>
+          <button
+            onClick={() => sincronizar.mutate(2)}
+            disabled={sincronizar.isPending}
+            className="difal-btn rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 hover:border-slate-300 disabled:opacity-50"
+          >
+            {sincronizar.isPending ? 'Buscando na fatura…' : 'Atualizar cobranças do ML'}
+          </button>
+        </span>
       </div>
+      {isLoading && <p className="px-5 py-6 text-center text-sm text-slate-500">Carregando o fechamento…</p>}
+      {isError && (
+        <div className="border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800">Não foi possível carregar o fechamento: {mensagemErro(error)}</div>
+      )}
       {sincronizar.isError && (
         <div className="border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800">
           Não foi possível buscar a fatura: {(sincronizar.error as Error).message}
@@ -831,24 +845,24 @@ function FechamentoMensal() {
           {a.empresa}: {a.erro}
         </div>
       ))}
-      {(() => {
-        const tot = (k: keyof DifalFechamentoMes) => linhas.reduce((s, l) => s + (Number(l[k]) || 0), 0)
+      {!isLoading && !isError && (() => {
+        const tot = (k: 'guiasZip' | 'pagoZip' | 'devidoZip' | 'aMaisZip' | 'encargosZip') => linhas.reduce((s, l) => s + l[k], 0)
         return (
           <div className="grid gap-3 border-b border-slate-100 px-5 py-3 text-sm sm:grid-cols-4">
-            <div><p className="text-xs text-slate-500">ML pagou de DIFAL (guias dos ZIPs)</p><p className="text-lg font-semibold tabular-nums">{brl(tot('pagoZip'))}</p><p className="text-[11px] text-slate-400">{tot('guiasZip')} guia(s)</p></div>
+            <div><p className="text-xs text-slate-500">ML pagou de DIFAL (guias dos ZIPs)</p><p className="text-lg font-semibold tabular-nums">{brl(tot('pagoZip'))}</p><p className="text-[11px] text-slate-400">{tot('guiasZip')} nota(s) com guia</p></div>
             <div><p className="text-xs text-slate-500">Devido pela nossa conta</p><p className="text-lg font-semibold tabular-nums">{brl(tot('devidoZip'))}</p></div>
             <div><p className="text-xs text-slate-500">Pago a mais</p><p className="text-lg font-semibold tabular-nums text-rose-700">{brl(tot('aMaisZip'))}</p></div>
             <div><p className="text-xs text-slate-500">Multa e juros</p><p className="text-lg font-semibold tabular-nums text-amber-700">{brl(tot('encargosZip'))}</p></div>
           </div>
         )
       })()}
-      <div className="overflow-x-auto">
+      {!isLoading && !isError && <div className="overflow-x-auto">
         <table className="min-w-full text-sm">
           <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-5 py-2.5 text-left">Mês</th>
               <th className="px-2 py-2 text-left">Empresa</th>
-              <th className="px-2 py-2 text-right" title="guias de DIFAL que o ML pagou, lidas dos ZIPs de comprovantes (sem autuações)">Guias</th>
+              <th className="px-2 py-2 text-right" title="notas com guia de DIFAL paga pelo ML, lidas dos ZIPs de comprovantes (sem autuações); mês = emissão da NF">Notas</th>
               <th className="px-2 py-2 text-right" title="DIFAL principal que o ML pagou nas guias">ML pagou</th>
               <th className="px-2 py-2 text-right" title="o que era devido pela regra do NCM 8436 (1,5% ou método do estado)">Devido</th>
               <th className="px-2 py-2 text-right">Pago a mais</th>
@@ -877,7 +891,7 @@ function FechamentoMensal() {
             })}
           </tbody>
         </table>
-      </div>
+      </div>}
     </div>
   )
 }
