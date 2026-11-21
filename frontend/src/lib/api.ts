@@ -265,6 +265,8 @@ export interface DifalGuiaPendente {
   mlOrderId: string | null
   guiaGeradaEm: string | null
   /** guia processada pelo portal: libera 'Comprovante enviado' */
+  /** situação da guia no portal: 0 aceita, 1/2 recusada, 3 erro de comunicação, 4 pendente; null = sem resultado */
+  situacaoGuia: string | null
   guiaAceita: boolean
   situacao: string
   observacao: string | null

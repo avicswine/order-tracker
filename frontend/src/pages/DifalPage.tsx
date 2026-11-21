@@ -631,6 +631,10 @@ function GuiasPendentes({ lugarCards, acaoExtra }: { lugarCards: HTMLElement | n
                   <span className="flex flex-wrap items-center gap-2">
                     {g.situacao === 'DIVERGENTE' ? (
                       <span title={g.observacao ?? undefined} className="rounded-full bg-rose-50 px-2.5 py-1 font-medium text-rose-700">● nota divergente (cancelada?) — conferir</span>
+                    ) : g.guiaGeradaEm && ['1', '2'].includes(g.situacaoGuia ?? '') ? (
+                      <span className="rounded-full bg-rose-50 px-2.5 py-1 font-medium text-rose-700">guia recusada · em Lotes GNRE, &ldquo;Devolver recusadas à fila&rdquo;</span>
+                    ) : g.guiaGeradaEm && g.situacaoGuia === '3' ? (
+                      <span className="rounded-full bg-amber-50 px-2.5 py-1 font-medium text-amber-800">erro de comunicação com o estado · consulte o lote de novo</span>
                     ) : g.guiaGeradaEm && !g.guiaAceita ? (
                       <span className="rounded-full bg-blue-50 px-2.5 py-1 font-medium text-blue-700">guia gerada · envie ao portal e consulte</span>
                     ) : g.guiaGeradaEm ? (
