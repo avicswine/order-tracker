@@ -358,6 +358,12 @@ export interface DifalFechamentoMes {
   calculado: number
   notas: number
   diferenca: number
+  /** guias que o ML pagou, lidas dos ZIPs de comprovantes (0 = mês sem ZIP) */
+  guiasZip: number
+  pagoZip: number
+  devidoZip: number
+  aMaisZip: number
+  encargosZip: number
 }
 
 export interface DifalSincronizacaoMl {
@@ -451,7 +457,7 @@ export const difalApi = {
     api.get<Blob>(`/difal/lotes/${id}/pdf`, { responseType: 'blob' }).then((r) => ({ arquivo: r.data, nome: `gnre-guias-${id}.pdf` })),
   fechamentoMensal: () => api.get<DifalFechamentoMes[]>('/difal/fechamento-mensal').then((r) => r.data),
   sincronizarCobrancasMl: () =>
-    api.post<DifalSincronizacaoMl[]>('/difal/cobrancas-ml/sincronizar', { meses: 2 }).then((r) => r.data),
+    api.post<DifalSincronizacaoMl[]>('/difal/cobrancas-ml/sincronizar', { meses: 12 }).then((r) => r.data),
   marcarComprovanteMl: (id: string) => api.post<{ ok: boolean }>(`/difal/notas/${id}/comprovante-ml`).then((r) => r.data),
   guiasEmitidas: () => api.get<{ guias: DifalGuiaEmitida[]; alertas: { tipo: string; texto: string }[] }>('/difal/guias-emitidas').then((r) => r.data),
   simularRotina: () =>

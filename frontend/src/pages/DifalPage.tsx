@@ -787,7 +787,6 @@ function envioTexto(e: DifalGuiaPendente['envio']): string {
 }
 
 // ------------------------------------------------- Fechamento mensal: ML cobrou x calculamos
-const TOLERANCIA_FECHAMENTO = 0.05 // até 5% de diferença é normal (arredondamentos, estornos)
 
 function mesBr(aaaaMm: string) {
   const [ano, mes] = aaaaMm.split('-')
@@ -808,10 +807,10 @@ function FechamentoMensal() {
     <div className="difal-secao difal-secao-ciano overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="difal-cab-ciano flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
         <div>
-          <p className="text-base font-semibold text-slate-900">Fechamento mensal: o que o Mercado Livre cobrou × o que calculamos</p>
+          <p className="text-base font-semibold text-slate-900">Fechamento mensal: o que o Mercado Livre pagou e cobrou × o que era devido</p>
           <p className="text-xs text-gray-500">
-            Lançamentos CDIFAL da fatura do ML (sem número de pedido, por isso o fechamento é por mês).
-            Verde até {TOLERANCIA_FECHAMENTO * 100}% de diferença.
+            Todos os meses desde a primeira guia dos ZIPs de comprovantes do ML (AVIC e AGRO). &ldquo;Fatura ML&rdquo; são os
+            lançamentos CDIFAL (sem número de pedido, por isso o fechamento é por mês); o botão busca os 12 meses da fatura.
           </p>
         </div>
         <button
@@ -832,51 +831,53 @@ function FechamentoMensal() {
           {a.empresa}: {a.erro}
         </div>
       ))}
-      {linhas.length === 0 ? (
-        <p className="px-4 py-6 text-center text-sm text-gray-500">
-          Nenhuma cobrança do ML importada ainda. Clique em &ldquo;Atualizar cobranças do ML&rdquo;.
-        </p>
-      ) : (
+      {(() => {
+        const tot = (k: keyof DifalFechamentoMes) => linhas.reduce((s, l) => s + (Number(l[k]) || 0), 0)
+        return (
+          <div className="grid gap-3 border-b border-slate-100 px-5 py-3 text-sm sm:grid-cols-4">
+            <div><p className="text-xs text-slate-500">ML pagou de DIFAL (guias dos ZIPs)</p><p className="text-lg font-semibold tabular-nums">{brl(tot('pagoZip'))}</p><p className="text-[11px] text-slate-400">{tot('guiasZip')} guia(s)</p></div>
+            <div><p className="text-xs text-slate-500">Devido pela nossa conta</p><p className="text-lg font-semibold tabular-nums">{brl(tot('devidoZip'))}</p></div>
+            <div><p className="text-xs text-slate-500">Pago a mais</p><p className="text-lg font-semibold tabular-nums text-rose-700">{brl(tot('aMaisZip'))}</p></div>
+            <div><p className="text-xs text-slate-500">Multa e juros</p><p className="text-lg font-semibold tabular-nums text-amber-700">{brl(tot('encargosZip'))}</p></div>
+          </div>
+        )
+      })()}
+      <div className="overflow-x-auto">
         <table className="min-w-full text-sm">
           <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-5 py-2.5 text-left">Mês</th>
               <th className="px-2 py-2 text-left">Empresa</th>
-              <th className="px-2 py-2 text-right">ML cobrou</th>
-              <th className="px-2 py-2 text-right">Calculamos</th>
-              <th className="px-2 py-2 text-right">Diferença</th>
-              <th className="px-4 py-2 text-left">Situação</th>
+              <th className="px-2 py-2 text-right" title="guias de DIFAL que o ML pagou, lidas dos ZIPs de comprovantes (sem autuações)">Guias</th>
+              <th className="px-2 py-2 text-right" title="DIFAL principal que o ML pagou nas guias">ML pagou</th>
+              <th className="px-2 py-2 text-right" title="o que era devido pela regra do NCM 8436 (1,5% ou método do estado)">Devido</th>
+              <th className="px-2 py-2 text-right">Pago a mais</th>
+              <th className="px-2 py-2 text-right" title="multa e juros pagos nessas guias">Multa/juros</th>
+              <th className="px-2 py-2 text-right" title="lançamentos CDIFAL da fatura do ML (o que ele cobrou de nós)">Fatura ML</th>
+              <th className="px-4 py-2 text-right" title="nosso cálculo nas vendas do ML importadas do Bling (últimos 90 dias)">Calculamos</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {linhas.map((l: DifalFechamentoMes) => {
-              const base = Math.max(l.calculado, l.cobradoMl)
-              const ok = base === 0 || Math.abs(l.diferenca) / base <= TOLERANCIA_FECHAMENTO
-              const semDados = l.lancamentos === 0 || l.notas === 0
+              const vazio = !l.guiasZip && !l.lancamentos && !l.notas
+              const traco = <span className="text-slate-300">—</span>
               return (
-                <tr key={`${l.mes}-${l.empresa}`} className="transition-colors hover:bg-slate-50">
-                  <td className="px-5 py-2.5 font-medium text-slate-900">{mesBr(l.mes)}</td>
-                  <td className="px-2 py-2.5"><SeloEmpresa empresa={l.empresa} /></td>
-                  <td className="px-2 py-2 text-right tabular-nums" title={`${l.lancamentos} lançamento(s)`}>{brl(l.cobradoMl)}</td>
-                  <td className="px-2 py-2 text-right tabular-nums" title={`${l.notas} nota(s)`}>{brl(l.calculado)}</td>
-                  <td className="px-2 py-2 text-right tabular-nums">{brl(l.diferenca)}</td>
-                  <td className="px-4 py-2">
-                    {semDados ? (
-                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-600">
-                        {l.lancamentos === 0 ? 'ML ainda não cobrou' : 'sem notas importadas'}
-                      </span>
-                    ) : ok ? (
-                      <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">● fecha</span>
-                    ) : (
-                      <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">● conferir</span>
-                    )}
-                  </td>
+                <tr key={`${l.mes}-${l.empresa}`} className={`transition-colors hover:bg-slate-50 ${vazio ? 'text-slate-400' : ''}`}>
+                  <td className="px-5 py-2 font-medium text-slate-900">{mesBr(l.mes)}</td>
+                  <td className="px-2 py-2"><SeloEmpresa empresa={l.empresa} /></td>
+                  <td className="px-2 py-2 text-right tabular-nums">{l.guiasZip || traco}</td>
+                  <td className="px-2 py-2 text-right tabular-nums">{l.guiasZip ? brl(l.pagoZip) : traco}</td>
+                  <td className="px-2 py-2 text-right tabular-nums">{l.guiasZip ? brl(l.devidoZip) : traco}</td>
+                  <td className={`px-2 py-2 text-right tabular-nums ${l.aMaisZip > 0.01 ? 'font-medium text-rose-700' : ''}`}>{l.guiasZip ? brl(l.aMaisZip) : traco}</td>
+                  <td className="px-2 py-2 text-right tabular-nums text-amber-700">{l.guiasZip ? brl(l.encargosZip) : traco}</td>
+                  <td className="px-2 py-2 text-right tabular-nums" title={`${l.lancamentos} lançamento(s) CDIFAL`}>{l.lancamentos ? brl(l.cobradoMl) : traco}</td>
+                  <td className="px-4 py-2 text-right tabular-nums" title={`${l.notas} venda(s) do ML`}>{l.notas ? brl(l.calculado) : traco}</td>
                 </tr>
               )
             })}
           </tbody>
         </table>
-      )}
+      </div>
     </div>
   )
 }
