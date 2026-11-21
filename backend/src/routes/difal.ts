@@ -344,11 +344,22 @@ router.get('/lotes', async (_req: Request, res: Response) => {
     const comPdf = new Set(
       (await prisma.difalLoteGnre.findMany({ where: { pdfGuias: { not: null } }, select: { id: true } })).map((x) => x.id)
     )
+    // notas que ainda estão em cada lote: a guia de nota devolvida à fila não pode ser paga por este lote
+    // (outra guia foi ou será gerada para ela; pagar as duas seria pagamento em dobro)
+    const naoLote = await prisma.difalNota.findMany({ where: { guiaLoteId: { in: lotes.map((l) => l.id) } }, select: { guiaLoteId: true, nfNumero: true } })
+    const notasDoLote = new Map<string, Set<string>>()
+    for (const n of naoLote) {
+      if (!notasDoLote.has(n.guiaLoteId!)) notasDoLote.set(n.guiaLoteId!, new Set())
+      notasDoLote.get(n.guiaLoteId!)!.add(n.nfNumero.replace(/\D/g, '').slice(-10))
+    }
     res.json(lotes.map((l) => ({
       ...l,
       resultadoXml: undefined,
       temPdf: comPdf.has(l.id),
-      guiasResultado: l.resultadoXml ? lerResultadoLote(l.resultadoXml).guias : [],
+      guiasResultado: (l.resultadoXml ? lerResultadoLote(l.resultadoXml).guias : []).map((g) => ({
+        ...g,
+        devolvida: !!g.identificadorGuia && !notasDoLote.get(l.id)?.has(g.identificadorGuia),
+      })),
     })))
   } catch (e) {
     res.status(500).json({ erro: (e as Error).message })
@@ -396,14 +407,17 @@ router.post('/lotes/:id/enviar', async (req: Request, res: Response) => {
 const GUIA_INVALIDADA = new Set(['1', '2'])
 
 // POST /difal/lotes/:id/devolver-recusadas — num lote com guias aceitas E recusadas, devolve à fila só as notas
-// cuja guia foi INVALIDADA (1 portal, 2 UF), para gerar de novo. As aceitas ficam; erro de comunicação (3) e
-// pendência (4) também ficam: a guia ainda pode valer e devolver arriscaria guia em dobro.
+// cuja guia não pode ser paga: INVALIDADA (1 portal, 2 UF) ou ERRO DE COMUNICAÇÃO (3, código 703) sem linha
+// digitável. Pelo manual GNRE v2.17 (pág. 30) o código de barras só vem na guia processada; sem ele a guia não tem
+// como ser paga, então gerar outra não cria pagamento em dobro. Aceitas (0) e pendentes (4) ficam no lote.
 router.post('/lotes/:id/devolver-recusadas', async (req: Request, res: Response) => {
   try {
     const lote = await prisma.difalLoteGnre.findUnique({ where: { id: String(req.params.id) }, select: { id: true, resultadoXml: true } })
     if (!lote) return res.status(404).json({ erro: 'lote não encontrado' })
     if (!lote.resultadoXml) return res.status(409).json({ erro: 'consulte o resultado do lote antes' })
-    const recusadas = new Set(lerResultadoLote(lote.resultadoXml).guias.filter((g) => GUIA_INVALIDADA.has(g.situacaoGuia)).map((g) => g.identificadorGuia))
+    const recusadas = new Set(lerResultadoLote(lote.resultadoXml).guias
+      .filter((g) => GUIA_INVALIDADA.has(g.situacaoGuia) || (g.situacaoGuia === '3' && !g.linhaDigitavel && !g.codigoBarras && !g.qrcodePayload))
+      .map((g) => g.identificadorGuia))
     const notas = await prisma.difalNota.findMany({ where: { guiaLoteId: lote.id, comprovanteMlEnviadoEm: null }, select: { id: true, nfNumero: true } })
     // mesmo identificadorGuia da montagem do lote: dígitos da NF, até 10
     const ids = notas.filter((n) => recusadas.has(n.nfNumero.replace(/\D/g, '').slice(-10))).map((n) => n.id)
