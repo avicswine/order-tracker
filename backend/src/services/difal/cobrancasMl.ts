@@ -133,6 +133,9 @@ export async function sincronizarCobrancasMl(prisma: PrismaClient, meses = 2): P
       r.erro = status ? `API do Mercado Livre respondeu ${status}` : (e as Error).message
     }
   }
+  for (const r of saida) {
+    console.log(`[DIFAL fatura ML] ${r.empresa}: ${r.periodos.length} período(s) ${r.periodos.map((p) => p.slice(0, 7)).join(', ') || '-'} · ${r.lidos} tarifas lidas · ${r.cdifal} CDIFAL${r.erro ? ` · ERRO: ${r.erro}` : ''}`)
+  }
   return saida
 }
 
@@ -194,7 +197,8 @@ export async function fechamentoMensal(prisma: PrismaClient, meses = 6): Promise
     prisma.difalCobrancaMl.findMany({ where: { periodo: { gte: `${desdeStr}-01` } } }),
     prisma.difalNota.findMany({
       // vendas em que nós pagamos a guia e mandamos o comprovante ao ML não são cobrança do ML
-      where: { responsavel: 'ML_PAGA', emitidaEm: { gte: desde }, comprovanteMlEnviadoEm: null },
+      // só vendas com DIFAL e que o ML recolhe: sem guia nossa (de 20/11/2026 em diante nós pagamos no dia)
+      where: { responsavel: 'ML_PAGA', emitidaEm: { gte: desde }, comprovanteMlEnviadoEm: null, guiaGeradaEm: null, difalCalculado: { gt: 0 } },
       select: { empresa: true, emitidaEm: true, difalCalculado: true },
     }),
   ])

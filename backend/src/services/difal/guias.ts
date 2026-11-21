@@ -200,6 +200,13 @@ export async function marcarComprovanteMlEnviado(prisma: PrismaClient, id: strin
  */
 export const UFS_COM_COBRANCA = ['AC', 'AL', 'AM', 'CE', 'PB', 'PI', 'RN', 'TO']
 
+/**
+ * Notas emitidas antes de o monitor começar a importar (a 1ª importação trouxe de 24/08/2026 em diante) ficam com a
+ * contabilidade: a importação histórica do fechamento (desde dez/2025) não pode encher a lista de Vendas nem os cards.
+ * Tudo o que já aparecia na lista continua aparecendo. emitidaEm guarda Brasília como UTC.
+ */
+export const INICIO_LISTA_NOTAS = new Date('2026-08-24T00:00:00Z')
+
 /** Vendas do ML que pagamos nós: sem guia e com nota de até 30 dias, ou com guia gerada e comprovante ainda não enviado */
 export function filtroVendasMl(): Prisma.DifalNotaWhereInput {
   const limite = new Date(`${somarDias(dataBR(), -JANELA_ML_DIAS)}T00:00:00Z`) // emitidaEm guarda Brasília como UTC
@@ -224,7 +231,8 @@ export async function listarGuiasPendentes(prisma: PrismaClient, empresa?: strin
         OR: [
           // as nossas: sem guia, ou com guia que ainda não foi aceita (recusada, erro de comunicação, sem resultado);
           // a aceita sai daqui (vai para 'O que já pagamos') — filtro logo abaixo, depois de ler o resultado do lote
-          { responsavel: 'NOSSO', situacao: { in: [...SITUACOES_ABERTAS] } },
+          // nota nossa desde o início do monitor (a importação histórica não enche a lista), ou já em lote
+          { responsavel: 'NOSSO', situacao: { in: [...SITUACOES_ABERTAS] }, OR: [{ emitidaEm: { gte: INICIO_LISTA_NOTAS } }, { guiaLoteId: { not: null } }] },
           filtroVendasMl(),
         ],
       },

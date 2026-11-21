@@ -840,6 +840,24 @@ function FechamentoMensal() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['difal-fechamento'] }),
   })
   const avisos = (sincronizar.data ?? []).filter((r) => r.erro)
+  // importação histórica do Bling (uma vez): enche a coluna 'Nossa conta' dos meses antigos
+  const { data: importacao } = useQuery({
+    queryKey: ['difal-importacao'],
+    queryFn: () => difalApi.importarStatus(),
+    refetchInterval: (q) => (q.state.data?.emAndamento ? 5000 : false),
+  })
+  const importarHistorico = useMutation({
+    // de 01/12/2025 até hoje (a rota aceita até 365 dias)
+    mutationFn: () => difalApi.importar(Math.min(365, Math.ceil((Date.now() - new Date('2025-12-01T03:00:00Z').getTime()) / 86400000) + 1)),
+    onSettled: () => qc.invalidateQueries({ queryKey: ['difal-importacao'] }),
+  })
+  const importandoHistorico = importarHistorico.isPending || !!importacao?.emAndamento
+  // quando a importação termina, o fechamento é recarregado (a coluna 'Nossa conta' se completa sozinha)
+  const estavaImportando = useRef(false)
+  useEffect(() => {
+    if (estavaImportando.current && !importacao?.emAndamento) qc.invalidateQueries({ queryKey: ['difal-fechamento'] })
+    estavaImportando.current = !!importacao?.emAndamento
+  }, [importacao?.emAndamento, qc])
 
   return (
     <div className="difal-secao difal-secao-ciano overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -847,12 +865,20 @@ function FechamentoMensal() {
         <div>
           <p className="text-base font-semibold text-slate-900">Fechamento mensal: o que o Mercado Livre pagou e cobrou × o que era devido</p>
           <p className="text-xs text-gray-500">
-            Todos os meses desde a primeira guia dos ZIPs de comprovantes do ML (AVIC e AGRO). &ldquo;Fatura ML&rdquo; são os
-            lançamentos CDIFAL (sem número de pedido, por isso o fechamento é por mês).
+            Todos os meses desde a primeira guia dos ZIPs de comprovantes do ML (AVIC e AGRO). Notas…Multa/juros: guias que o
+            ML pagou (ZIPs). &ldquo;Fatura ML&rdquo;: lançamentos CDIFAL que ele cobrou de nós (mês da fatura). &ldquo;Nossa conta&rdquo;: o
+            DIFAL certo de todas as vendas do ML do mês (mês da emissão). Passe o mouse nos títulos.
           </p>
         </div>
         <span className="flex flex-wrap items-center gap-2">
           {/* a conta do ML já foi bloqueada: o dia a dia lê só 2 meses; os 12 meses ficam num botão à parte, para usar uma vez */}
+          <button
+            onClick={() => { if (window.confirm('Buscar no Bling as notas desde 01/12/2025 (só leitura)? São milhares de notas: roda em segundo plano e pode levar até 1 hora. Use uma vez, para completar a coluna \u201cNossa conta\u201d dos meses antigos. N\u00e3o use perto das 16h: a rotina di\u00e1ria importa no mesmo hor\u00e1rio.')) importarHistorico.mutate() }}
+            disabled={importandoHistorico}
+            className="difal-btn rounded-xl px-3 py-2 text-xs text-slate-500 hover:text-slate-800 disabled:opacity-50"
+          >
+            {importandoHistorico ? 'Importando notas do Bling…' : 'Importar notas desde dez/2025 (uma vez)'}
+          </button>
           <button
             onClick={() => { if (window.confirm('Ler os 12 meses da fatura do ML? São bem mais chamadas à API; use só para completar o histórico.')) sincronizar.mutate(12) }}
             disabled={sincronizar.isPending}
@@ -883,6 +909,24 @@ function FechamentoMensal() {
           {a.empresa}: {a.erro}
         </div>
       ))}
+      {/* o que a busca da fatura leu: deixa claro se o ML só tem esses meses ou se a busca parou no meio */}
+      {sincronizar.data && (
+        <div className="border-b border-sky-100 bg-sky-50 px-4 py-2 text-xs text-sky-900">
+          Fatura do ML lida agora:{' '}
+          {sincronizar.data.map((r) => `${r.empresa}: ${r.periodos.length} mês(es) (${r.periodos.map((p) => mesBr(p.slice(0, 7))).join(', ') || 'nenhum'}), ${r.cdifal} lançamento(s) CDIFAL${r.erro ? ' — parou com erro' : ''}`).join(' · ')}
+        </div>
+      )}
+      {importacao?.emAndamento && (
+        <div className="border-b border-indigo-100 bg-indigo-50 px-4 py-2 text-xs text-indigo-900">
+          Importando notas do Bling em segundo plano… a coluna &ldquo;Nossa conta&rdquo; se completa quando terminar.
+        </div>
+      )}
+      {!importacao?.emAndamento && importacao?.erro && (
+        <div className="border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800">Última importação do Bling falhou: {importacao.erro}</div>
+      )}
+      {importarHistorico.isError && (
+        <div className="border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800">Não foi possível iniciar a importação: {mensagemErro(importarHistorico.error)}</div>
+      )}
       {!isLoading && !isError && (() => {
         const tot = (k: 'guiasZip' | 'pagoZip' | 'devidoZip' | 'aMaisZip' | 'encargosZip') => linhas.reduce((s, l) => s + l[k], 0)
         return (
@@ -906,7 +950,8 @@ function FechamentoMensal() {
               <th className="px-2 py-2 text-right">Pago a mais</th>
               <th className="px-2 py-2 text-right" title="multa e juros pagos nessas guias">Multa/juros</th>
               <th className="px-2 py-2 text-right" title="lançamentos CDIFAL da fatura do ML (o que ele cobrou de nós)">Fatura ML</th>
-              <th className="px-4 py-2 text-right" title="nosso cálculo nas vendas do ML importadas do Bling (últimos 90 dias)">Calculamos</th>
+              <th className="px-2 py-2 text-right" title="nosso cálculo do DIFAL em todas as vendas do ML do mês com DIFAL, importadas do Bling (base: valor da NF, regra do 8436)">Nossa conta (vendas ML)</th>
+              <th className="px-4 py-2 text-right" title="fatura do ML (CDIFAL) menos a nossa conta: positivo = o ML cobrou mais do que devia">Fatura − nossa conta</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -923,7 +968,10 @@ function FechamentoMensal() {
                   <td className={`px-2 py-2 text-right tabular-nums ${l.aMaisZip > 0.01 ? 'font-medium text-rose-700' : ''}`}>{l.guiasZip ? brl(l.aMaisZip) : traco}</td>
                   <td className="px-2 py-2 text-right tabular-nums text-amber-700">{l.guiasZip ? brl(l.encargosZip) : traco}</td>
                   <td className="px-2 py-2 text-right tabular-nums" title={`${l.lancamentos} lançamento(s) CDIFAL`}>{l.lancamentos ? brl(l.cobradoMl) : traco}</td>
-                  <td className="px-4 py-2 text-right tabular-nums" title={`${l.notas} venda(s) do ML`}>{l.notas ? brl(l.calculado) : traco}</td>
+                  <td className="px-2 py-2 text-right tabular-nums" title={`${l.notas} venda(s) do ML`}>{l.notas ? brl(l.calculado) : traco}</td>
+                  <td className={`px-4 py-2 text-right tabular-nums ${l.lancamentos && l.notas && l.cobradoMl - l.calculado > 0.01 ? 'font-medium text-rose-700' : ''}`}>
+                    {l.lancamentos && l.notas ? brl(l.cobradoMl - l.calculado) : traco}
+                  </td>
                 </tr>
               )
             })}

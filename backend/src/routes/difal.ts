@@ -13,7 +13,7 @@ import { importarNotas, type ResultadoImportacao } from '../services/difal/impor
 import { preencherLogisticaMl } from '../services/difal/logisticaMl'
 import { listarGuiasEmitidas, marcarGuiasPagas } from '../services/difal/guiasEmitidas'
 import { semearAliquotas } from '../services/difal/aliquotas'
-import { listarGuiasPendentes, gerarLoteDasNotas, classificarCamposExtras, marcarComprovanteMlEnviado, filtroVendasMl } from '../services/difal/guias'
+import { listarGuiasPendentes, gerarLoteDasNotas, classificarCamposExtras, marcarComprovanteMlEnviado, filtroVendasMl, INICIO_LISTA_NOTAS } from '../services/difal/guias'
 import { ErroMontagemGnre } from '../services/difal/gnre'
 import { empresaGnre, enviarLoteGnre, consultarLoteGnre, ErroLote } from '../services/difal/lotesGnre'
 import { rodarRotinaDifal, ultimaExecucaoRotina } from '../services/difal/rotinaDiaria'
@@ -56,7 +56,7 @@ router.get('/resumo', [query('desde').optional().isISO8601()], async (req: Reque
   })
 
   const divergentes = await prisma.difalNota.aggregate({
-    where: { ...where, situacao: 'DIVERGENTE' },
+    where: { ...where, situacao: 'DIVERGENTE', emitidaEm: { gte: INICIO_LISTA_NOTAS } },
     _count: { _all: true },
     _sum: { divergencia: true },
   })
