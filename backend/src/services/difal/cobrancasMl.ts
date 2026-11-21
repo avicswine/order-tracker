@@ -133,6 +133,9 @@ export async function sincronizarCobrancasMl(prisma: PrismaClient, meses = 2): P
       r.erro = status ? `API do Mercado Livre respondeu ${status}` : (e as Error).message
     }
   }
+  for (const r of saida) {
+    console.log(`[DIFAL fatura ML] ${r.empresa}: ${r.periodos.length} período(s) ${r.periodos.map((p) => p.slice(0, 7)).join(', ') || '-'} · ${r.lidos} tarifas lidas · ${r.cdifal} CDIFAL${r.erro ? ` · ERRO: ${r.erro}` : ''}`)
+  }
   return saida
 }
 
