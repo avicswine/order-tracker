@@ -2,14 +2,17 @@ import { useQuery } from '@tanstack/react-query'
 import { ordersApi } from '../../lib/api'
 import { Spinner } from '../ui/Spinner'
 import type { OrderFilters } from '../../types'
+import { STATUS_TOM, TOM_ATRASADO } from '../../lib/utils'
+import { TOM, type Tom } from '../../lib/estilo'
 
-const cards: { key: string; label: string; color: string; bg: string; ring: string; icon: string }[] = [
-  { key: 'TOTAL',      label: 'Total de Pedidos', color: 'text-gray-700',   bg: 'bg-gray-100',   ring: 'ring-gray-400',   icon: '📦' },
-  { key: 'PENDING',    label: 'Faturados',          color: 'text-yellow-700', bg: 'bg-yellow-50',  ring: 'ring-yellow-400', icon: '🧾' },
-  { key: 'IN_TRANSIT', label: 'Em Trânsito',       color: 'text-blue-700',   bg: 'bg-blue-50',    ring: 'ring-blue-400',   icon: '🚚' },
-  { key: 'DELIVERED',  label: 'Entregues',          color: 'text-green-700',  bg: 'bg-green-50',   ring: 'ring-green-400',  icon: '✅' },
-  { key: 'CANCELLED',  label: 'Cancelados',         color: 'text-red-700',    bg: 'bg-red-50',     ring: 'ring-red-400',    icon: '❌' },
-  { key: 'DELAYED',    label: 'Atrasados',          color: 'text-orange-700', bg: 'bg-orange-50',  ring: 'ring-orange-400', icon: '⚠️' },
+// cor de cada card = cor do status (a mesma dos selos, em lib/estilo.ts)
+const cards: { key: string; label: string; tom: Tom }[] = [
+  { key: 'TOTAL',      label: 'Total de pedidos', tom: 'cinza' },
+  { key: 'PENDING',    label: 'Faturados',        tom: STATUS_TOM.PENDING },
+  { key: 'IN_TRANSIT', label: 'Em trânsito',      tom: STATUS_TOM.IN_TRANSIT },
+  { key: 'DELIVERED',  label: 'Entregues',        tom: STATUS_TOM.DELIVERED },
+  { key: 'CANCELLED',  label: 'Cancelados',       tom: STATUS_TOM.CANCELLED },
+  { key: 'DELAYED',    label: 'Atrasados',        tom: TOM_ATRASADO },
 ]
 
 function getActiveKey(filters: OrderFilters): string {
@@ -48,7 +51,7 @@ export function SummaryCards({ filters, onFilter }: Props) {
     return (
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
         {cards.map((c) => (
-          <div key={c.key} className="card p-4 animate-pulse h-24" />
+          <div key={c.key} className="resumo h-24 animate-pulse" />
         ))}
       </div>
     )
@@ -62,17 +65,15 @@ export function SummaryCards({ filters, onFilter }: Props) {
           <button
             key={c.key}
             onClick={() => handleClick(c.key)}
-            className={`card p-4 text-left transition-all ${c.bg} hover:brightness-95 ${
-              isActive ? `ring-2 ${c.ring}` : ''
-            }`}
+            className={`resumo resumo-clicavel text-left ${isActive ? 'resumo-ativo' : ''}`}
           >
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-2xl">{c.icon}</span>
-              <span className={`text-2xl font-bold ${c.color}`}>
-                {data ? (data[c.key as keyof typeof data] ?? '—') : '—'}
-              </span>
-            </div>
-            <p className={`text-xs font-medium ${c.color}`}>{c.label}</p>
+            <p className="resumo-rotulo flex items-center gap-1.5">
+              <span className={`selo-ponto ${TOM[c.tom].ponto}`} />
+              {c.label}
+            </p>
+            <p className={`resumo-valor ${c.key === 'TOTAL' ? '' : TOM[c.tom].texto}`}>
+              {data ? (data[c.key as keyof typeof data] ?? '—') : '—'}
+            </p>
           </button>
         )
       })}

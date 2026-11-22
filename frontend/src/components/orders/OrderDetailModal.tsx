@@ -4,7 +4,8 @@ import { ordersApi, carriersApi } from '../../lib/api'
 import { Modal } from '../ui/Modal'
 import { StatusBadge } from '../ui/Badge'
 import { Spinner } from '../ui/Spinner'
-import { formatDate, formatDateTime, STATUS_LABELS, SENDER_COMPANIES, isOccurrenceEvent, formatTrackingText } from '../../lib/utils'
+import { formatDate, formatDateTime, STATUS_LABELS, SENDER_COMPANIES, isOccurrenceEvent, formatTrackingText, TOM_ATRASADO } from '../../lib/utils'
+import { TOM, seloTom } from '../../lib/estilo'
 import { useAuth } from '../../contexts/AuthContext'
 import type { Order, OrderStatus, TrackingEvent } from '../../types'
 
@@ -63,7 +64,7 @@ export function OrderDetailModal({ order, onClose }: Props) {
   return (
     <Modal open={!!order} onClose={onClose} title="Detalhes do Pedido" size="xl">
       {isLoading && (
-        <div className="flex justify-center py-8">
+        <div className="estado-carregando">
           <Spinner />
         </div>
       )}
@@ -73,8 +74,8 @@ export function OrderDetailModal({ order, onClose }: Props) {
           {/* Header info */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <p className="text-xs text-gray-500 uppercase tracking-wide">Nº do Pedido</p>
-              <p className="font-mono text-lg font-bold text-gray-900">{data.orderNumber}</p>
+              <p className="resumo-rotulo">Nº do pedido</p>
+              <p className="font-mono text-lg font-bold text-slate-900">{data.orderNumber}</p>
             </div>
             <div className="text-right">
               <StatusBadge status={data.status} hasOccurrence={data.hasOccurrence} lastTracking={data.lastTracking} />
@@ -86,45 +87,45 @@ export function OrderDetailModal({ order, onClose }: Props) {
             today.setHours(0, 0, 0, 0)
             const isDelayed = !!(data.estimatedDelivery && data.status !== 'DELIVERED' && data.status !== 'CANCELLED' && new Date(data.estimatedDelivery) < today)
             return (
-          <div className="grid grid-cols-2 gap-4 rounded-lg bg-gray-50 p-4">
+          <div className="grid grid-cols-1 gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4 sm:grid-cols-2">
             <div>
-              <p className="text-xs text-gray-500">Cliente</p>
+              <p className="text-xs text-slate-500">Cliente</p>
               <p className="font-medium">{data.customerName}</p>
               {data.customerEmail && (
-                <a href={`mailto:${data.customerEmail}`} className="text-sm text-blue-500 hover:text-blue-700 hover:underline">
+                <a href={`mailto:${data.customerEmail}`} className="text-sm text-primaria-500 hover:text-primaria-700 hover:underline">
                   {data.customerEmail}
                 </a>
               )}
             </div>
             <div>
-              <p className="text-xs text-gray-500">Transportadora</p>
+              <p className="text-xs text-slate-500">Transportadora</p>
               <p className={`font-medium ${!data.carrier ? 'text-amber-600' : ''}`}>
                 {data.carrier?.name ?? 'A definir'}
               </p>
             </div>
             <div>
-              <p className="text-xs text-gray-500">Data de Envio</p>
+              <p className="text-xs text-slate-500">Data de Envio</p>
               <p className="font-medium">{formatDate(data.shippedAt)}</p>
             </div>
             <div>
-              <p className="text-xs text-gray-500">Previsão de Entrega</p>
+              <p className="text-xs text-slate-500">Previsão de Entrega</p>
               <p className={`font-medium ${isDelayed ? 'text-orange-600' : ''}`}>
                 {formatDate(data.estimatedDelivery)}
                 {isDelayed && (() => {
                   const dias = Math.floor((today.getTime() - new Date(data.estimatedDelivery!).setHours(0,0,0,0)) / 86400000)
-                  return <span className="ml-2 text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded">{dias}d atraso</span>
+                  return <span className={`ml-2 ${seloTom(TOM_ATRASADO)}`}>{dias}d atraso</span>
                 })()}
               </p>
             </div>
             {data.deliveredAt && (
               <div>
-                <p className="text-xs text-gray-500">Entregue em</p>
-                <p className="font-medium text-green-700">{formatDate(data.deliveredAt)}</p>
+                <p className="text-xs text-slate-500">Entregue em</p>
+                <p className="font-medium text-emerald-700">{formatDate(data.deliveredAt)}</p>
               </div>
             )}
             {data.nfNumber && (
               <div>
-                <p className="text-xs text-gray-500">Nº da NF</p>
+                <p className="text-xs text-slate-500">Nº da NF</p>
                 <p className="font-medium font-mono">{data.nfNumber}</p>
               </div>
             )}
@@ -132,23 +133,23 @@ export function OrderDetailModal({ order, onClose }: Props) {
               const company = SENDER_COMPANIES.find((c) => c.cnpj === data.senderCnpj)
               return (
                 <div>
-                  <p className="text-xs text-gray-500">Empresa Remetente</p>
-                  <span className={`inline-block text-xs font-medium px-2 py-0.5 rounded ${company?.color ?? 'bg-gray-100 text-gray-700'}`}>
+                  <p className="text-xs text-slate-500">Empresa Remetente</p>
+                  <span className={`inline-block text-xs font-medium px-2 py-0.5 rounded-lg ${company?.color ?? 'bg-slate-100 text-slate-700'}`}>
                     {company?.name ?? data.senderCnpj}
                   </span>
-                  <p className="text-xs text-gray-400 mt-0.5">{data.senderCnpj}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">{data.senderCnpj}</p>
                 </div>
               )
             })()}
             {data.recipientCnpj && (
               <div>
-                <p className="text-xs text-gray-500">CNPJ do Destinatário</p>
+                <p className="text-xs text-slate-500">CNPJ do Destinatário</p>
                 <p className="font-medium font-mono">{data.recipientCnpj}</p>
               </div>
             )}
             {data.notes && (
-              <div className="col-span-2">
-                <p className="text-xs text-gray-500">Observações</p>
+              <div className="sm:col-span-2">
+                <p className="text-xs text-slate-500">Observações</p>
                 <p className="text-sm">{data.notes}</p>
               </div>
             )}
@@ -159,76 +160,65 @@ export function OrderDetailModal({ order, onClose }: Props) {
           {/* Rastreamento completo */}
           {data.trackingEvents && data.trackingEvents.length > 0 ? (
             <div>
-              <h3 className="text-sm font-semibold text-gray-900 mb-3">Rastreamento</h3>
-              <div className="space-y-0 max-h-64 overflow-y-auto">
-                {(data.trackingEvents as TrackingEvent[]).map((event, idx) => {
-                  const isFirst = idx === 0
-                  const isLast = idx === (data.trackingEvents as TrackingEvent[]).length - 1
-                  const isOccurrence = isOccurrenceEvent(event.description)
-                  const isDelivery = event.description.toUpperCase().includes('ENTREGUE') || event.description.toUpperCase().includes('ENTREGA REALIZADA') || event.description.toUpperCase().includes('ENTREGA EFETUADA')
-                  const dotColor = isOccurrence ? 'bg-orange-400' : isDelivery ? 'bg-green-500' : isFirst ? 'bg-blue-500' : 'bg-gray-300'
-                  return (
-                    <div key={idx} className="flex gap-3">
-                      <div className="flex flex-col items-center">
-                        <div className={`h-2.5 w-2.5 rounded-full mt-1 flex-shrink-0 ${dotColor}`} />
-                        {!isLast && <div className="w-px flex-1 bg-gray-200 mt-1 mb-0" />}
-                      </div>
-                      <div className={`pb-3 ${isFirst ? '' : 'opacity-75'}`}>
-                        <p className={`text-sm font-medium ${isOccurrence ? 'text-orange-700' : isDelivery ? 'text-green-700' : 'text-gray-800'}`}>
+              <h3 className="secao-titulo mb-3">Rastreamento</h3>
+              <div className="max-h-64 overflow-y-auto pl-2 pt-1">
+                <ol className="linha-tempo">
+                  {(data.trackingEvents as TrackingEvent[]).map((event, idx) => {
+                    const isFirst = idx === 0
+                    const isOccurrence = isOccurrenceEvent(event.description)
+                    const isDelivery = event.description.toUpperCase().includes('ENTREGUE') || event.description.toUpperCase().includes('ENTREGA REALIZADA') || event.description.toUpperCase().includes('ENTREGA EFETUADA')
+                    const ponto = isOccurrence ? TOM[TOM_ATRASADO].ponto : isDelivery ? TOM.verde.ponto : isFirst ? 'linha-tempo-ponto-atual' : ''
+                    return (
+                      <li key={idx} className={`linha-tempo-item ${isFirst ? '' : 'opacity-75'}`}>
+                        <span className={`linha-tempo-ponto ${ponto}`} />
+                        <p className={`linha-tempo-texto font-medium ${isOccurrence ? TOM[TOM_ATRASADO].texto : isDelivery ? TOM.verde.texto : ''}`}>
                           {formatTrackingText(event.description)}
                         </p>
-                        {event.date && (
-                          <p className="text-xs text-gray-400 mt-0.5">{formatDateTime(event.date)}</p>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
+                        {event.date && <p className="linha-tempo-data">{formatDateTime(event.date)}</p>}
+                      </li>
+                    )
+                  })}
+                </ol>
               </div>
             </div>
           ) : data.lastTracking ? (
-            <div className={`rounded-lg p-3 ${isOccurrenceEvent(data.lastTracking) ? 'bg-orange-50 border border-orange-200' : 'bg-blue-50 border border-blue-100'}`}>
-              <p className={`text-xs font-semibold uppercase tracking-wide mb-1 ${isOccurrenceEvent(data.lastTracking) ? 'text-orange-600' : 'text-blue-600'}`}>
+            <div className={isOccurrenceEvent(data.lastTracking) ? 'alerta border-orange-200 bg-orange-50' : 'alerta-info'}>
+              <p className={`text-xs font-semibold uppercase tracking-wide mb-1 ${isOccurrenceEvent(data.lastTracking) ? 'text-orange-600' : 'text-primaria-600'}`}>
                 {isOccurrenceEvent(data.lastTracking) ? '⚠️ Intercorrência' : 'Último Rastreio'}
               </p>
-              <p className={`text-sm font-medium ${isOccurrenceEvent(data.lastTracking) ? 'text-orange-800' : 'text-blue-800'}`}>
+              <p className={`text-sm font-medium ${isOccurrenceEvent(data.lastTracking) ? 'text-orange-800' : 'text-primaria-800'}`}>
                 {formatTrackingText(data.lastTracking)}
               </p>
               {data.lastTrackingAt && (
-                <p className="text-xs text-gray-500 mt-0.5">{formatDateTime(data.lastTrackingAt)}</p>
+                <p className="text-xs text-slate-500 mt-0.5">{formatDateTime(data.lastTrackingAt)}</p>
               )}
             </div>
           ) : null}
 
           {/* Status history */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">Histórico de Status</h3>
-            <div className="space-y-2 max-h-48 overflow-y-auto">
-              {data.statusHistory?.map((entry, idx) => (
-                <div key={entry.id} className="flex gap-3">
-                  <div className="flex flex-col items-center">
-                    <div className="h-2 w-2 rounded-full bg-blue-500 mt-1.5" />
-                    {idx < (data.statusHistory?.length ?? 0) - 1 && (
-                      <div className="w-px flex-1 bg-gray-200 mt-1" />
-                    )}
-                  </div>
-                  <div className="pb-3">
-                    <div className="flex items-center gap-2">
+            <h3 className="secao-titulo mb-3">Histórico de Status</h3>
+            <div className="max-h-48 overflow-y-auto pl-2 pt-1">
+              <ol className="linha-tempo">
+                {data.statusHistory?.map((entry, idx) => (
+                  <li key={entry.id} className="linha-tempo-item">
+                    <span className={`linha-tempo-ponto ${idx === 0 ? 'linha-tempo-ponto-atual' : ''}`} />
+                    <div className="flex flex-wrap items-center gap-2">
                       <StatusBadge status={entry.status} />
-                      <span className="text-xs text-gray-500">{formatDateTime(entry.createdAt)}</span>
+                      <span className="linha-tempo-data">{formatDateTime(entry.createdAt)}</span>
                     </div>
-                    {entry.note && <p className="text-xs text-gray-600 mt-0.5">{entry.note}</p>}
-                  </div>
-                </div>
-              ))}
+                    {entry.note && <p className="mt-0.5 text-xs text-slate-600">{entry.note}</p>}
+                  </li>
+                ))}
+              </ol>
             </div>
           </div>
 
           {/* Update status */}
           {isAdmin && data.status !== 'DELIVERED' && data.status !== 'CANCELLED' && (
-            <div className="rounded-lg border border-dashed border-gray-300 p-4 space-y-3">
-              <h3 className="text-sm font-semibold text-gray-700">Atualizar Status</h3>
-              <div className="flex gap-3">
+            <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <h3 className="secao-titulo">Atualizar Status</h3>
+              <div className="flex flex-col gap-3 sm:flex-row">
                 <select
                   className="input"
                   value={newStatus}
@@ -247,7 +237,7 @@ export function OrderDetailModal({ order, onClose }: Props) {
                   onChange={(e) => setNote(e.target.value)}
                 />
                 <button
-                  className="btn-primary whitespace-nowrap"
+                  className="btn-primary"
                   disabled={!newStatus || mutation.isPending}
                   onClick={handleStatusUpdate}
                 >
@@ -255,20 +245,20 @@ export function OrderDetailModal({ order, onClose }: Props) {
                 </button>
               </div>
               {mutation.isError && (
-                <p className="text-xs text-red-600">Erro ao atualizar status. Tente novamente.</p>
+                <p className="alerta-erro">Erro ao atualizar status. Tente novamente.</p>
               )}
             </div>
           )}
 
           {/* Trocar transportadora */}
           {isAdmin && (
-            <div className="rounded-lg border border-dashed border-gray-300 p-4 space-y-3">
-              <h3 className="text-sm font-semibold text-gray-700">Trocar Transportadora</h3>
-              <p className="text-xs text-gray-500">
+            <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <h3 className="secao-titulo">Trocar Transportadora</h3>
+              <p className="text-xs text-slate-500">
                 Atual: <strong>{data.carrier?.name ?? 'A definir'}</strong>. Use quando a transportadora real
                 for diferente da que está na NF — o rastreio passa a usar a nova.
               </p>
-              <div className="flex gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row">
                 <select
                   className="input"
                   value={newCarrierId}
@@ -280,7 +270,7 @@ export function OrderDetailModal({ order, onClose }: Props) {
                   ))}
                 </select>
                 <button
-                  className="btn-primary whitespace-nowrap"
+                  className="btn-primary"
                   disabled={!newCarrierId || carrierMutation.isPending}
                   onClick={() => newCarrierId && carrierMutation.mutate(newCarrierId)}
                 >
@@ -288,10 +278,10 @@ export function OrderDetailModal({ order, onClose }: Props) {
                 </button>
               </div>
               {carrierMutation.isError && (
-                <p className="text-xs text-red-600">Erro ao trocar transportadora. Tente novamente.</p>
+                <p className="alerta-erro">Erro ao trocar transportadora. Tente novamente.</p>
               )}
               {carrierMutation.isSuccess && (
-                <p className="text-xs text-green-600">Transportadora atualizada. Rode "Atualizar Status" ou aguarde o próximo sync para rastrear.</p>
+                <p className="alerta-ok">Transportadora atualizada. Rode "Atualizar Status" ou aguarde o próximo sync para rastrear.</p>
               )}
             </div>
           )}

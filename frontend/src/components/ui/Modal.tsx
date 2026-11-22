@@ -31,7 +31,7 @@ export function Modal({ open, onClose, title, children, size = 'md' }: ModalProp
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        className="janela-fundo"
         onClick={onClose}
         aria-hidden
       />
@@ -40,15 +40,15 @@ export function Modal({ open, onClose, title, children, size = 'md' }: ModalProp
         role="dialog"
         aria-modal
         aria-labelledby="modal-title"
-        className={`relative z-10 w-full ${sizeClasses[size]} rounded-2xl bg-white shadow-2xl`}
+        className={`janela ${sizeClasses[size]}`}
       >
-        <div className="flex items-center justify-between border-b px-6 py-4">
-          <h2 id="modal-title" className="text-lg font-semibold text-gray-900">
+        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+          <h2 id="modal-title" className="text-lg font-semibold">
             {title}
           </h2>
           <button
             onClick={onClose}
-            className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+            className="btn-icone"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

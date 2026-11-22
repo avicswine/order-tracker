@@ -27,12 +27,12 @@ export function OrdersPage() {
   })
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="pagina">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Pedidos</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Gerencie e rastreie todos os pedidos</p>
+          <h1 className="pagina-titulo">Pedidos</h1>
+          <p className="pagina-subtitulo">Gerencie e rastreie todos os pedidos</p>
         </div>
         <div className="flex items-center gap-3">
           {isAdmin && <BlingSync />}
@@ -54,7 +54,7 @@ export function OrdersPage() {
       />
 
       {/* Table */}
-      <div className="card p-6 space-y-4">
+      <div className="card space-y-4 p-4 sm:p-6">
         <OrderFiltersBar filters={filters} onChange={setFilters} />
         <OrderTable
           orders={data?.data ?? []}
