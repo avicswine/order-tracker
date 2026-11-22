@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Sidebar } from './Sidebar'
 
 const SIDEBAR_KEY = 'order_tracker_sidebar_min'
@@ -7,6 +7,19 @@ export function Layout({ children }: { children: ReactNode }) {
   const [minimizado, setMinimizado] = useState(() => localStorage.getItem(SIDEBAR_KEY) === '1')
   // celular: menu aberto por cima da tela (no computador o menu fica sempre visível)
   const [menuAberto, setMenuAberto] = useState(false)
+  // fecha o menu do celular com a tecla Esc e quando a janela cresce para tamanho de computador
+  useEffect(() => {
+    if (!menuAberto) return
+    const fechar = () => setMenuAberto(false)
+    const teclado = (e: KeyboardEvent) => { if (e.key === 'Escape') fechar() }
+    const telaGrande = window.matchMedia('(min-width: 768px)')
+    document.addEventListener('keydown', teclado)
+    telaGrande.addEventListener('change', fechar)
+    return () => {
+      document.removeEventListener('keydown', teclado)
+      telaGrande.removeEventListener('change', fechar)
+    }
+  }, [menuAberto])
 
   function toggle() {
     setMinimizado((m) => {

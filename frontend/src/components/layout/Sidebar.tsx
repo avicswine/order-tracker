@@ -102,7 +102,7 @@ export function Sidebar({ minimizado = false, onToggle, abertoNoCelular = false,
   }
 
   return (
-    <aside className={`fixed inset-y-0 left-0 z-40 flex flex-col overflow-y-auto bg-secundaria-escura transition-[width,transform] md:translate-x-0 ${abertoNoCelular ? 'translate-x-0' : '-translate-x-full'} ${minimizado ? 'w-16' : 'w-60'}`}>
+    <aside className={`fixed inset-y-0 left-0 z-40 flex flex-col overflow-y-auto bg-secundaria-escura transition-[width,transform] md:visible md:translate-x-0 ${abertoNoCelular ? 'translate-x-0' : 'invisible -translate-x-full'} ${minimizado ? 'w-16' : 'w-60'}`}>
       {/* Logo */}
       <div className={`flex items-center gap-3 py-5 border-b border-white/10 ${minimizado ? 'px-3 justify-center' : 'px-6'}`}>
         <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-primaria-600">
@@ -163,6 +163,7 @@ export function Sidebar({ minimizado = false, onToggle, abertoNoCelular = false,
           href="/portal"
           target="_blank"
           rel="noopener noreferrer"
+          onClick={onNavegar}
           title="Portal Cliente"
           className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition text-slate-400 hover:bg-white/10 hover:text-white ${minimizado ? 'justify-center' : ''}`}
         >
@@ -177,6 +178,7 @@ export function Sidebar({ minimizado = false, onToggle, abertoNoCelular = false,
           href="http://localhost:5175/"
           target="_blank"
           rel="noopener noreferrer"
+          onClick={onNavegar}
           title="Power BI"
           className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition text-slate-400 hover:bg-white/10 hover:text-white ${minimizado ? 'justify-center' : ''}`}
         >
