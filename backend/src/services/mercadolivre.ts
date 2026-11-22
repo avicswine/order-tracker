@@ -252,15 +252,15 @@ export type MsgDaConversa = {
 export function destinatarioDaConversa(
   mensagens: MsgDaConversa[], sellerId: string, buyerId?: string,
 ): string {
-  const AGENTE_MLB = '3037675074'
   const quando = (m: MsgDaConversa) =>
     String(m?.message_date?.received ?? m?.message_date?.created ?? '')
   const recebidas = mensagens
     .filter((m) => String(m?.from?.user_id ?? '') !== sellerId)
     .sort((a, b) => quando(a).localeCompare(quando(b)))
   const ultima = recebidas.length ? String(recebidas[recebidas.length - 1]?.from?.user_id ?? '') : ''
-  if (ultima === AGENTE_MLB) return AGENTE_MLB      // migração já ativa nesta conversa
-  if (ultima) return ultima                          // o próprio comprador escreveu
+  // quem falou por último é quem responde: o Agente do ML (MLB 3037675074) quando a
+  // migração já chegou nesta conversa, ou o próprio comprador enquanto não chegou
+  if (ultima) return ultima
   if (buyerId) return buyerId                        // sem histórico: cai no comprador do pedido
   throw new Error('Não dá para saber para quem responder nesta conversa')
 }
@@ -291,6 +291,25 @@ export async function mlSubirAnexo(
 
 // Responde uma conversa PÓS-VENDA (mensagens do pack) direto do painel.
 // `anexos` são ids devolvidos pelo upload (ver mlSubirAnexo).
+/**
+ * Ids das orders que compõem um pack do ML (carrinho = várias orders, um pack).
+ *
+ * Serve para achar o pedido da conversa: a caixa de mensagens trabalha com o PACK, mas
+ * `mlEnvios` grava `mlOrderId` com o id da ORDER, enquanto `bling.ts` grava o do pack.
+ * Em venda de carrinho os dois divergem e o pedido não era encontrado (revisão do PR #1).
+ * Devolve lista vazia quando não é pacote ou o ML não responde.
+ */
+export async function ordersDoPack(company: MlCompany, packId: string): Promise<string[]> {
+  const auth = await mlAuth(company)
+  if (!auth) return []
+  try {
+    const { data } = await axios.get(`https://api.mercadolibre.com/packs/${packId}`, auth.H)
+    return (data?.orders ?? []).map((o: { id: unknown }) => String(o?.id)).filter(Boolean)
+  } catch {
+    return []        // pedido simples: o próprio id já é a order
+  }
+}
+
 export async function mlConversaResponder(
   company: MlCompany, packId: string, texto: string, anexos: string[] = [],
 ): Promise<void> {

@@ -434,7 +434,11 @@ export function marketplaceDaNf(companyKey: string, detail: BlingNFeDetailRespon
   const inter = (detail?.data?.intermediador?.cnpj ?? '').replace(/\D/g, '')
   const pedidoLoja = String(detail?.data?.numeroPedidoLoja ?? '').trim()
   if (!inter) return { mlOrderId: null, mlCompany: null }
-  const ehML = inter === CNPJ_INTERMEDIARIO_ML || /^\d{14,}$/.test(pedidoLoja)
+  // SÓ o CNPJ do intermediador decide. Antes isto aceitava também "pedido com 14+
+  // dígitos", e pedido da Shopee tem 16: a venda virava ML, o aviso ao comprador era
+  // tentado lá, falhava, e a falha BLOQUEAVA o aviso por WhatsApp — o cliente da Shopee
+  // não recebia nada. Achado na revisão do PR #1 (22/11/2026).
+  const ehML = inter === CNPJ_INTERMEDIARIO_ML
   if (!ehML) {
     // outro marketplace: não sabemos o id, mas também não se avisa por fora da
     // plataforma — devolve o pedido da loja para o notifier ter o que travar

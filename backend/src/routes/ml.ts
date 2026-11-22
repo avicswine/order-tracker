@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express'
 import crypto from 'crypto'
-import { mlAuthUrl, mlExchangeCode, mlStatus, syncMlClaims, mlClaimMessages, mlClaimResponder, mlConversaResponder, mlConversasPendentes, mlVarrerMensagens, mlAtualizarClaim, mlReconciliarClaims, mlSubirAnexo, ML_MSG_MAX_CHARS, ML_COMPANIES, type MlCompany } from '../services/mercadolivre'
+import { mlAuthUrl, mlExchangeCode, mlStatus, syncMlClaims, mlClaimMessages, mlClaimResponder, mlConversaResponder, mlConversasPendentes, mlVarrerMensagens, mlAtualizarClaim, mlReconciliarClaims, mlSubirAnexo, ordersDoPack, ML_MSG_MAX_CHARS, ML_COMPANIES, type MlCompany } from '../services/mercadolivre'
 import { gerarImagemRastreio, type EventoRastreio } from '../services/imagemRastreio'
 import { cicloEnviosMl, notificarStatusMl, PORTAL_URL, TRACKING_MSG, TRACKING_COMENTARIO, type MlEnvioStatus } from '../services/mlEnvios'
 import { prisma } from '../lib/prisma'
@@ -112,16 +112,40 @@ router.post('/conversas/:company/:packId/responder', async (req: Request, res: R
 // NUNCA envia sozinho: o José vê a imagem e o texto antes. Mensagem automática é motivo
 // de moderação no ML (AUTOMATIC_MESSAGE) e a conta já foi bloqueada uma vez.
 
-/** Acha o pedido desta conversa pelo id da venda/pack do ML. */
+/**
+ * Acha o pedido desta conversa pelo id da venda/pack do ML.
+ *
+ * Um mesmo pack pode ter gerado DUAS notas (carrinho faturado em volumes separados).
+ * Sem ordem definida, `findFirst` escolheria qualquer uma e a imagem poderia sair com a
+ * NF e o rastreio do outro volume — erro silencioso, achado na revisão do PR #1.
+ * Fica com a mais recente, que é a que o cliente está perguntando.
+ */
 async function pedidoDaConversa(company: string, packId: string) {
-  return prisma.order.findFirst({
-    where: { mlCompany: company.toLowerCase(), mlOrderId: packId },
-    select: {
-      id: true, orderNumber: true, nfNumber: true, estimatedDelivery: true,
-      trackingEvents: true, lastTracking: true, lastTrackingAt: true,
-      carrier: { select: { name: true } },
-    },
+  const CAMPOS = {
+    id: true, orderNumber: true, nfNumber: true, estimatedDelivery: true,
+    trackingEvents: true, lastTracking: true, lastTrackingAt: true,
+    carrier: { select: { name: true } },
+  } as const
+  const ORDEM = [{ nfIssuedAt: 'desc' as const }, { createdAt: 'desc' as const }]
+  const mlCompany = company.toLowerCase()
+
+  const buscar = (ids: string[]) => prisma.order.findMany({
+    where: { mlCompany, mlOrderId: { in: ids } }, orderBy: ORDEM, select: CAMPOS,
   })
+
+  let achados = await buscar([packId])
+  if (!achados.length) {
+    // venda de carrinho: `mlEnvios` gravou o id da ORDER, não o do pack. Pergunta ao ML
+    // quais orders compõem este pack e tenta por elas. Uma chamada a mais, só quando não
+    // achou — a conta do ML já foi bloqueada uma vez.
+    const orders = await ordersDoPack(company as MlCompany, packId)
+    if (orders.length) achados = await buscar(orders)
+  }
+  if (achados.length > 1) {
+    console.warn(`[ml] pack ${packId} tem ${achados.length} notas; usando a mais recente `
+      + `(${achados[0].orderNumber}). Confira a NF na imagem antes de enviar.`)
+  }
+  return achados[0] ?? null
 }
 
 /** "09/11/2026 às 13:49" — o cliente não pode receber data em formato de máquina. */
@@ -226,25 +250,50 @@ router.post('/conversas/:company/:packId/enviar-rastreio', async (req: Request, 
   const texto = String(req.body?.texto ?? '').trim()
   if (!ML_COMPANIES.includes(company)) { res.status(400).json({ error: 'Empresa inválida' }); return }
   if (!texto) { res.status(400).json({ error: 'Escreva a mensagem' }); return }
+  // o texto é conferido ANTES de subir o anexo: upload de imagem recusada depois por
+  // texto longo é chamada jogada fora numa conta que já foi bloqueada uma vez
+  if (texto.length > ML_MSG_MAX_CHARS) {
+    res.status(400).json({ error: `A mensagem tem ${texto.length} caracteres; o Mercado `
+      + `Livre aceita no máximo ${ML_MSG_MAX_CHARS}. Encurte antes de enviar.` })
+    return
+  }
+  const chave = `${company}:${req.params.packId}`
+  // EXATAMENTE a imagem que foi conferida — nunca uma nova
+  const png = pegarRascunho(chave)
+  if (!png) {
+    res.status(409).json({ error: 'O rascunho expirou (vale 15 minutos). '
+      + 'Feche e abra de novo para conferir a imagem antes de enviar.' })
+    return
+  }
+  const p = await pedidoDaConversa(company, req.params.packId)
+  if (!p) { res.status(404).json({ error: 'Não achei o pedido desta conversa' }); return }
+
+  // RESERVA o rascunho antes de falar com o ML. Se a mensagem for aceita e a resposta se
+  // perder (timeout, queda de rede), o segundo clique mandaria TUDO de novo e o comprador
+  // receberia a mensagem e a imagem duas vezes — não há como desfazer. Achado na revisão
+  // do PR #1 (22/11/2026). Só devolvemos o rascunho quando é certo que nada foi enviado.
+  RASCUNHOS.delete(chave)
+  let anexo: string
   try {
-    const chave = `${company}:${req.params.packId}`
-    // EXATAMENTE a imagem que foi conferida — nunca uma nova
-    const png = pegarRascunho(chave)
-    if (!png) {
-      res.status(409).json({ error: 'O rascunho expirou (vale 15 minutos). '
-        + 'Feche e abra de novo para conferir a imagem antes de enviar.' })
-      return
-    }
-    const p = await pedidoDaConversa(company, req.params.packId)
-    if (!p) { res.status(404).json({ error: 'Não achei o pedido desta conversa' }); return }
     // o anexo é apagado se não for usado em 48 h: sobe agora, envia em seguida
-    const anexo = await mlSubirAnexo(company, png, `rastreio-${p.nfNumber ?? p.orderNumber}.png`)
+    anexo = await mlSubirAnexo(company, png, `rastreio-${p.nfNumber ?? p.orderNumber}.png`)
+  } catch (err) {
+    guardarRascunho(chave, png)   // falhou ANTES de enviar: pode tentar de novo
+    res.status(400).json({ error: 'Falha ao enviar a imagem ao Mercado Livre: '
+      + (err instanceof Error ? err.message : 'erro desconhecido') })
+    return
+  }
+  try {
     await mlConversaResponder(company, req.params.packId, texto, [anexo])
-    // some da memória: evita que um segundo clique mande a mesma mensagem de novo
-    RASCUNHOS.delete(chave)
     res.json({ ok: true, pedido: p.orderNumber })
   } catch (err) {
-    res.status(400).json({ error: err instanceof Error ? err.message : 'Falha ao enviar' })
+    // daqui em diante NÃO devolvemos o rascunho: o ML pode ter recebido a mensagem e
+    // só a resposta ter se perdido. Melhor o José conferir do que o cliente receber duas.
+    console.error(`[ml] envio do rastreio ${chave} falhou depois do upload:`, err)
+    res.status(502).json({ error: 'O Mercado Livre não confirmou o envio. '
+      + 'ABRA A CONVERSA NO ML E CONFIRA antes de tentar de novo — a mensagem pode ter '
+      + 'sido entregue. Motivo: '
+      + (err instanceof Error ? err.message : 'erro desconhecido') })
   }
 })
 
