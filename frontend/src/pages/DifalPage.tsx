@@ -9,7 +9,7 @@ import type {
 import { StatusBadge } from '../components/ui/Badge'
 import { OrderDetailModal } from '../components/orders/OrderDetailModal'
 import { ordersApi } from '../lib/api'
-import { formatBRL as brl, formatDate, formatDateTime } from '../lib/utils'
+import { formatBRL as brl, formatDate, formatDateTime, SENDER_COMPANIES } from '../lib/utils'
 import { seloTom, type Tom } from '../lib/estilo'
 import type { Order } from '../types'
 
@@ -155,9 +155,9 @@ function NotaCliente({ nf, empresa, cliente, itens }: { nf: string; empresa: str
   )
 }
 
-// selo da empresa (AVIC / AGRO)
+// selo da empresa (AVIC / AGRO): as mesmas cores das outras telas (SENDER_COMPANIES)
 function SeloEmpresa({ empresa }: { empresa: string }) {
-  const cor = empresa === 'AGRO' ? 'bg-primaria-50 text-primaria-700' : 'bg-primaria-50 text-primaria-700'
+  const cor = SENDER_COMPANIES.find((c) => c.name === empresa)?.color ?? 'bg-slate-100 text-slate-700'
   return <span className={`rounded-lg px-1.5 py-0.5 text-xs font-medium ${cor}`}>{empresa}</span>
 }
 
