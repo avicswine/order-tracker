@@ -16,6 +16,18 @@ export const TOM: Record<Tom, { selo: string; ponto: string; texto: string }> = 
   vermelho: { selo: 'border-red-200 bg-red-50 text-red-800', ponto: 'bg-red-500', texto: 'text-red-700' },
 }
 
+/** tom (cor) de cada status de pedido: o mesmo no painel e no Portal Cliente */
+export const STATUS_TOM: Record<'PENDING' | 'IN_TRANSIT' | 'DELIVERED' | 'CANCELLED', Tom> = {
+  PENDING: 'ambar',
+  IN_TRANSIT: 'azul',
+  DELIVERED: 'verde',
+  CANCELLED: 'cinza',
+}
+/** tons dos estados que não são um status do banco, mas aparecem como selo */
+export const TOM_OCORRENCIA: Tom = 'vermelho'
+export const TOM_ENTREGUE_COM_OCORRENCIA: Tom = 'ambarForte'
+export const TOM_ATRASADO: Tom = 'laranja'
+
 /** classes prontas de um selo do tom pedido */
 export function seloTom(tom: Tom): string {
   return `selo ${TOM[tom].selo}`

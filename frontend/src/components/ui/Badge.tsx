@@ -1,5 +1,5 @@
-import { STATUS_LABELS, STATUS_TOM, TOM_OCORRENCIA, TOM_ENTREGUE_COM_OCORRENCIA } from '../../lib/utils'
-import { TOM, seloTom } from '../../lib/estilo'
+import { STATUS_LABELS } from '../../lib/utils'
+import { STATUS_TOM, TOM, TOM_OCORRENCIA, TOM_ENTREGUE_COM_OCORRENCIA, seloTom } from '../../lib/estilo'
 import type { OrderStatus } from '../../types'
 
 interface BadgeProps {

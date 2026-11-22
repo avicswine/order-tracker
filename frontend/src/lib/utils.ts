@@ -1,7 +1,6 @@
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import type { Order, OrderStatus, TrackingSystem } from '../types'
-import type { Tom } from './estilo'
 
 export function getTrackingUrl(order: Order): string | null {
   const system = order.carrier?.trackingSystem
@@ -56,18 +55,6 @@ export const STATUS_LABELS: Record<OrderStatus, string> = {
   DELIVERED: 'Entregue',
   CANCELLED: 'Cancelado',
 }
-
-/** tom (cor) de cada status de pedido: o mesmo em todas as telas (cores em lib/estilo.ts) */
-export const STATUS_TOM: Record<OrderStatus, Tom> = {
-  PENDING: 'ambar',
-  IN_TRANSIT: 'azul',
-  DELIVERED: 'verde',
-  CANCELLED: 'cinza',
-}
-/** tons dos estados que não são um status do banco, mas aparecem como selo */
-export const TOM_OCORRENCIA: Tom = 'vermelho'
-export const TOM_ENTREGUE_COM_OCORRENCIA: Tom = 'ambarForte'
-export const TOM_ATRASADO: Tom = 'laranja'
 
 export function formatCNPJ(value: string) {
   return value

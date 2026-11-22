@@ -1,8 +1,8 @@
 import { useState, useRef } from 'react'
 import type { Order } from '../../types'
 import { StatusBadge } from '../ui/Badge'
-import { formatDate, SENDER_COMPANIES, getTrackingUrl, TOM_ATRASADO } from '../../lib/utils'
-import { seloTom } from '../../lib/estilo'
+import { formatDate, SENDER_COMPANIES, getTrackingUrl } from '../../lib/utils'
+import { TOM_ATRASADO, seloTom } from '../../lib/estilo'
 import { Spinner } from '../ui/Spinner'
 
 interface Props {

@@ -2,8 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ordersApi } from '../../lib/api'
 import { Spinner } from '../ui/Spinner'
 import type { OrderFilters } from '../../types'
-import { STATUS_TOM, TOM_ATRASADO } from '../../lib/utils'
-import { TOM, type Tom } from '../../lib/estilo'
+import { STATUS_TOM, TOM, TOM_ATRASADO, type Tom } from '../../lib/estilo'
 
 // cor de cada card = cor do status (a mesma dos selos, em lib/estilo.ts)
 const cards: { key: string; label: string; tom: Tom }[] = [
