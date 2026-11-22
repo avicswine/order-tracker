@@ -227,7 +227,7 @@ function Numero({
   const cor = tom === 'alerta' ? 'text-amber-700' : tom === 'ok' ? 'text-emerald-700' : 'text-slate-900'
   const fundoIcone = tom === 'alerta' ? 'bg-amber-50 text-amber-700' : tom === 'ok' ? 'bg-emerald-50 text-emerald-700' : 'bg-primaria-50 text-primaria-700'
   return (
-    <div className={`resumo flex items-center gap-3 px-4 py-2.5 ${borda}`}>
+    <div className={`resumo flex min-w-0 items-center gap-3 px-4 py-2.5 ${borda}`}>
       {icone && <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${fundoIcone}`}><Icone nome={icone} className="h-4 w-4" /></span>}
       <div className="min-w-0">
         <div className="resumo-rotulo normal-case tracking-normal">{titulo}</div>
@@ -1713,14 +1713,14 @@ export function DifalPage() {
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <h1 className="pagina-titulo">DIFAL</h1>
         <span className={seloTom('primaria')}>monitor de guias</span>
-        <p className="min-w-0 flex-1 text-sm text-slate-500" title="Convênio ICMS 52/91: carga total de 5,6% para o NCM 8436; a origem (RS) já recolhe 4,1%">
+        <p className="order-last min-w-0 basis-full text-sm text-slate-500 sm:order-none sm:basis-0 sm:flex-1" title="Convênio ICMS 52/91: carga total de 5,6% para o NCM 8436; a origem (RS) já recolhe 4,1%">
           NCM 8436: carga de 5,6% − 4,1% na origem = <b className="text-primaria-700">1,5%</b> para o destino. Pagar no dia da emissão da NF.
         </p>
         <button
           onClick={() => setAba(aba === 'config' ? 'vendas' : 'config')}
           title={aba === 'config' ? 'Voltar para Vendas' : 'Configuração (portal GNRE, receitas por estado e rotina diária)'}
           aria-label="Configuração"
-          className={`${aba === 'config' ? 'btn-primary' : 'btn-secondary'} h-9 w-9 shrink-0 px-0`}
+          className={`${aba === 'config' ? 'btn-primary' : 'btn-secondary'} ml-auto h-9 w-9 shrink-0 px-0 sm:ml-0`}
         >
           <Icone nome="engrenagem" className="h-5 w-5" />
         </button>

@@ -84,7 +84,15 @@ const navItems = [
   },
 ]
 
-export function Sidebar({ minimizado = false, onToggle }: { minimizado?: boolean; onToggle?: () => void }) {
+interface SidebarProps {
+  minimizado?: boolean
+  onToggle?: () => void
+  /** celular: o menu fica escondido e abre por cima da tela pelo botão ☰ */
+  abertoNoCelular?: boolean
+  onNavegar?: () => void
+}
+
+export function Sidebar({ minimizado = false, onToggle, abertoNoCelular = false, onNavegar }: SidebarProps) {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
 
@@ -94,7 +102,7 @@ export function Sidebar({ minimizado = false, onToggle }: { minimizado?: boolean
   }
 
   return (
-    <aside className={`fixed inset-y-0 left-0 z-40 flex flex-col bg-secundaria-escura transition-[width] ${minimizado ? 'w-16' : 'w-60'}`}>
+    <aside className={`fixed inset-y-0 left-0 z-40 flex flex-col overflow-y-auto bg-secundaria-escura transition-[width,transform] md:translate-x-0 ${abertoNoCelular ? 'translate-x-0' : '-translate-x-full'} ${minimizado ? 'w-16' : 'w-60'}`}>
       {/* Logo */}
       <div className={`flex items-center gap-3 py-5 border-b border-white/10 ${minimizado ? 'px-3 justify-center' : 'px-6'}`}>
         <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-primaria-600">
@@ -117,7 +125,7 @@ export function Sidebar({ minimizado = false, onToggle }: { minimizado?: boolean
         <button
           onClick={onToggle}
           title={minimizado ? 'Expandir menu' : 'Minimizar menu'}
-          className={`flex items-center gap-3 mx-3 mt-2 rounded-lg px-3 py-2 text-xs font-medium text-slate-400 hover:bg-white/10 hover:text-white transition ${minimizado ? 'justify-center' : ''}`}
+          className={`mx-3 mt-2 hidden items-center gap-3 rounded-lg px-3 py-2 text-xs font-medium text-slate-400 transition hover:bg-white/10 hover:text-white md:flex ${minimizado ? 'justify-center' : ''}`}
         >
           <svg className="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             {minimizado ? (
@@ -138,6 +146,7 @@ export function Sidebar({ minimizado = false, onToggle }: { minimizado?: boolean
             to={item.to}
             end={item.to === '/'}
             title={item.label}
+            onClick={onNavegar}
             className={({ isActive }) =>
               `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${minimizado ? 'justify-center' : ''} ${
                 isActive
