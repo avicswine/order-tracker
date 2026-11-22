@@ -163,19 +163,7 @@ export function Sidebar({ minimizado = false, onToggle }: { minimizado?: boolean
           </svg>
           {!minimizado && 'Portal Cliente'}
         </a>
-        <a
-          href={import.meta.env.DEV ? 'http://localhost:5176/separacao' : '/separacao'}
-          target="_blank"
-          rel="noopener noreferrer"
-          title="Separação"
-          className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition text-slate-400 hover:bg-white/10 hover:text-white ${minimizado ? 'justify-center' : ''}`}
-        >
-          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-          </svg>
-          {!minimizado && 'Separação'}
-        </a>
+        {/* Separação (app do galpão) fora do menu enquanto não está em uso; o app continua em /separacao */}
         <a
           href="http://localhost:5175/"
           target="_blank"
