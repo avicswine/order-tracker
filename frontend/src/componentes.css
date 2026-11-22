@@ -83,6 +83,11 @@
   .aba { @apply -mb-px whitespace-nowrap border-b-2 border-transparent px-4 py-2.5 text-sm font-medium text-slate-500 transition hover:text-slate-800; }
   .aba-ativa { @apply border-primaria-600 text-primaria-700; }
 
+  /* seletor de opções coladas (uma ativa), ex.: No prazo | Atrasadas */
+  .segmentos { @apply inline-flex rounded-lg bg-slate-100 p-1 text-sm; }
+  .segmento { @apply rounded-md px-3 py-1 text-slate-600 transition hover:text-slate-900; }
+  .segmento-ativo { @apply bg-white font-semibold text-primaria-700 shadow-cartao hover:text-primaria-700; }
+
   /* ---------- alertas (faixas de aviso) ---------- */
   .alerta { @apply rounded-lg border px-4 py-3 text-sm; }
   .alerta-info { @apply alerta border-primaria-200 bg-primaria-50 text-primaria-800; }

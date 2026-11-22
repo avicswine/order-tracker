@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { difalApi } from '../lib/api'
@@ -6,11 +6,11 @@ import type {
   DifalHistorico, DifalGuiaPendente, DifalFechamentoMes,
   DifalLote, DifalAliquota, DifalReceitaUf, DifalItemNota, DifalCalculoDetalhe, DifalGuiaResultado,
 } from '../lib/api'
-import './difal.css'
 import { StatusBadge } from '../components/ui/Badge'
 import { OrderDetailModal } from '../components/orders/OrderDetailModal'
 import { ordersApi } from '../lib/api'
 import { formatBRL as brl, formatDate, formatDateTime } from '../lib/utils'
+import { seloTom, type Tom } from '../lib/estilo'
 import type { Order } from '../types'
 
 // Ícones simples desenhados aqui mesmo (sem biblioteca nova)
@@ -40,7 +40,7 @@ function ItensDaNota({ itens }: { itens: DifalItemNota[] | null | undefined }) {
   const total = itens.reduce((s, i) => s + (i.valorTotal ?? 0), 0)
   return (
     <table className="w-full text-xs">
-      <thead className="text-left text-[11px] uppercase tracking-wide text-slate-500">
+      <thead className="text-left text-xs uppercase tracking-wide text-slate-500">
         <tr><th className="py-1 pr-2">SKU</th><th className="py-1 pr-2">Descrição</th><th className="py-1 pr-2">NCM</th><th className="py-1 pr-2 text-right">Qtd</th><th className="py-1 pr-2 text-right">Valor</th><th className="py-1 text-right">Total</th></tr>
       </thead>
       <tbody className="divide-y divide-slate-100">
@@ -75,7 +75,7 @@ function ComDica({ conteudo, largura = 640, altura = 260, children }: { conteudo
       {pos && (
         <span
           style={{ left: Math.max(8, pos.x), top: pos.y, width: largura, maxHeight: altura }}
-          className="difal-entrar pointer-events-none fixed z-50 block max-w-[90vw] overflow-hidden rounded-xl border border-slate-200 bg-white p-3 text-left font-normal shadow-xl"
+          className="pointer-events-none fixed z-50 block max-w-[90vw] overflow-hidden rounded-lg border border-slate-200 bg-white p-3 text-left font-normal shadow-janela"
         >
           {conteudo}
         </span>
@@ -93,7 +93,7 @@ const pctBr = (v: number | undefined) => `${(v ?? 0).toLocaleString('pt-BR', { m
 // A conta do DIFAL explicada passo a passo, com os números gravados na importação (calculo.ts)
 function CalculoDaNota({ d, total }: { d: DifalCalculoDetalhe | null | undefined; total: number }) {
   if (!d) return <p className="text-xs text-slate-500">Cálculo não guardado para esta nota.</p>
-  if (d.erro) return <p className="text-xs text-rose-700">Não deu para calcular: {d.erro}</p>
+  if (d.erro) return <p className="text-xs text-red-700">Não deu para calcular: {d.erro}</p>
   if (d.motivo) return <p className="text-xs text-slate-600">{d.motivo}</p>
   const com = d.comReducao
   const sem = d.semReducao
@@ -117,13 +117,13 @@ function CalculoDaNota({ d, total }: { d: DifalCalculoDetalhe | null | undefined
               <div className={linha}><span>Base reduzida: {brl(com.valor)} × (5,6% ÷ {pctBr(d.aliquotaInterna)})</span><span className="tabular-nums">{brl(com.baseReduzida)}</span></div>
               <div className={linha}><span>Diferença de alíquotas: {pctBr(d.aliquotaInterna)} − {pctBr(d.interestadual)}</span><span className="tabular-nums">{pctBr(com.diferencaAliquotas)}</span></div>
               <div className={`${linha} font-medium text-slate-900`}><span>{brl(com.baseReduzida)} × {pctBr(com.diferencaAliquotas)}</span><span className="tabular-nums">{brl(com.difal)}</span></div>
-              <p className="mt-1 text-[11px] text-slate-500">Método do fisco de {d.uf}: base reduzida vezes a diferença de alíquotas.</p>
+              <p className="mt-1 text-xs text-slate-500">Método do fisco de {d.uf}: base reduzida vezes a diferença de alíquotas.</p>
             </>
           ) : (
             <>
               <div className={linha}><span>Carga total do Convênio 52/91 − carga já recolhida no RS: {pctBr(com.cargaTotal)} − {pctBr(com.cargaOrigem)}</span><span className="tabular-nums">{pctBr(com.cargaDevida)}</span></div>
               <div className={`${linha} font-medium text-slate-900`}><span>{brl(com.valor)} × {pctBr(com.cargaDevida)}</span><span className="tabular-nums">{brl(com.difal)}</span></div>
-              {!com.cargaDevida && <p className="mt-1 text-[11px] text-slate-500">A origem já recolheu toda a carga: não sobra DIFAL para estes itens.</p>}
+              {!com.cargaDevida && <p className="mt-1 text-xs text-slate-500">A origem já recolheu toda a carga: não sobra DIFAL para estes itens.</p>}
             </>
           )}
         </div>
@@ -157,8 +157,8 @@ function NotaCliente({ nf, empresa, cliente, itens }: { nf: string; empresa: str
 
 // selo da empresa (AVIC / AGRO)
 function SeloEmpresa({ empresa }: { empresa: string }) {
-  const cor = empresa === 'AGRO' ? 'bg-violet-50 text-violet-700' : 'bg-sky-50 text-sky-700'
-  return <span className={`rounded-md px-1.5 py-0.5 text-[11px] font-medium ${cor}`}>{empresa}</span>
+  const cor = empresa === 'AGRO' ? 'bg-primaria-50 text-primaria-700' : 'bg-primaria-50 text-primaria-700'
+  return <span className={`rounded-lg px-1.5 py-0.5 text-xs font-medium ${cor}`}>{empresa}</span>
 }
 
 /**
@@ -189,14 +189,14 @@ function FiltroCanal({ canais, valor, onTrocar }: { canais: (string | null)[]; v
   const opcoes = [...new Set(canais.map(nomeCanal))].sort()
   return (
     <select value={valor} onChange={(e) => onTrocar(e.target.value)}
-      className="max-w-40 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:ring-4 focus:ring-blue-100">
+      className="input w-auto max-w-40">
       <option value="">Todos os canais</option>
       {opcoes.map((c) => <option key={c} value={c}>{c}</option>)}
     </select>
   )
 }
 
-const CAMPO_BUSCA = 'w-36 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-4 focus:ring-blue-100'
+const CAMPO_BUSCA = 'input w-36'
 const DICA_BUSCA = 'Buscar NF, cliente, empresa, UF, canal, produto…'
 
 function pct(v: number | null | undefined) {
@@ -223,16 +223,16 @@ function Numero({
   tom?: 'normal' | 'alerta' | 'ok'
   icone?: keyof typeof ICONES
 }) {
-  const borda = tom === 'alerta' ? 'border-amber-200 difal-kpi-alerta' : tom === 'ok' ? 'border-emerald-200 difal-kpi-ok' : 'border-indigo-100 difal-kpi-normal'
+  const borda = tom === 'alerta' ? 'border-amber-200' : tom === 'ok' ? 'border-emerald-200' : ''
   const cor = tom === 'alerta' ? 'text-amber-700' : tom === 'ok' ? 'text-emerald-700' : 'text-slate-900'
-  const fundoIcone = tom === 'alerta' ? 'bg-amber-50 text-amber-600' : tom === 'ok' ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue-600'
+  const fundoIcone = tom === 'alerta' ? 'bg-amber-50 text-amber-700' : tom === 'ok' ? 'bg-emerald-50 text-emerald-700' : 'bg-primaria-50 text-primaria-700'
   return (
-    <div className={`difal-cartao difal-kpi flex items-center gap-3 rounded-xl border px-4 py-2.5 ${borda}`}>
+    <div className={`resumo flex items-center gap-3 px-4 py-2.5 ${borda}`}>
       {icone && <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${fundoIcone}`}><Icone nome={icone} className="h-4 w-4" /></span>}
       <div className="min-w-0">
-        <div className="text-xs text-slate-500">{titulo}</div>
-        <div className={`text-xl font-semibold leading-tight tracking-tight tabular-nums ${cor}`}>{valor}</div>
-        {detalhe && <div className="truncate text-[11px] text-slate-500" title={detalhe}>{detalhe}</div>}
+        <div className="resumo-rotulo normal-case tracking-normal">{titulo}</div>
+        <div className={`text-lg font-bold leading-tight tabular-nums ${cor}`}>{valor}</div>
+        {detalhe && <div className="truncate text-xs text-slate-500" title={detalhe}>{detalhe}</div>}
       </div>
     </div>
   )
@@ -246,36 +246,18 @@ const ABAS: { id: NomeAba; texto: string }[] = [
   { id: 'fechamento', texto: 'Fechamento ML' },
 ]
 
-// seletor de abas com um fundo escuro que desliza até a aba escolhida
+// abas padrão; na configuração (engrenagem) nenhuma aba fica marcada
 function Abas({ aba, onTrocar }: { aba: NomeAba; onTrocar: (a: NomeAba) => void }) {
   // lotes esperando ação: ainda não enviados ao portal, ou enviados sem o resultado consultado
   const { data: lotes = [] } = useQuery({ queryKey: ['difal-lotes'], queryFn: difalApi.lotes })
   const lotesPendentes = lotes.filter((l) => !l.numeroRecibo || l.guiasResultado.length === 0).length
-  const botoes = useRef<Partial<Record<NomeAba, HTMLButtonElement | null>>>({})
-  const [indicador, setIndicador] = useState({ esquerda: 0, largura: 0 })
-  useLayoutEffect(() => {
-    const b = botoes.current[aba]
-    // na configuração (engrenagem) nenhuma aba fica marcada
-    setIndicador(b ? { esquerda: b.offsetLeft, largura: b.offsetWidth } : { esquerda: 0, largura: 0 })
-  }, [aba])
   return (
-    <div className="relative inline-flex rounded-xl bg-white/80 p-1 shadow-sm ring-1 ring-indigo-100 backdrop-blur">
-      <span
-        className="difal-indicador absolute bottom-1 top-1 left-0 rounded-lg bg-gradient-to-r from-indigo-600 to-sky-500 shadow-md shadow-indigo-500/30"
-        style={{ width: indicador.largura, transform: `translateX(${indicador.esquerda}px)` }}
-      />
+    <div className="abas">
       {ABAS.map((a) => (
-        <button
-          key={a.id}
-          ref={(el) => { botoes.current[a.id] = el }}
-          onClick={() => onTrocar(a.id)}
-          className={`relative z-10 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-            aba === a.id ? 'text-white' : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
+        <button key={a.id} onClick={() => onTrocar(a.id)} className={`aba ${aba === a.id ? 'aba-ativa' : ''}`}>
           {a.texto}
           {a.id === 'lotes' && lotesPendentes > 0 && (
-            <span className="ml-2 rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-semibold text-white" title="lotes esperando envio ou consulta">{lotesPendentes}</span>
+            <span className="ml-2 rounded-full bg-red-600 px-1.5 py-0.5 text-xs font-semibold text-white" title="lotes esperando envio ou consulta">{lotesPendentes}</span>
           )}
         </button>
       ))}
@@ -325,7 +307,7 @@ function Vendas({ lugarCards }: { lugarCards: HTMLElement | null }) {
       title={`Atualizar do Bling: busca as notas dos últimos 90 dias e calcula o DIFAL por NCM e estado (só leitura no Bling).${
         !importando && resumoImportacao ? `\nÚltima importação (${formatDateTime(terminadaEm)}): ${resumoImportacao}` : ''}`}
       aria-label="Atualizar do Bling"
-      className="difal-btn ml-auto inline-flex h-9 items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-sky-500 px-2.5 text-sm font-medium text-white shadow-md shadow-indigo-500/30 hover:from-indigo-500 hover:to-sky-400 disabled:opacity-60"
+      className="btn-primary ml-auto h-9 px-2.5"
     >
       <Icone nome="atualizar" className={`h-4 w-4 ${importando ? 'animate-spin' : ''}`} />
       {importando && <span>Buscando notas…</span>}
@@ -335,13 +317,13 @@ function Vendas({ lugarCards }: { lugarCards: HTMLElement | null }) {
   return (
     <div className="space-y-3">
       {(importar.isError || importacao?.erro) && (
-        <div className="difal-entrar rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
           Não foi possível buscar as notas: {importacao?.erro ?? erroDoClique?.response?.data?.erro ?? erroDoClique?.message}
         </div>
       )}
       {/* erro de importação nunca fica escondido: só o resumo de sucesso vai para a dica do botão */}
       {!importando && errosImportacao.length > 0 && (
-        <div className="difal-entrar rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
+        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
           Última importação com {errosImportacao.length} erro(s): {errosImportacao.slice(0, 3).join(' · ')}{errosImportacao.length > 3 ? ' …' : ''}
         </div>
       )}
@@ -478,7 +460,7 @@ function GuiasPendentes({ lugarCards, acaoExtra }: { lugarCards: HTMLElement | n
 
   // os cards seguem os filtros desta lista, mas aparecem no topo da página, acima das abas
   const cards = (
-      <div className="difal-escalonado grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-3">
         <Numero
           icone="documento"
           titulo="Guias que precisamos emitir"
@@ -506,63 +488,63 @@ function GuiasPendentes({ lugarCards, acaoExtra }: { lugarCards: HTMLElement | n
     <>
     {lugarCards && createPortal(cards, lugarCards)}
     <div className="flex flex-wrap items-center gap-2">
-    <div className="inline-flex rounded-xl bg-slate-100 p-1 text-sm">
+    <div className="segmentos">
         <button onClick={() => trocarLista('prazo')}
-          className={`rounded-lg px-2.5 py-1 transition-colors ${lista === 'prazo' ? 'bg-white font-semibold text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>
-          No prazo <span className="ml-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-[11px] tabular-nums">{noPrazo.length}</span>
+          className={`segmento ${lista === 'prazo' ? 'segmento-ativo' : ''}`}>
+          No prazo <span className="ml-1 rounded-full bg-slate-200/70 px-1.5 py-0.5 text-xs tabular-nums">{noPrazo.length}</span>
         </button>
         <button onClick={() => trocarLista('atrasadas')}
-          className={`rounded-lg px-2.5 py-1 transition-colors ${lista === 'atrasadas' ? 'bg-white font-semibold text-rose-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>
-          Atrasadas <span className="ml-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-[11px] tabular-nums">{atrasadas.length}</span>
+          className={`segmento ${lista === 'atrasadas' ? 'segmento-ativo !text-red-700' : ''}`}>
+          Atrasadas <span className="ml-1 rounded-full bg-slate-200/70 px-1.5 py-0.5 text-xs tabular-nums">{atrasadas.length}</span>
         </button>
     </div>
     <input type="search" value={busca} onChange={(e) => setBusca(e.target.value)} placeholder={DICA_BUSCA} className={CAMPO_BUSCA} />
     <FiltroCanal canais={guias.map((g) => g.canal)} valor={canal} onTrocar={(c) => { setCanal(c); setEscolhidas(new Set()) }} />
-    <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1 text-sm text-slate-700">
+    <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1 text-sm text-slate-700">
       <span title="data de emissão da NF">De</span>
-      <input type="date" value={de} onChange={(e) => setDe(e.target.value)} className="w-[8.5rem] rounded-lg border border-slate-200 px-1.5 py-0.5 text-sm outline-none focus:ring-4 focus:ring-blue-100" />
+      <input type="date" value={de} onChange={(e) => setDe(e.target.value)} className="input input-sm w-[8.5rem] py-0.5" />
       <span>até</span>
-      <input type="date" value={ate} onChange={(e) => setAte(e.target.value)} className="w-[8.5rem] rounded-lg border border-slate-200 px-1.5 py-0.5 text-sm outline-none focus:ring-4 focus:ring-blue-100" />
+      <input type="date" value={ate} onChange={(e) => setAte(e.target.value)} className="input input-sm w-[8.5rem] py-0.5" />
       <span className="ml-1 inline-flex rounded-lg bg-slate-100 p-0.5 text-xs">
         {atalhosPeriodo().map(([rotulo, d, a]) => (
           <button key={rotulo} onClick={() => { setDe(d); setAte(a) }}
-            className={`rounded-md px-1.5 py-0.5 text-[11px] transition-colors ${de === d && ate === a ? 'bg-white font-medium text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>
+            className={`rounded-lg px-1.5 py-0.5 text-xs transition-colors ${de === d && ate === a ? 'bg-white font-medium text-slate-900 shadow-cartao' : 'text-slate-500 hover:text-slate-800'}`}>
             {rotulo}
           </button>
         ))}
       </span>
     </div>
     <label title={`${ufsComCobranca ? `Estados com cobrança: ${ufsComCobranca}.` : ''}${soComCobranca && escondidas ? ` ${escondidas} nota(s) de outros estados ocultas.` : ''}`}
-      className="flex w-fit cursor-pointer select-none items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
-      <input type="checkbox" checked={soComCobranca} onChange={(e) => setSoComCobranca(e.target.checked)} className="h-4 w-4 accent-blue-600" />
+      className="flex w-fit cursor-pointer select-none items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+      <input type="checkbox" checked={soComCobranca} onChange={(e) => setSoComCobranca(e.target.checked)} className="h-4 w-4 accent-primaria-600" />
       <span>
         Estados c/ cobrança
       </span>
     </label>
     {acaoExtra}
     </div>
-    {aviso && <div className="difal-entrar rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-2.5 text-sm text-emerald-900">{aviso}</div>}
-    {erroTexto && <div className="difal-entrar rounded-xl border border-red-200 bg-red-50 px-5 py-2.5 text-sm text-red-800">{erroTexto}</div>}
+    {aviso && <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-5 py-2.5 text-sm text-emerald-900">{aviso}</div>}
+    {erroTexto && <div className="rounded-lg border border-red-200 bg-red-50 px-5 py-2.5 text-sm text-red-800">{erroTexto}</div>}
     {mostradas.length === 0 ? (
-      <div className="difal-entrar flex items-center gap-3 rounded-2xl border border-emerald-200 bg-white p-4 text-sm text-emerald-900">
-        <span className="grid h-8 w-8 place-items-center rounded-xl bg-emerald-50 text-emerald-600"><Icone nome="ok" className="h-4 w-4" /></span>
+      <div className="flex items-center gap-3 rounded-lg border border-emerald-200 bg-white p-4 text-sm text-emerald-900">
+        <span className="grid h-8 w-8 place-items-center rounded-lg bg-emerald-50 text-emerald-600"><Icone nome="ok" className="h-4 w-4" /></span>
         {verAtrasadas ? 'Nenhuma nota atrasada neste filtro.' : 'Nenhuma guia no prazo para emitir agora.'}
       </div>
     ) : (
-    <div className={`difal-secao ${verAtrasadas ? 'difal-secao-rosa border-rose-200' : 'difal-secao-azul border-slate-200'} overflow-hidden rounded-2xl border bg-white shadow-sm`}>
-      <div className={`${verAtrasadas ? 'difal-cab-rosa' : 'difal-cab-azul'} flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4`}>
+    <div className={`card overflow-hidden ${verAtrasadas ? 'border-red-200' : ''}`}>
+      <div className={`card-cabecalho flex-wrap ${verAtrasadas ? 'bg-red-50' : ''}`}>
         <div>
           {verAtrasadas ? (
             <>
-              <p className="text-base font-semibold text-slate-900">Atrasadas: passaram do prazo</p>
+              <p className="secao-titulo">Atrasadas: passaram do prazo</p>
               <p className="text-xs text-slate-500">
                 {atrasadas.length} nota(s) · {brl(atrasadas.reduce((s, g) => s + g.difalCalculado, 0))} de DIFAL. Dá para gerar a guia, mas ela sai só com o imposto,{' '}
-                <b className="text-rose-700">sem multa e juros</b>. A planilha vai para a contabilidade.
+                <b className="text-red-700">sem multa e juros</b>. A planilha vai para a contabilidade.
               </p>
             </>
           ) : (
             <>
-              <p className="text-base font-semibold text-slate-900">Guias para emitir agora (no prazo)</p>
+              <p className="secao-titulo">Guias para emitir agora (no prazo)</p>
               <p className="text-xs text-slate-500">
                 {noPrazo.length} nota(s) no prazo · {prontas.length} prontas para a guia (GNRE). Um lote por empresa, até {LIMITE_GUIAS_LOTE} guias.
                 Vendas do Mercado Livre: depois de pagar, anexe o comprovante na venda do ML e clique em "Comprovante enviado".
@@ -573,32 +555,32 @@ function GuiasPendentes({ lugarCards, acaoExtra }: { lugarCards: HTMLElement | n
         <span className="flex flex-wrap items-center gap-2">
         {['AVIC', 'AGRO'].map((emp) => prontasPorEmpresa(emp) > 0 && (
           <button key={emp} onClick={() => marcarEmpresa(emp)}
-            className="difal-btn rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:border-slate-300">
+            className="btn-secondary">
             Marcar {emp} ({Math.min(prontasPorEmpresa(emp), LIMITE_GUIAS_LOTE)})
           </button>
         ))}
         {marcadas.length > 0 && (
-          <button onClick={() => setEscolhidas(new Set())} className="difal-btn rounded-xl px-3 py-2 text-sm text-slate-500 hover:text-slate-800">Limpar</button>
+          <button onClick={() => setEscolhidas(new Set())} className="btn-ghost">Limpar</button>
         )}
         {verAtrasadas && (
-          <button onClick={() => baixarListaAtrasadas(atrasadas)} className="difal-btn rounded-xl border border-rose-200 bg-white px-3 py-2 text-sm text-rose-700 hover:bg-rose-50">
+          <button onClick={() => baixarListaAtrasadas(atrasadas)} className="btn-secondary border-red-200 text-red-700 hover:bg-red-50">
             Baixar lista
           </button>
         )}
         <button
           onClick={gerarComAviso}
           disabled={marcadas.length === 0 || gerar.isPending}
-          className={`difal-btn rounded-xl bg-gradient-to-r ${verAtrasadas ? 'from-rose-600 to-orange-500 shadow-rose-500/30' : 'from-indigo-600 to-violet-600 shadow-indigo-500/30 hover:from-indigo-500 hover:to-violet-500'} px-4 py-2 text-sm font-medium text-white shadow-md disabled:opacity-40`}
+          className={verAtrasadas ? 'btn-danger' : 'btn-primary'}
         >
           {gerar.isPending ? 'Montando lote…' : marcadas.length ? `Baixar lote GNRE (${marcadas.length} · ${brl(totalMarcado)})` : 'Baixar lote GNRE (0)'}
         </button>
         </span>
       </div>
-      <table className="min-w-full text-sm">
-        <thead className={`bg-gradient-to-r ${verAtrasadas ? 'from-rose-50 to-orange-50 text-rose-900/60' : 'from-indigo-50 to-sky-50 text-indigo-900/60'} text-left text-xs uppercase tracking-wide`}>
+      <table className="tabela min-w-full">
+        <thead>
           <tr><th className="w-10 px-5 py-2"></th><th className="px-2 py-2">Nota / cliente</th><th className="px-2 py-2">Emissão</th><th className="px-2 py-2">{verAtrasadas ? 'Venceu em' : 'Prazo'}</th><th className="px-2 py-2">UF</th><th className="px-2 py-2">Canal</th><th className="px-2 py-2">Transportadora</th><th className="px-2 py-2">Status</th><th className="px-2 py-2">Envio</th><th className="px-2 py-2">Previsão</th><th className="px-2 py-2 text-right">Valor da NF</th><th className="px-2 py-2 text-right">DIFAL</th><th className="px-5 py-2">Situação</th></tr>
         </thead>
-        <tbody className="difal-linhas divide-y divide-slate-100">
+        <tbody>
           {mostradas.map((g) => {
             const bloqueada = !g.pronta || (empresaEscolhida !== undefined && g.empresa !== empresaEscolhida && !escolhidas.has(g.id))
             return (
@@ -610,19 +592,19 @@ function GuiasPendentes({ lugarCards, acaoExtra }: { lugarCards: HTMLElement | n
                     disabled={bloqueada}
                     onChange={() => alternar(g)}
                     title={bloqueada && g.pronta ? 'Lote de uma empresa só' : undefined}
-                    className="h-4 w-4 accent-blue-600"
+                    className="h-4 w-4 accent-primaria-600"
                   />}
                 </td>
                 <td className="px-2 py-2.5">
                   <NotaCliente nf={g.nfNumero} empresa={g.empresa} cliente={g.clienteNome} itens={g.itens} />
                 </td>
                 <td className="px-2 py-2.5 text-slate-500">{dataBr(g.emitidaEm)}</td>
-                <td className={`px-2 py-2.5 text-xs ${g.atrasada ? 'font-medium text-rose-700' : 'text-slate-500'}`}>{g.atrasada ? `venceu ${dataBr(g.prazo)}` : g.prazo === isoDia(new Date()) ? 'pagar hoje' : `vence ${dataBr(g.prazo)}`}</td>
-                <td className="px-2 py-2.5"><span className="rounded-md bg-indigo-50 px-1.5 py-0.5 text-xs font-semibold text-indigo-700 ring-1 ring-indigo-100">{g.clienteUf}</span></td>
+                <td className={`px-2 py-2.5 text-xs ${g.atrasada ? 'font-medium text-red-700' : 'text-slate-500'}`}>{g.atrasada ? `venceu ${dataBr(g.prazo)}` : g.prazo === isoDia(new Date()) ? 'pagar hoje' : `vence ${dataBr(g.prazo)}`}</td>
+                <td className="px-2 py-2.5"><span className="rounded-lg bg-primaria-50 px-1.5 py-0.5 text-xs font-semibold text-primaria-700 ring-1 ring-primaria-100">{g.clienteUf}</span></td>
                 <CelulaCanal g={g} />
                 <CelulasEnvio envio={g.envio} envioMl={g.envioMl} />
                 <td className="px-2 py-2.5 text-right tabular-nums text-slate-600">{brl(g.valorNota)}</td>
-                <td className="px-2 py-2.5 text-right font-semibold tabular-nums text-indigo-700">
+                <td className="px-2 py-2.5 text-right font-semibold tabular-nums text-primaria-700">
                   <ComDica largura={460} altura={340} conteudo={<CalculoDaNota d={g.calculoDetalhe} total={g.difalCalculado} />}>
                     <span className="cursor-help underline decoration-dotted decoration-slate-300 underline-offset-4">{brl(g.difalCalculado)}</span>
                   </ComDica>
@@ -630,32 +612,32 @@ function GuiasPendentes({ lugarCards, acaoExtra }: { lugarCards: HTMLElement | n
                 <td className="px-5 py-2.5 text-xs">
                   <span className="flex flex-wrap items-center gap-2">
                     {g.situacao === 'DIVERGENTE' ? (
-                      <span title={g.observacao ?? undefined} className="rounded-full bg-rose-50 px-2.5 py-1 font-medium text-rose-700">● nota divergente (cancelada?) — conferir</span>
+                      <span title={g.observacao ?? undefined} className={seloTom('vermelho')}>● nota divergente (cancelada?) — conferir</span>
                     ) : g.guiaGeradaEm && ['1', '2'].includes(g.situacaoGuia ?? '') ? (
-                      <span className="rounded-full bg-rose-50 px-2.5 py-1 font-medium text-rose-700">guia recusada · em Lotes GNRE, &ldquo;Devolver à fila&rdquo;</span>
+                      <span className={seloTom('vermelho')}>guia recusada · em Lotes GNRE, &ldquo;Devolver à fila&rdquo;</span>
                     ) : g.guiaGeradaEm && g.situacaoGuia === '3' ? (
-                      <span className="rounded-full bg-amber-50 px-2.5 py-1 font-medium text-amber-800">erro de comunicação com o estado · consulte o lote de novo; sem código de barras, &ldquo;Devolver à fila&rdquo;</span>
+                      <span className={seloTom('ambar')}>erro de comunicação com o estado · consulte o lote de novo; sem código de barras, &ldquo;Devolver à fila&rdquo;</span>
                     ) : g.guiaGeradaEm && !g.guiaAceita ? (
-                      <span className="rounded-full bg-blue-50 px-2.5 py-1 font-medium text-blue-700">guia gerada · envie ao portal e consulte</span>
+                      <span className={seloTom('primaria')}>guia gerada · envie ao portal e consulte</span>
                     ) : g.guiaGeradaEm ? (
                       <>
-                        <span className="rounded-full bg-emerald-50 px-2.5 py-1 font-medium text-emerald-700">guia aceita · pagar e anexar</span>
+                        <span className={seloTom('verde')}>guia aceita · pagar e anexar</span>
                         <button
                           onClick={() => { setErroTexto(null); if (window.confirm(`Confirma que o comprovante da NF ${g.nfNumero} foi anexado na venda do ML?`)) marcar.mutate(g.id) }}
                           disabled={marcar.isPending}
-                          className="difal-btn rounded-lg bg-emerald-600 px-3 py-1.5 font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                          className="btn-primary btn-sm"
                         >
                           Comprovante enviado
                         </button>
                       </>
                     ) : g.pronta ? (
-                      <span className="rounded-full bg-emerald-50 px-2.5 py-1 font-medium text-emerald-700">● pronta</span>
+                      <span className={seloTom('verde')}>● pronta</span>
                     ) : (
-                      <span className="rounded-full bg-amber-50 px-2.5 py-1 font-medium text-amber-700">● falta: {g.faltando.join('; ')}</span>
+                      <span className={seloTom('ambar')}>● falta: {g.faltando.join('; ')}</span>
                     )}
                     {g.ml && g.mlOrderId && (
                       <a href={linkComprovanteMl(g.mlOrderId)} target="_blank" rel="noreferrer" title={`venda ML ${g.mlOrderId}`}
-                        className="difal-btn rounded-lg border border-yellow-300 bg-yellow-50 px-2.5 py-1 font-medium text-yellow-800 hover:bg-yellow-100">
+                        className="btn btn-sm border border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100">
                         Comprovante no ML ↗
                       </a>
                     )}
@@ -714,20 +696,20 @@ function baixarListaAtrasadas(notas: DifalGuiaPendente[]) {
 }
 
 // cores do selo do tipo de envio do ML
-const COR_LOGISTICA: Record<string, string> = {
-  FULL: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
-  Coleta: 'bg-sky-50 text-sky-700 ring-sky-200',
-  'A combinar': 'bg-amber-50 text-amber-700 ring-amber-200',
-  ME1: 'bg-violet-50 text-violet-700 ring-violet-200',
+const TOM_LOGISTICA: Record<string, Tom> = {
+  FULL: 'verde',
+  Coleta: 'primaria',
+  'A combinar': 'ambar',
+  ME1: 'azul',
 }
 
 // cor do selo da plataforma da venda
-function corCanal(canal: string | null): string {
+function tomCanal(canal: string | null): Tom {
   const c = (canal ?? '').toLowerCase()
-  if (c.includes('mercado livre')) return 'bg-yellow-50 text-yellow-800 ring-yellow-200'
-  if (c.includes('loja integrada')) return 'bg-blue-50 text-blue-700 ring-blue-200'
-  if (c.includes('shopee')) return 'bg-orange-50 text-orange-700 ring-orange-200'
-  return 'bg-slate-100 text-slate-600 ring-slate-200'
+  if (c.includes('mercado livre')) return 'ambar'
+  if (c.includes('loja integrada')) return 'primaria'
+  if (c.includes('shopee')) return 'laranja'
+  return 'cinza'
 }
 
 // plataforma da venda e, no Mercado Livre, o tipo de envio
@@ -735,10 +717,10 @@ function CelulaCanal({ g }: { g: DifalGuiaPendente }) {
   return (
     <td className="px-2 py-2.5 text-xs">
       <span className="flex flex-col gap-1">
-        <span className={`w-fit max-w-[150px] truncate rounded-md px-1.5 py-0.5 font-medium ring-1 ${corCanal(g.canal)}`} title={g.canal ?? undefined}>{g.canal ?? 'Balcão'}</span>
+        <span className={`w-fit max-w-[150px] truncate ${seloTom(tomCanal(g.canal))}`} title={g.canal ?? undefined}>{g.canal ?? 'Balcão'}</span>
         {g.ml && (
           <span title={g.mlLogistica ? undefined : 'Buscado na API do Mercado Livre no "Atualizar do Bling" em produção (o PC não tem acesso à conta do ML)'}
-            className={`w-fit rounded-md px-1.5 py-0.5 text-[11px] font-medium ring-1 ${COR_LOGISTICA[g.mlLogistica ?? ''] ?? 'bg-slate-50 text-slate-400 ring-slate-200'}`}>
+            className={`w-fit ${seloTom(TOM_LOGISTICA[g.mlLogistica ?? ''] ?? 'cinza')}`}>
             {g.mlLogistica ?? 'tipo de envio: pendente'}
           </span>
         )}
@@ -749,14 +731,14 @@ function CelulaCanal({ g }: { g: DifalGuiaPendente }) {
 
 // Envio da nota como na tela de Pedidos: transportadora, status (mesmo selo), data de envio e previsão/entrega
 // status do envio do Mercado Envios (API do ML) → texto e cor do selo
-const STATUS_ENVIO_ML: Record<string, [string, string]> = {
-  pending: ['Em preparação', 'bg-slate-100 text-slate-600'],
-  handling: ['Em preparação', 'bg-slate-100 text-slate-600'],
-  ready_to_ship: ['Pronto para enviar', 'bg-amber-50 text-amber-700'],
-  shipped: ['A caminho', 'bg-sky-50 text-sky-700'],
-  delivered: ['Entregue', 'bg-emerald-50 text-emerald-700'],
-  not_delivered: ['Não entregue', 'bg-rose-50 text-rose-700'],
-  cancelled: ['Cancelado', 'bg-slate-100 text-slate-500'],
+const STATUS_ENVIO_ML: Record<string, [string, Tom]> = {
+  pending: ['Em preparação', 'cinza'],
+  handling: ['Em preparação', 'cinza'],
+  ready_to_ship: ['Pronto para enviar', 'ambar'],
+  shipped: ['A caminho', 'azul'],
+  delivered: ['Entregue', 'verde'],
+  not_delivered: ['Não entregue', 'vermelho'],
+  cancelled: ['Cancelado', 'cinza'],
 }
 
 function CelulasEnvio({ envio, envioMl }: { envio: DifalGuiaPendente['envio']; envioMl: DifalGuiaPendente['envioMl'] }) {
@@ -773,17 +755,17 @@ function CelulasEnvio({ envio, envioMl }: { envio: DifalGuiaPendente['envio']; e
   }
   if (!envio && envioMl?.status) {
     // venda pelo Mercado Envios: rastreio do próprio ML (status atual, sem o histórico de cada movimentação)
-    const [texto, cor] = envioMl.substatus === 'out_for_delivery'
-      ? ['Saiu para entrega', 'bg-sky-100 text-sky-800']
-      : STATUS_ENVIO_ML[envioMl.status] ?? [envioMl.status, 'bg-slate-100 text-slate-600']
+    const [texto, tom]: [string, Tom] = envioMl.substatus === 'out_for_delivery'
+      ? ['Saiu para entrega', 'azul']
+      : STATUS_ENVIO_ML[envioMl.status] ?? [envioMl.status, 'cinza']
     const lido = envioMl.lidoEm ? `rastreio do ML · lido em ${formatDateTime(envioMl.lidoEm)}` : 'rastreio do ML'
     return (
       <>
         <td className="px-2 py-2.5 text-xs text-slate-600">
           Mercado Envios
-          <span className="block text-[10px] text-slate-400">{lido}</span>
+          <span className="block text-xs text-slate-400">{lido}</span>
         </td>
-        <td className="px-2 py-2.5"><span className={`rounded-full px-2.5 py-1 text-xs font-medium ${cor}`}>{texto}</span></td>
+        <td className="px-2 py-2.5"><span className={seloTom(tom)}>{texto}</span></td>
         <td className="px-2 py-2.5 text-xs text-slate-400">—</td>
         <td className="px-2 py-2.5 text-xs text-slate-600">{formatDate(envioMl.previsao)}</td>
       </>
@@ -802,7 +784,7 @@ function CelulasEnvio({ envio, envioMl }: { envio: DifalGuiaPendente['envio']; e
           onClick={() => abrir(envio.pedidoId)}
           disabled={abrindo}
           title={`${envio.ultimoRastreio ?? ''}${envio.ultimoRastreio ? ' · ' : ''}clique para ver o pedido`}
-          className="difal-btn rounded-full disabled:opacity-50"
+          className="rounded-full transition hover:opacity-80 disabled:opacity-50"
         >
           <StatusBadge status={envio.situacao} hasOccurrence={envio.temOcorrencia} lastTracking={envio.ultimoRastreio} />
         </button>
@@ -857,11 +839,11 @@ function FechamentoMensal() {
   }, [importacao?.emAndamento, qc])
 
   return (
-    <div className="difal-secao difal-secao-ciano overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div className="difal-cab-ciano flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+    <div className="card overflow-hidden">
+      <div className="card-cabecalho flex-wrap">
         <div>
-          <p className="text-base font-semibold text-slate-900">Fechamento mensal: o que o Mercado Livre pagou e cobrou × o que era devido</p>
-          <p className="text-xs text-gray-500">
+          <p className="secao-titulo">Fechamento mensal: o que o Mercado Livre pagou e cobrou × o que era devido</p>
+          <p className="text-xs text-slate-500">
             Todos os meses desde a primeira guia dos ZIPs de comprovantes do ML (AVIC e AGRO). Notas…Multa/juros: guias que o
             ML pagou (ZIPs). &ldquo;Fatura ML&rdquo;: lançamentos CDIFAL que ele cobrou de nós (mês da fatura). &ldquo;Nossa conta&rdquo;: o
             DIFAL certo de todas as vendas do ML do mês (mês da emissão). Passe o mouse nos títulos.
@@ -872,21 +854,21 @@ function FechamentoMensal() {
           <button
             onClick={() => { if (window.confirm('Buscar no Bling as notas desde 01/12/2025 (só leitura)? São milhares de notas: roda em segundo plano e pode levar até 1 hora. Use uma vez, para completar a coluna \u201cNossa conta\u201d dos meses antigos. N\u00e3o use perto das 16h: a rotina di\u00e1ria importa no mesmo hor\u00e1rio.')) importarHistorico.mutate() }}
             disabled={importandoHistorico}
-            className="difal-btn rounded-xl px-3 py-2 text-xs text-slate-500 hover:text-slate-800 disabled:opacity-50"
+            className="btn-ghost btn-sm"
           >
             {importandoHistorico ? 'Importando notas do Bling…' : 'Importar notas desde dez/2025 (uma vez)'}
           </button>
           <button
             onClick={() => { if (window.confirm('Ler os 12 meses da fatura do ML? São bem mais chamadas à API; use só para completar o histórico.')) sincronizar.mutate(12) }}
             disabled={sincronizar.isPending}
-            className="difal-btn rounded-xl px-3 py-2 text-xs text-slate-500 hover:text-slate-800 disabled:opacity-50"
+            className="btn-ghost btn-sm"
           >
             Buscar 12 meses (uma vez)
           </button>
           <button
             onClick={() => sincronizar.mutate(2)}
             disabled={sincronizar.isPending}
-            className="difal-btn rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 hover:border-slate-300 disabled:opacity-50"
+            className="btn-secondary"
           >
             {sincronizar.isPending ? 'Buscando na fatura…' : 'Atualizar cobranças do ML'}
           </button>
@@ -908,13 +890,13 @@ function FechamentoMensal() {
       ))}
       {/* o que a busca da fatura leu: deixa claro se o ML só tem esses meses ou se a busca parou no meio */}
       {sincronizar.data && (
-        <div className="border-b border-sky-100 bg-sky-50 px-4 py-2 text-xs text-sky-900">
+        <div className="border-b border-primaria-100 bg-primaria-50 px-4 py-2 text-xs text-primaria-900">
           Fatura do ML lida agora:{' '}
           {sincronizar.data.map((r) => `${r.empresa}: ${r.periodos.length} mês(es) (${r.periodos.map((p) => mesBr(p.slice(0, 7))).join(', ') || 'nenhum'}), ${r.cdifal} lançamento(s) CDIFAL${r.erro ? ' — parou com erro' : ''}`).join(' · ')}
         </div>
       )}
       {importacao?.emAndamento && (
-        <div className="border-b border-indigo-100 bg-indigo-50 px-4 py-2 text-xs text-indigo-900">
+        <div className="border-b border-primaria-100 bg-primaria-50 px-4 py-2 text-xs text-primaria-900">
           Importando notas do Bling em segundo plano… a coluna &ldquo;Nossa conta&rdquo; se completa quando terminar.
         </div>
       )}
@@ -928,16 +910,16 @@ function FechamentoMensal() {
         const tot = (k: 'guiasZip' | 'pagoZip' | 'devidoZip' | 'aMaisZip' | 'encargosZip') => linhas.reduce((s, l) => s + l[k], 0)
         return (
           <div className="grid gap-3 border-b border-slate-100 px-5 py-3 text-sm sm:grid-cols-4">
-            <div><p className="text-xs text-slate-500">ML pagou de DIFAL (guias dos ZIPs)</p><p className="text-lg font-semibold tabular-nums">{brl(tot('pagoZip'))}</p><p className="text-[11px] text-slate-400">{tot('guiasZip')} nota(s) com guia</p></div>
+            <div><p className="text-xs text-slate-500">ML pagou de DIFAL (guias dos ZIPs)</p><p className="text-lg font-semibold tabular-nums">{brl(tot('pagoZip'))}</p><p className="text-xs text-slate-400">{tot('guiasZip')} nota(s) com guia</p></div>
             <div><p className="text-xs text-slate-500">Devido pela nossa conta</p><p className="text-lg font-semibold tabular-nums">{brl(tot('devidoZip'))}</p></div>
-            <div><p className="text-xs text-slate-500">Pago a mais</p><p className="text-lg font-semibold tabular-nums text-rose-700">{brl(tot('aMaisZip'))}</p></div>
+            <div><p className="text-xs text-slate-500">Pago a mais</p><p className="text-lg font-semibold tabular-nums text-red-700">{brl(tot('aMaisZip'))}</p></div>
             <div><p className="text-xs text-slate-500">Multa e juros</p><p className="text-lg font-semibold tabular-nums text-amber-700">{brl(tot('encargosZip'))}</p></div>
           </div>
         )
       })()}
       {!isLoading && !isError && <div className="overflow-x-auto">
-        <table className="min-w-full text-sm">
-          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+        <table className="tabela min-w-full">
+          <thead>
             <tr>
               <th className="px-5 py-2.5 text-left">Mês</th>
               <th className="px-2 py-2 text-left">Empresa</th>
@@ -951,7 +933,7 @@ function FechamentoMensal() {
               <th className="px-4 py-2 text-right" title="fatura do ML (CDIFAL) menos a nossa conta: positivo = o ML cobrou mais do que devia">Fatura − nossa conta</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-slate-100">
             {linhas.map((l: DifalFechamentoMes) => {
               const vazio = !l.guiasZip && !l.lancamentos && !l.notas
               const traco = <span className="text-slate-300">—</span>
@@ -962,11 +944,11 @@ function FechamentoMensal() {
                   <td className="px-2 py-2 text-right tabular-nums">{l.guiasZip || traco}</td>
                   <td className="px-2 py-2 text-right tabular-nums">{l.guiasZip ? brl(l.pagoZip) : traco}</td>
                   <td className="px-2 py-2 text-right tabular-nums">{l.guiasZip ? brl(l.devidoZip) : traco}</td>
-                  <td className={`px-2 py-2 text-right tabular-nums ${l.aMaisZip > 0.01 ? 'font-medium text-rose-700' : ''}`}>{l.guiasZip ? brl(l.aMaisZip) : traco}</td>
+                  <td className={`px-2 py-2 text-right tabular-nums ${l.aMaisZip > 0.01 ? 'font-medium text-red-700' : ''}`}>{l.guiasZip ? brl(l.aMaisZip) : traco}</td>
                   <td className="px-2 py-2 text-right tabular-nums text-amber-700">{l.guiasZip ? brl(l.encargosZip) : traco}</td>
                   <td className="px-2 py-2 text-right tabular-nums" title={`${l.lancamentos} lançamento(s) CDIFAL`}>{l.lancamentos ? brl(l.cobradoMl) : traco}</td>
                   <td className="px-2 py-2 text-right tabular-nums" title={`${l.notas} venda(s) do ML`}>{l.notas ? brl(l.calculado) : traco}</td>
-                  <td className={`px-4 py-2 text-right tabular-nums ${l.lancamentos && l.notas && l.cobradoMl - l.calculado > 0.01 ? 'font-medium text-rose-700' : ''}`}>
+                  <td className={`px-4 py-2 text-right tabular-nums ${l.lancamentos && l.notas && l.cobradoMl - l.calculado > 0.01 ? 'font-medium text-red-700' : ''}`}>
                     {l.lancamentos && l.notas ? brl(l.cobradoMl - l.calculado) : traco}
                   </td>
                 </tr>
@@ -1008,9 +990,7 @@ function BotaoCopiar({ texto, rotulo }: { texto: string; rotulo: string }) {
   return (
     <button
       onClick={copiar}
-      className={`difal-btn rounded-lg border px-3 py-1.5 text-xs font-medium ${
-        estado === 'copiado' ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : estado === 'erro' ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
-      }`}
+      className={estado === 'copiado' ? 'btn btn-sm border border-emerald-300 bg-emerald-50 text-emerald-800' : estado === 'erro' ? 'btn btn-sm border border-red-200 bg-red-50 text-red-800' : 'btn-secondary btn-sm'}
     >
       {estado === 'copiado' ? 'copiado!' : estado === 'erro' ? 'não deu para copiar' : rotulo}
     </button>
@@ -1057,7 +1037,7 @@ function LotesGnre() {
 
   if (lotes.length === 0) {
     return (
-      <div className="rounded-2xl border border-violet-200 bg-white p-6 text-center text-sm text-slate-500">
+      <div className="rounded-lg border border-primaria-200 bg-white p-6 text-center text-sm text-slate-500">
         Nenhum lote gerado ainda. Marque as notas em <b>Vendas</b> e clique em <b>Baixar lote GNRE</b>; o lote aparece aqui para enviar ao portal.
       </div>
     )
@@ -1068,11 +1048,11 @@ function LotesGnre() {
     !g.devolvida && (['1', '2'].includes(g.situacaoGuia) || (g.situacaoGuia === '3' && !g.linhaDigitavel && !g.codigoBarras && !g.qrcodePayload))
 
   return (
-    <div className="difal-secao difal-secao-violeta overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div className="difal-cab-violeta flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-5 py-4">
-        <p className="text-base font-semibold text-slate-900">Lotes GNRE gerados</p>
+    <div className="card overflow-hidden">
+      <div className="card-cabecalho flex-wrap">
+        <p className="secao-titulo">Lotes GNRE gerados</p>
         {portal && (
-          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600">
+          <span className={seloTom('cinza')}>
             Portal: <b>{portal.ambiente === 'producao' ? 'PRODUÇÃO' : 'homologação (testes)'}</b> · certificado AVIC{' '}
             {portal.empresas.AVIC ? 'ok' : 'não configurado'} · AGRO {portal.empresas.AGRO ? 'ok' : 'não configurado'}
           </span>
@@ -1084,37 +1064,37 @@ function LotesGnre() {
           <button onClick={() => setErro(null)} className="text-xs underline">fechar</button>
         </div>
       )}
-      <div className="difal-escalonado grid gap-3 p-4 lg:grid-cols-2">
+      <div className="grid gap-3 p-4 lg:grid-cols-2">
         {lotes.map((l: DifalLote) => {
           const podeEnviar = !l.numeroRecibo && !!portal?.empresas[l.empresa as 'AVIC' | 'AGRO']
           // cor do cartão pela situação das guias: todas processadas = verde; alguma invalidada/erro = vermelho
           const situacoes = l.guiasResultado.map((g) => g.situacaoGuia)
           const tomLote = situacoes.length === 0 ? 'border-slate-200 bg-white'
             : situacoes.every((s) => s === '0') ? 'border-emerald-200 bg-emerald-50/40'
-            : situacoes.some((s) => s !== '0' && s !== '4') ? 'border-rose-200 bg-rose-50/40'
+            : situacoes.some((s) => s !== '0' && s !== '4') ? 'border-red-200 bg-red-50/40'
             : 'border-amber-200 bg-amber-50/40'
           return (
-            <div key={l.id} className={`difal-cartao rounded-xl border p-4 text-sm ${tomLote}`}>
+            <div key={l.id} className={`rounded-lg border p-4 text-sm ${tomLote}`}>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                 <span className="font-medium text-slate-900">{l.id}</span>
                 <span className="text-slate-600">{l.guias} guia(s) · {brl(l.total)} · gerado em {dataBr(l.criadoEm)}</span>
                 {l.ambiente === 'homologacao' && (
-                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">teste</span>
+                  <span className={seloTom('cinza')}>teste</span>
                 )}
                 {l.numeroRecibo ? (
-                  <span className="text-gray-600">recibo {l.numeroRecibo} · {l.situacaoDescricao ?? 'aguardando consulta'}</span>
+                  <span className="text-slate-600">recibo {l.numeroRecibo} · {l.situacaoDescricao ?? 'aguardando consulta'}</span>
                 ) : l.situacaoDescricao ? (
                   <span className="text-amber-700">{l.situacaoDescricao}</span>
                 ) : (
-                  <span className="text-gray-500">não enviado ao portal</span>
+                  <span className="text-slate-500">não enviado ao portal</span>
                 )}
                 <span className="mt-2 flex w-full flex-wrap gap-2">
-                  <button onClick={() => xml.mutate(l.id)} className="difal-btn rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs hover:border-slate-300">XML</button>
+                  <button onClick={() => xml.mutate(l.id)} className="btn-secondary btn-sm">XML</button>
                   {podeEnviar && (
                     <button
                       onClick={() => { setErro(null); enviar.mutate(l.id) }}
                       disabled={ocupado}
-                      className="difal-btn rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+                      className="btn-primary btn-sm"
                     >
                       {enviar.isPending ? 'Enviando…' : 'Enviar ao portal'}
                     </button>
@@ -1123,7 +1103,7 @@ function LotesGnre() {
                     <button
                       onClick={() => { setErro(null); consultar.mutate(l.id) }}
                       disabled={ocupado}
-                      className="difal-btn rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs hover:border-slate-300 disabled:opacity-50"
+                      className="btn-secondary btn-sm"
                     >
                       {consultar.isPending ? 'Consultando…' : 'Consultar resultado'}
                     </button>
@@ -1133,7 +1113,7 @@ function LotesGnre() {
                     <button
                       onClick={() => { setErro(null); if (window.confirm(`Desfazer o lote ${l.id}? As notas voltam para a fila de guias pendentes.`)) desfazer.mutate(l.id) }}
                       disabled={ocupado}
-                      className="difal-btn rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-xs text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+                      className="btn-secondary btn-sm border-red-200 text-red-700 hover:bg-red-50"
                     >
                       Desfazer
                     </button>
@@ -1148,13 +1128,13 @@ function LotesGnre() {
                         if (window.confirm(`Devolver à fila as ${n} nota(s) com guia recusada ou com erro de comunicação (sem código de barras, não podem ser pagas)? As guias aceitas continuam neste lote. Depois, gere um lote novo com elas.`)) devolver.mutate(l.id)
                       }}
                       disabled={ocupado}
-                      className="difal-btn rounded-lg border border-amber-200 bg-white px-3 py-1.5 text-xs text-amber-800 hover:bg-amber-50 disabled:opacity-50"
+                      className="btn-secondary btn-sm border-amber-200 text-amber-800 hover:bg-amber-50"
                     >
                       {devolver.isPending ? 'Devolvendo…' : 'Devolver à fila as que não podem ser pagas'}
                     </button>
                   )}
                   {l.temPdf && (
-                    <button onClick={() => pdf.mutate(l.id)} className="difal-btn rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700">
+                    <button onClick={() => pdf.mutate(l.id)} className="btn-primary btn-sm">
                       PDF das guias
                     </button>
                   )}
@@ -1164,12 +1144,12 @@ function LotesGnre() {
                 <ul className="mt-3 space-y-1 border-t border-slate-200/70 pt-2 text-xs text-slate-600">
                   {l.guiasResultado.map((g, i) => (
                     <li key={i}>
-                      {g.devolvida && <span className="mr-1 rounded bg-slate-800 px-1.5 py-0.5 font-semibold text-white">devolvida à fila · NÃO PAGAR</span>}
+                      {g.devolvida && <span className="mr-1 rounded-lg bg-slate-800 px-1.5 py-0.5 font-semibold text-white">devolvida à fila · NÃO PAGAR</span>}
                       <span className={g.devolvida ? 'text-slate-400 line-through' : g.situacaoGuia === '0' ? 'text-emerald-700' : 'text-red-700'}>{g.situacaoTexto}</span>
                       {' · '}{g.identificadorGuia ? `NF ${g.identificadorGuia}` : g.ufFavorecida}
                       {g.valorGNRE && <> · {brl(Number(g.valorGNRE))}</>}
                       {g.dataLimitePagamento && <> · pagar até {g.dataLimitePagamento}</>}
-                      {g.linhaDigitavel && <> · linha digitável <code className="select-all break-all rounded bg-white px-1 py-0.5 ring-1 ring-slate-200">{g.linhaDigitavel}</code></>}
+                      {g.linhaDigitavel && <> · linha digitável <code className="select-all break-all rounded-lg bg-white px-1 py-0.5 ring-1 ring-slate-200">{g.linhaDigitavel}</code></>}
                       {g.motivos.map((m) => <span key={m.codigo} className="text-red-700"> · {m.codigo} {m.descricao}{m.campo ? ` (${m.campo})` : ''}</span>)}
                       {!g.devolvida && (g.linhaDigitavel || g.qrcodePayload) && (
                         <span className="mt-1.5 flex flex-wrap gap-2">
@@ -1195,20 +1175,20 @@ function RotinaDiaria() {
   const simular = useMutation({ mutationFn: difalApi.simularRotina })
   const r = simular.data
   return (
-    <div className="difal-cartao flex gap-4 rounded-2xl border border-slate-200 bg-white p-5 text-sm">
-      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-600"><Icone nome="atualizar" /></span>
+    <div className="flex gap-4 rounded-lg border border-slate-200 bg-white p-5 text-sm">
+      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-emerald-50 text-emerald-600"><Icone nome="atualizar" /></span>
       <div className="min-w-0 flex-1">
         <p className="font-semibold text-slate-900">Rotina diária (16h, dias úteis)</p>
         <p className="text-xs text-slate-500">
           Atualiza as notas, monta a lista do dia (no prazo, estados com cobrança) e manda o resumo no WhatsApp. Nota emitida até as 16h59 vence no mesmo dia; a partir das 17h, no próximo dia útil. O pagamento continua com você.
         </p>
         <button onClick={() => simular.mutate()} disabled={simular.isPending}
-          className="difal-btn mt-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:border-slate-300 disabled:opacity-60">
+          className="btn-secondary mt-3">
           {simular.isPending ? 'Montando…' : 'Rodar rotina agora (simulação)'}
         </button>
-        {simular.isError && <p className="mt-2 text-xs text-rose-600">{mensagemErro(simular.error)}</p>}
+        {simular.isError && <p className="mt-2 text-xs text-red-600">{mensagemErro(simular.error)}</p>}
         {r && (
-          <div className="difal-entrar mt-3 space-y-2">
+          <div className="mt-3 space-y-2">
             <ul className="text-xs text-slate-600">
               <li>Agendamento: <b>{r.agendada ? 'ligado' : 'desligado'}</b>{!r.agendada && ' (variável DIFAL_ROTINA=1 no Railway)'}</li>
               <li>Modo: <b>{r.modoCompleto ? 'completo (gera e envia os lotes ao portal; só com o portal em produção)' : 'só aviso'}</b></li>
@@ -1216,14 +1196,14 @@ function RotinaDiaria() {
               <li>
                 Última execução:{' '}
                 {r.ultimaExecucao ? (
-                  <b className={r.ultimaExecucao.ok ? 'text-emerald-700' : 'text-rose-700'}>
+                  <b className={r.ultimaExecucao.ok ? 'text-emerald-700' : 'text-red-700'}>
                     {formatDateTime(r.ultimaExecucao.em)} · {r.ultimaExecucao.ok ? 'ok' : 'FALHOU'} · {r.ultimaExecucao.enviadaWhatsapp ? 'WhatsApp enviado' : 'WhatsApp NÃO enviado'} — {r.ultimaExecucao.resumo}
                   </b>
                 ) : <b>nenhuma desde o último deploy</b>}
               </li>
             </ul>
             <p className="text-xs text-slate-500">Mensagem que iria agora (simulação: usa as notas já importadas, não gera lote nem envia nada):</p>
-            <pre className="whitespace-pre-wrap rounded-xl bg-slate-50 p-3 text-xs text-slate-800 ring-1 ring-slate-100">{r.pulou ? `Não rodou: ${r.pulou}` : r.mensagem}</pre>
+            <pre className="whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-xs text-slate-800 ring-1 ring-slate-100">{r.pulou ? `Não rodou: ${r.pulou}` : r.mensagem}</pre>
           </div>
         )}
       </div>
@@ -1256,8 +1236,8 @@ function Configuracao() {
 
   return (
     <div className="space-y-5">
-      <div className="difal-cartao flex gap-4 rounded-2xl border border-slate-200 bg-white p-5 text-sm">
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-600"><Icone nome="cadeado" /></span>
+      <div className="flex gap-4 rounded-lg border border-slate-200 bg-white p-5 text-sm">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primaria-50 text-primaria-600"><Icone nome="cadeado" /></span>
         <div>
         <p className="font-semibold text-slate-900">Portal GNRE</p>
         {portal ? (
@@ -1274,18 +1254,18 @@ function Configuracao() {
 
       <RotinaDiaria />
 
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
           <div>
             <p className="font-semibold text-slate-900">Código de receita GNRE por estado</p>
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-slate-500">
               Cada UF publica o seu código no portal (serviço GnreConfigUF). Sem ele a guia não fica &ldquo;pronta&rdquo;.
               {semReceita > 0 && <> <b>{semReceita}</b> estado(s) ainda sem código.</>}
             </p>
           </div>
-          <label className="text-sm text-gray-600">
+          <label className="text-sm text-slate-600">
             Consultar com o certificado da{' '}
-            <select value={empresa} onChange={(e) => setEmpresa(e.target.value as 'AVIC' | 'AGRO')} className="rounded-lg border border-slate-200 px-2 py-1 text-sm outline-none focus:ring-4 focus:ring-blue-100">
+            <select value={empresa} onChange={(e) => setEmpresa(e.target.value as 'AVIC' | 'AGRO')} className="input input-sm w-auto">
               <option>AVIC</option>
               <option>AGRO</option>
             </select>
@@ -1298,8 +1278,8 @@ function Configuracao() {
           </div>
         )}
         <div className="overflow-x-auto">
-        <table className="min-w-full text-sm">
-          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+        <table className="tabela min-w-full">
+          <thead>
             <tr>
               <th className="px-5 py-2.5 text-left">UF</th>
               <th className="px-2 py-2 text-right">Interna</th>
@@ -1310,20 +1290,20 @@ function Configuracao() {
               <th className="px-4 py-2"></th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-slate-100">
             {aliquotas.map((a: DifalAliquota) => (
               <Fragment key={a.uf}>
-                <tr className={`transition-colors hover:bg-slate-50 ${a.codigoReceitaGnre ? '' : 'bg-amber-50/40'}`}>
-                  <td className="px-4 py-2 font-medium text-gray-900" title={a.nome}>{a.uf}</td>
-                  <td className="px-2 py-2 text-right tabular-nums text-gray-600">{pct(a.aliquotaInterna)}</td>
-                  <td className="px-2 py-2 text-right tabular-nums text-gray-600">{pct(a.interestadual)}</td>
-                  <td className="px-2 py-2 text-gray-600">{a.metodo}</td>
-                  <td className="px-2 py-2 tabular-nums">{a.codigoReceitaGnre ? <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">{a.codigoReceitaGnre}</span> : <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">falta</span>}</td>
+                <tr className={a.codigoReceitaGnre ? '' : '!bg-amber-50/60'}>
+                  <td className="px-4 py-2 font-medium text-slate-900" title={a.nome}>{a.uf}</td>
+                  <td className="px-2 py-2 text-right tabular-nums text-slate-600">{pct(a.aliquotaInterna)}</td>
+                  <td className="px-2 py-2 text-right tabular-nums text-slate-600">{pct(a.interestadual)}</td>
+                  <td className="px-2 py-2 text-slate-600">{a.metodo}</td>
+                  <td className="px-2 py-2 tabular-nums">{a.codigoReceitaGnre ? <span className={seloTom('verde')}>{a.codigoReceitaGnre}</span> : <span className={seloTom('ambar')}>falta</span>}</td>
                   <td className="px-2 py-2">
                     <select
                       value={a.vencimentoRegra}
                       onChange={(e) => salvar.mutate({ uf: a.uf, dados: { vencimentoRegra: e.target.value } })}
-                      className="rounded-lg border border-slate-200 px-2 py-1 text-xs outline-none focus:ring-4 focus:ring-blue-100"
+                      className="input input-sm w-auto"
                     >
                       <option value="saida">na saída (por operação)</option>
                       <option value="dia15">dia 15 do mês seguinte</option>
@@ -1334,7 +1314,7 @@ function Configuracao() {
                       onClick={() => { setErro(null); setUfAberta(a.uf); buscar.mutate(a.uf) }}
                       disabled={!certificadoOk || buscar.isPending}
                       title={certificadoOk ? 'Consulta o portal GNRE' : `Certificado da ${empresa} não configurado`}
-                      className="difal-btn rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs hover:border-slate-300 disabled:opacity-40"
+                      className="btn-secondary btn-sm"
                     >
                       {buscar.isPending && ufAberta === a.uf ? 'Consultando…' : 'Buscar receitas no portal'}
                     </button>
@@ -1342,8 +1322,8 @@ function Configuracao() {
                 </tr>
                 {ufAberta === a.uf && buscar.data && (
                   <tr>
-                    <td colSpan={7} className="difal-entrar bg-slate-50 px-5 py-3">
-                      <p className="mb-2 text-xs text-gray-600">
+                    <td colSpan={7} className="bg-slate-50 px-5 py-3">
+                      <p className="mb-2 text-xs text-slate-600">
                         {buscar.data.receitas.length} receita(s) em {a.uf} ({buscar.data.situacao.descricao}). Escolha a de ICMS para consumidor final não contribuinte:
                       </p>
                       <ul className="space-y-1">
@@ -1351,13 +1331,13 @@ function Configuracao() {
                           <li key={`${r.codigo}-${r.courier}`} className="flex flex-wrap items-center gap-2 text-xs">
                             <button
                               onClick={() => salvar.mutate({ uf: a.uf, dados: { codigoReceitaGnre: r.codigo, tipoDocOrigemGnre: tipoDocPreferido(r), camposAdicionais: r.camposAdicionais, exigeProduto: r.exigeProduto, exigePeriodo: r.exigePeriodoReferencia } })}
-                              className="difal-btn rounded-lg bg-slate-900 px-2.5 py-1 text-white hover:bg-slate-800"
+                              className="btn-primary btn-sm"
                             >
                               usar {r.codigo}
                             </button>
-                            <span className="text-gray-800">{r.descricao}</span>
-                            {r.courier && <span className="text-gray-500">(courier)</span>}
-                            <span className="text-gray-500">
+                            <span className="text-slate-800">{r.descricao}</span>
+                            {r.courier && <span className="text-slate-500">(courier)</span>}
+                            <span className="text-slate-500">
                               {[
                                 r.exigeDocumentoOrigem && 'exige nota de origem',
                                 r.exigeDetalhamentoReceita && 'exige detalhamento',
@@ -1369,7 +1349,7 @@ function Configuracao() {
                           </li>
                         ))}
                       </ul>
-                      <button onClick={() => { setUfAberta(null); buscar.reset() }} className="mt-2 text-xs text-gray-500 underline">fechar</button>
+                      <button onClick={() => { setUfAberta(null); buscar.reset() }} className="mt-2 text-xs text-slate-500 underline">fechar</button>
                     </td>
                   </tr>
                 )}
@@ -1384,12 +1364,12 @@ function Configuracao() {
 }
 
 // ------------------------------------------------- Guias emitidas: registro e pagamento
-const SITUACAO_PORTAL: Record<string, [string, string]> = {
-  '0': ['aceita', 'bg-emerald-50 text-emerald-700 ring-emerald-200'],
-  '1': ['recusada pelo portal', 'bg-rose-50 text-rose-700 ring-rose-200'],
-  '2': ['recusada pelo estado', 'bg-rose-50 text-rose-700 ring-rose-200'],
-  '3': ['erro de comunicação', 'bg-amber-50 text-amber-700 ring-amber-200'],
-  '4': ['processando', 'bg-sky-50 text-sky-700 ring-sky-200'],
+const SITUACAO_PORTAL: Record<string, [string, Tom]> = {
+  '0': ['aceita', 'verde'],
+  '1': ['recusada pelo portal', 'vermelho'],
+  '2': ['recusada pelo estado', 'vermelho'],
+  '3': ['erro de comunicação', 'ambar'],
+  '4': ['processando', 'azul'],
 }
 
 function GuiasEmitidas() {
@@ -1444,100 +1424,100 @@ function GuiasEmitidas() {
   return (
     <div className="space-y-4">
       {data.alertas.map((a, i) => (
-        <div key={i} className={`difal-entrar flex items-start gap-3 rounded-xl border px-4 py-3 text-sm ${a.tipo === 'dobro' ? 'border-rose-300 bg-rose-50 text-rose-900' : 'border-amber-200 bg-amber-50 text-amber-900'}`}>
+        <div key={i} className={`flex items-start gap-3 rounded-lg border px-4 py-3 text-sm ${a.tipo === 'dobro' ? 'border-red-300 bg-red-50 text-red-900' : 'border-amber-200 bg-amber-50 text-amber-900'}`}>
           <Icone nome="alerta" className="mt-0.5 h-4 w-4 shrink-0" />
           <span><b>{a.tipo === 'dobro' ? 'Possível guia em dobro: ' : 'Sem pagamento marcado: '}</b>{a.texto}</span>
         </div>
       ))}
-      {erro && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-800">{erro}</div>}
+      {erro && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-800">{erro}</div>}
       <div className="flex flex-wrap items-center gap-3">
         <input type="search" value={busca} onChange={(e) => setBusca(e.target.value)} placeholder={DICA_BUSCA} className={CAMPO_BUSCA} />
         <FiltroCanal canais={data.guias.map((g) => g.canal)} valor={canal} onTrocar={setCanal} />
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700">
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700">
           <span>Geradas de</span>
-          <input type="date" value={de} onChange={(e) => setDe(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1 text-sm" />
+          <input type="date" value={de} onChange={(e) => setDe(e.target.value)} className="input input-sm w-auto" />
           <span>até</span>
-          <input type="date" value={ate} onChange={(e) => setAte(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1 text-sm" />
+          <input type="date" value={ate} onChange={(e) => setAte(e.target.value)} className="input input-sm w-auto" />
           <span className="ml-1 inline-flex rounded-lg bg-slate-100 p-0.5 text-xs">
             {atalhosPeriodo().map(([rotulo, d, a]) => (
               <button key={rotulo} onClick={() => { setDe(d); setAte(a) }}
-                className={`rounded-md px-2.5 py-1 ${de === d && ate === a ? 'bg-white font-medium text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>{rotulo}</button>
+                className={`rounded-lg px-2.5 py-1 ${de === d && ate === a ? 'bg-white font-medium text-slate-900 shadow-cartao' : 'text-slate-500 hover:text-slate-800'}`}>{rotulo}</button>
             ))}
           </span>
         </div>
-        <span className="inline-flex rounded-xl bg-white p-1 text-sm ring-1 ring-slate-200">
+        <span className="segmentos">
           {([['todas', 'Todas'], ['nao_pagas', 'Não pagas'], ['pagas', 'Pagas']] as const).map(([v, r]) => (
-            <button key={v} onClick={() => setFiltro(v)} className={`rounded-lg px-3 py-1 ${filtro === v ? 'bg-gradient-to-r from-indigo-600 to-sky-500 text-white' : 'text-slate-600 hover:text-slate-900'}`}>{r}</button>
+            <button key={v} onClick={() => setFiltro(v)} className={`segmento ${filtro === v ? 'segmento-ativo' : ''}`}>{r}</button>
           ))}
         </span>
-        <label className="flex cursor-pointer select-none items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700">
-          <input type="checkbox" checked={soComCobranca} onChange={(e) => setSoComCobranca(e.target.checked)} className="h-4 w-4 accent-blue-600" />
+        <label className="flex cursor-pointer select-none items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700">
+          <input type="checkbox" checked={soComCobranca} onChange={(e) => setSoComCobranca(e.target.checked)} className="h-4 w-4 accent-primaria-600" />
           Só estados com cobrança de DIFAL
         </label>
       </div>
-      <div className="difal-secao difal-secao-violeta overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="difal-cab-violeta flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+      <div className="card overflow-hidden">
+        <div className="card-cabecalho flex-wrap">
           <div>
-            <p className="text-base font-semibold text-slate-900">Guias emitidas</p>
+            <p className="secao-titulo">Guias emitidas</p>
             <p className="text-xs text-slate-500">{visiveis.length} guia(s) · pago {brl(totalPago)} · aceitas e ainda não pagas {brl(totalAPagar)}</p>
           </div>
           <span className="flex flex-wrap items-center gap-2">
             {marcadas.length > 0 && (
               <>
-                <input type="date" value={dataPagamento} onChange={(e) => setDataPagamento(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm" />
+                <input type="date" value={dataPagamento} onChange={(e) => setDataPagamento(e.target.value)} className="input input-sm w-auto" />
                 <button onClick={() => { setErro(null); marcar.mutate({ ids: marcadas, data: dataPagamento }) }} disabled={marcar.isPending}
-                  className="difal-btn rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 px-4 py-2 text-sm font-medium text-white shadow-md shadow-emerald-500/30 disabled:opacity-40">
+                  className="btn-primary">
                   Marcar como paga ({marcadas.length})
                 </button>
                 <button onClick={() => { setErro(null); if (window.confirm(`Desmarcar ${marcadas.length} guia(s) como paga(s)?`)) marcar.mutate({ ids: marcadas, data: null }) }}
-                  className="difal-btn rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">Desmarcar</button>
+                  className="btn-secondary">Desmarcar</button>
               </>
             )}
-            <button onClick={baixar} className="difal-btn rounded-xl border border-violet-200 bg-white px-4 py-2 text-sm text-violet-700 hover:bg-violet-50">Baixar planilha</button>
+            <button onClick={baixar} className="btn-outline">Baixar planilha</button>
           </span>
         </div>
         {visiveis.length === 0 ? (
           <p className="px-5 py-6 text-center text-sm text-slate-500">Nenhuma guia emitida com esses filtros.</p>
         ) : (
         <div className="max-h-[560px] overflow-auto">
-        <table className="min-w-full text-sm">
-          <thead className="sticky top-0 bg-gradient-to-r from-violet-50 to-indigo-50 text-left text-xs uppercase tracking-wide text-violet-900/60">
+        <table className="tabela min-w-full">
+          <thead>
             <tr><th className="w-10 px-5 py-2"></th><th className="px-2 py-2">Nota / cliente</th><th className="px-2 py-2">UF</th><th className="px-2 py-2">Canal</th><th className="px-2 py-2 text-right">Valor da NF</th><th className="px-2 py-2 text-right">DIFAL</th><th className="px-2 py-2">Gerada</th><th className="px-2 py-2">Portal</th><th className="px-2 py-2">Pagamento</th><th className="px-5 py-2">Código</th></tr>
           </thead>
-          <tbody className="difal-linhas divide-y divide-slate-100">
+          <tbody>
             {visiveis.map((g) => {
               const portal = SITUACAO_PORTAL[g.situacaoPortal ?? '']
               return (
                 <tr key={g.id}>
-                  <td className="px-5 py-2.5"><input type="checkbox" checked={escolhidas.has(g.id)} onChange={() => alternar(g.id)} className="h-4 w-4 accent-violet-600" /></td>
+                  <td className="px-5 py-2.5"><input type="checkbox" checked={escolhidas.has(g.id)} onChange={() => alternar(g.id)} className="h-4 w-4 accent-primaria-600" /></td>
                   <td className="px-2 py-2.5"><NotaCliente nf={g.nfNumero} empresa={g.empresa} cliente={g.clienteNome} itens={g.itens} /></td>
-                  <td className="px-2 py-2.5"><span className="rounded-md bg-indigo-50 px-1.5 py-0.5 text-xs font-semibold text-indigo-700 ring-1 ring-indigo-100">{g.clienteUf}</span></td>
+                  <td className="px-2 py-2.5"><span className="rounded-lg bg-primaria-50 px-1.5 py-0.5 text-xs font-semibold text-primaria-700 ring-1 ring-primaria-100">{g.clienteUf}</span></td>
                   <td className="px-2 py-2.5 text-xs">
                     <span className="flex flex-col gap-1">
-                      <span className={`w-fit max-w-[150px] truncate rounded-md px-1.5 py-0.5 font-medium ring-1 ${corCanal(g.canal)}`}>{g.canal ?? 'Balcão'}</span>
-                      {g.ml && g.mlLogistica && <span className={`w-fit rounded-md px-1.5 py-0.5 text-[11px] font-medium ring-1 ${COR_LOGISTICA[g.mlLogistica] ?? 'bg-slate-50 text-slate-600 ring-slate-200'}`}>{g.mlLogistica}</span>}
+                      <span className={`w-fit max-w-[150px] truncate ${seloTom(tomCanal(g.canal))}`}>{g.canal ?? 'Balcão'}</span>
+                      {g.ml && g.mlLogistica && <span className={`w-fit ${seloTom(TOM_LOGISTICA[g.mlLogistica] ?? 'cinza')}`}>{g.mlLogistica}</span>}
                     </span>
                   </td>
                   <td className="px-2 py-2.5 text-right tabular-nums text-slate-600">{brl(g.valorNota)}</td>
-                  <td className="px-2 py-2.5 text-right font-semibold tabular-nums text-violet-700">
+                  <td className="px-2 py-2.5 text-right font-semibold tabular-nums text-primaria-700">
                     <ComDica largura={460} altura={340} conteudo={<CalculoDaNota d={g.calculoDetalhe} total={g.difalCalculado} />}>
                       <span className="cursor-help underline decoration-dotted decoration-slate-300 underline-offset-4">{brl(g.difalCalculado)}</span>
                     </ComDica>
                   </td>
                   <td className="px-2 py-2.5 text-xs text-slate-600">
                     {dataBr(g.geradaEm)}
-                    <span className="block text-[11px] text-slate-400">{g.loteId}{g.ambiente === 'homologacao' ? ' · teste' : ''}</span>
+                    <span className="block text-xs text-slate-400">{g.loteId}{g.ambiente === 'homologacao' ? ' · teste' : ''}</span>
                   </td>
                   <td className="px-2 py-2.5 text-xs">
-                    <span className={`rounded-full px-2 py-0.5 font-medium ring-1 ${portal?.[1] ?? 'bg-slate-50 text-slate-500 ring-slate-200'}`}>{portal?.[0] ?? (g.enviadaEm ? 'aguardando resultado' : 'não enviada')}</span>
+                    <span className={seloTom(portal?.[1] ?? 'cinza')}>{portal?.[0] ?? (g.enviadaEm ? 'aguardando resultado' : 'não enviada')}</span>
                   </td>
                   <td className="px-2 py-2.5 text-xs">
                     <span className="flex flex-col gap-1">
                       {g.pagaEm
-                        ? <span className="w-fit rounded-full bg-emerald-50 px-2 py-0.5 font-medium text-emerald-700 ring-1 ring-emerald-200">paga em {dataBr(g.pagaEm)}</span>
-                        : <span className="w-fit rounded-full bg-slate-50 px-2 py-0.5 text-slate-500 ring-1 ring-slate-200">não paga</span>}
-                      {g.atrasada && <span className="w-fit rounded-full bg-rose-50 px-2 py-0.5 font-medium text-rose-700 ring-1 ring-rose-200" title="guia gerada depois do dia em que o DIFAL vencia (regra do mesmo dia); saiu só com o imposto">gerada depois do prazo</span>}
-                      {g.ml && <span className="w-fit rounded-full bg-yellow-50 px-2 py-0.5 text-yellow-800 ring-1 ring-yellow-200">{g.comprovanteMlEnviadoEm ? `comprovante no ML ${dataBr(g.comprovanteMlEnviadoEm)}` : 'comprovante no ML: falta'}</span>}
+                        ? <span className={`w-fit ${seloTom('verde')}`}>paga em {dataBr(g.pagaEm)}</span>
+                        : <span className={`w-fit ${seloTom('cinza')}`}>não paga</span>}
+                      {g.atrasada && <span className={`w-fit ${seloTom('vermelho')}`} title="guia gerada depois do dia em que o DIFAL vencia (regra do mesmo dia); saiu só com o imposto">gerada depois do prazo</span>}
+                      {g.ml && <span className={`w-fit ${seloTom('ambar')}`}>{g.comprovanteMlEnviadoEm ? `comprovante no ML ${dataBr(g.comprovanteMlEnviadoEm)}` : 'comprovante no ML: falta'}</span>}
                     </span>
                   </td>
                   <td className="px-5 py-2.5 text-xs">{g.linhaDigitavel ? <BotaoCopiar texto={g.linhaDigitavel} rotulo="Copiar código" /> : <span className="text-slate-400">—</span>}</td>
@@ -1561,8 +1541,8 @@ function Historico() {
     queryFn: () => difalApi.historico(),
   })
 
-  if (isLoading) return <p className="py-8 text-center text-gray-500">Carregando apuração…</p>
-  if (!data) return <p className="py-8 text-center text-gray-500">Não foi possível carregar.</p>
+  if (isLoading) return <p className="py-8 text-center text-slate-500">Carregando apuração…</p>
+  if (!data) return <p className="py-8 text-center text-slate-500">Não foi possível carregar.</p>
 
   const h: DifalHistorico = data
   const maior = Math.max(...h.estados.map((e) => e.pctCobrado), 5)
@@ -1572,7 +1552,7 @@ function Historico() {
       <GuiasEmitidas />
 
       <h2 className="pt-2 text-base font-semibold text-slate-900">Histórico auditado: o que cada estado cobrou (dez/2025 a nov/2026)</h2>
-      <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-5">
+      <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-5">
         <p className="text-sm text-amber-900">
           Entre {dataBr(h.periodo.de)} e {dataBr(h.periodo.ate)} pagamos{' '}
           <b>{brl(h.resumo.aMais)}</b> a mais de DIFAL do que o devido. A causa: os anúncios
@@ -1585,7 +1565,7 @@ function Historico() {
         </p>
       </div>
 
-      <div className="difal-escalonado grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Numero icone="alerta" titulo="Pago a mais" valor={brl(h.resumo.aMais)} detalhe="o que não precisávamos ter pago" tom="alerta" />
         <Numero icone="moedas" titulo="DIFAL devido" valor={brl(h.resumo.devido)} detalhe={`pagamos ${brl(h.resumo.pago)}`} />
         <Numero icone="documento" titulo="Multa e juros" valor={brl(h.resumo.encargos)} detalhe="encargos por atraso" />
@@ -1597,33 +1577,33 @@ function Historico() {
       </div>
 
       <div>
-        <h2 className="mb-1 text-base font-medium text-gray-900">Quanto cada estado cobrou</h2>
-        <p className="mb-3 text-sm text-gray-600">
+        <h2 className="mb-1 text-base font-medium text-slate-900">Quanto cada estado cobrou</h2>
+        <p className="mb-3 text-sm text-slate-600">
           A barra cinza é o que era devido. A diferença em âmbar é o que pagamos a mais.
         </p>
-        <div className="difal-escalonado space-y-4 rounded-2xl border border-slate-200 bg-white p-5">
+        <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-5">
           {h.estados.map((e) => (
             <div key={e.uf}>
               <div className="flex items-baseline justify-between gap-2 text-sm">
-                <span className="font-medium text-gray-900">
+                <span className="font-medium text-slate-900">
                   {e.estado}
-                  <span className="ml-2 text-xs font-normal text-gray-500">
+                  <span className="ml-2 text-xs font-normal text-slate-500">
                     {e.notas} nota{e.notas === 1 ? '' : 's'}
                   </span>
                 </span>
-                <span className="tabular-nums text-gray-600">
-                  cobrou <b className="text-gray-900">{pct(e.pctCobrado)}</b> · devia{' '}
+                <span className="tabular-nums text-slate-600">
+                  cobrou <b className="text-slate-900">{pct(e.pctCobrado)}</b> · devia{' '}
                   {pct(e.pctDevido)}
                 </span>
               </div>
               <div className="mt-1 flex items-center gap-2">
                 <div className="relative h-3 flex-1 overflow-hidden rounded-full bg-slate-100">
                   <div
-                    className="difal-barra absolute inset-y-0 left-0 rounded-full bg-amber-400"
+                    className="transition-[width] absolute inset-y-0 left-0 rounded-full bg-amber-400"
                     style={{ width: `${Math.min((e.pctCobrado / maior) * 100, 100)}%` }}
                   />
                   <div
-                    className="difal-barra absolute inset-y-0 left-0 rounded-full bg-slate-400"
+                    className="transition-[width] absolute inset-y-0 left-0 rounded-full bg-slate-400"
                     style={{ width: `${Math.min((e.pctDevido / maior) * 100, 100)}%` }}
                   />
                 </div>
@@ -1639,14 +1619,14 @@ function Historico() {
       <div>
         <button
           onClick={() => setVerNotas(!verNotas)}
-          className="difal-btn rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:border-slate-300"
+          className="btn-secondary"
         >
           {verNotas ? 'Esconder' : 'Ver'} as {h.notas.length} notas auditadas
         </button>
         {verNotas && (
-          <div className="difal-entrar mt-3 max-h-[420px] overflow-auto rounded-2xl border border-slate-200 bg-white">
-            <table className="min-w-full text-sm">
-              <thead className="sticky top-0 border-b border-gray-200 bg-gray-50 text-xs uppercase text-gray-500">
+          <div className="mt-3 max-h-[420px] overflow-auto rounded-lg border border-slate-200 bg-white">
+            <table className="tabela min-w-full">
+              <thead>
                 <tr>
                   <th className="px-3 py-2 text-left">NF</th>
                   <th className="px-3 py-2 text-left">UF</th>
@@ -1658,35 +1638,35 @@ function Historico() {
                   <th className="px-3 py-2 text-left">Guia</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-slate-100">
                 {h.notas.map((n) => (
-                  <tr key={`${n.uf}-${n.nf}`} className="hover:bg-gray-50">
-                    <td className="px-3 py-2 font-medium text-gray-900">
+                  <tr key={`${n.uf}-${n.nf}`} className="hover:bg-slate-50">
+                    <td className="px-3 py-2 font-medium text-slate-900">
                       {n.nf}
                       {n.autuacao && (
-                        <span className="ml-1 rounded bg-gray-100 px-1 text-xs text-gray-600">
+                        <span className="ml-1 rounded-lg bg-slate-100 px-1 text-xs text-slate-600">
                           autuação
                         </span>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-gray-600">{n.uf}</td>
-                    <td className="px-3 py-2 text-gray-600">{dataBr(n.data)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-gray-600">{brl(n.base)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-gray-900">
+                    <td className="px-3 py-2 text-slate-600">{n.uf}</td>
+                    <td className="px-3 py-2 text-slate-600">{dataBr(n.data)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-slate-600">{brl(n.base)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-slate-900">
                       {brl(n.difal_pago)}
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-gray-600">
+                    <td className="px-3 py-2 text-right tabular-nums text-slate-600">
                       {brl(n.difal_devido)}
                     </td>
                     <td
                       className={`px-3 py-2 text-right tabular-nums ${
-                        n.diferenca > 1 ? 'text-amber-700' : 'text-gray-500'
+                        n.diferenca > 1 ? 'text-amber-700' : 'text-slate-500'
                       }`}
                     >
                       {n.diferenca > 0 ? '+' : ''}
                       {brl(n.diferenca)}
                     </td>
-                    <td className="px-3 py-2 text-gray-500">{n.guia}</td>
+                    <td className="px-3 py-2 text-slate-500">{n.guia}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1695,9 +1675,9 @@ function Historico() {
         )}
       </div>
 
-      <details className="border-t border-gray-200 pt-4">
-        <summary className="cursor-pointer text-sm text-gray-600">Como estes números foram apurados</summary>
-        <div className="mt-3 max-w-3xl space-y-2 text-sm text-gray-600">
+      <details className="border-t border-slate-200 pt-4">
+        <summary className="cursor-pointer text-sm text-slate-600">Como estes números foram apurados</summary>
+        <div className="mt-3 max-w-3xl space-y-2 text-sm text-slate-600">
           <p>
             <b>A conta.</b> Para o NCM 8436 a carga total é de 5,6% (Convênio ICMS 52/91, Anexo II).
             A nota já sai do RS com base reduzida e ICMS de 7%, o que dá 4,1% recolhidos na origem.
@@ -1715,7 +1695,7 @@ function Historico() {
             fisco. Cinco guias do Tocantins não puderam ser lidas: o PDF não traz os valores em
             texto.
           </p>
-          <p className="text-xs text-gray-500">Apurado em {dataBr(h.apuradoEm)}.</p>
+          <p className="text-xs text-slate-500">Apurado em {dataBr(h.apuradoEm)}.</p>
         </div>
       </details>
     </div>
@@ -1728,22 +1708,19 @@ export function DifalPage() {
   const [lugarCards, setLugarCards] = useState<HTMLDivElement | null>(null)
 
   return (
-    // mesma margem das outras páginas (p-6): sem ela o conteúdo encosta na barra lateral
-    <div className="difal-fundo min-h-screen space-y-4 p-6">
-      {/* cabeçalho numa linha só; a engrenagem fica dentro da linha (antes, absoluta, o título passava por cima e engolia o clique) */}
-      <div className="difal-hero flex flex-wrap items-center gap-x-4 gap-y-2 px-6 py-4">
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/10 ring-1 ring-white/20 backdrop-blur"><Icone nome="documento" className="h-5 w-5 text-sky-300" /></span>
-        <h1 className="text-2xl font-semibold tracking-tight">DIFAL</h1>
-        <span className="rounded-full bg-sky-400/15 px-2.5 py-0.5 text-xs font-medium text-sky-200 ring-1 ring-sky-300/30">monitor de guias</span>
-        <p className="min-w-0 flex-1 text-xs text-indigo-100/75" title="Convênio ICMS 52/91: carga total de 5,6% para o NCM 8436; a origem (RS) já recolhe 4,1%">
-          NCM 8436: carga de 5,6% − 4,1% na origem = <b className="text-sky-200">1,5%</b> para o destino. Pagar no dia da emissão da NF.
+    <div className="pagina space-y-4">
+      {/* cabeçalho numa linha só, com a engrenagem da configuração no fim */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <h1 className="pagina-titulo">DIFAL</h1>
+        <span className={seloTom('primaria')}>monitor de guias</span>
+        <p className="min-w-0 flex-1 text-sm text-slate-500" title="Convênio ICMS 52/91: carga total de 5,6% para o NCM 8436; a origem (RS) já recolhe 4,1%">
+          NCM 8436: carga de 5,6% − 4,1% na origem = <b className="text-primaria-700">1,5%</b> para o destino. Pagar no dia da emissão da NF.
         </p>
         <button
           onClick={() => setAba(aba === 'config' ? 'vendas' : 'config')}
           title={aba === 'config' ? 'Voltar para Vendas' : 'Configuração (portal GNRE, receitas por estado e rotina diária)'}
-          className={`difal-btn grid h-9 w-9 shrink-0 place-items-center rounded-xl ring-1 backdrop-blur transition-colors ${
-            aba === 'config' ? 'bg-sky-400/30 text-white ring-sky-300/50' : 'bg-white/10 text-sky-200 ring-white/20 hover:bg-white/20'
-          }`}
+          aria-label="Configuração"
+          className={`${aba === 'config' ? 'btn-primary' : 'btn-secondary'} h-9 w-9 shrink-0 px-0`}
         >
           <Icone nome="engrenagem" className="h-5 w-5" />
         </button>
@@ -1753,8 +1730,8 @@ export function DifalPage() {
 
       <Abas aba={aba} onTrocar={setAba} />
 
-      {/* a chave muda a cada aba: a tela nova entra com a animação de entrada */}
-      <div key={aba} className="difal-entrar">
+      {/* a chave muda a cada aba: a tela nova entra com a animação curta padrão */}
+      <div key={aba} className="animar-entrada">
         {aba === 'vendas' ? <Vendas lugarCards={lugarCards} /> : aba === 'lotes' ? <LotesGnre /> : aba === 'fechamento' ? <FechamentoMensal /> : aba === 'config' ? <Configuracao /> : <Historico />}
       </div>
     </div>
