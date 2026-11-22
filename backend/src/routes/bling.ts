@@ -365,6 +365,10 @@ async function refreshToken(companyKey: string): Promise<void> {
   return promessa
 }
 
+// Sem timeout uma chamada pendurada trava quem espera por ela (ex.: a importação do DIFAL
+// ficaria "em andamento" para sempre).
+const BLING_TIMEOUT_MS = 30_000
+
 // Chamada autenticada ao Bling por empresa (com retry em 401 e 429).
 // Exportada para outros módulos (ex.: separação) — NUNCA criar um segundo cliente/cache de token.
 export async function blingGet(companyKey: string, path: string, retries = 5): Promise<unknown> {
@@ -377,6 +381,7 @@ export async function blingGet(companyKey: string, path: string, retries = 5): P
   try {
     const response = await axios.get(`${BLING_API}${path}`, {
       headers: { Authorization: `Bearer ${tokens[companyKey].access_token}` },
+      timeout: BLING_TIMEOUT_MS,
     })
     return response.data
   } catch (err: unknown) {
@@ -385,6 +390,7 @@ export async function blingGet(companyKey: string, path: string, retries = 5): P
         await refreshToken(companyKey)
         const response = await axios.get(`${BLING_API}${path}`, {
           headers: { Authorization: `Bearer ${tokens[companyKey].access_token}` },
+          timeout: BLING_TIMEOUT_MS,
         })
         return response.data
       }

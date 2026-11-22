@@ -1,0 +1,2615 @@
+{
+ "empresa": "AGRO",
+ "apuradoEm": "2026-11-20",
+ "zips": [
+  "AGRO-2025-12.zip",
+  "AGRO-2026-01.zip",
+  "AGRO-2026-02.zip",
+  "AGRO-2026-03.zip",
+  "AGRO-2026-04.zip",
+  "AGRO-2026-05.zip",
+  "AGRO-2026-06.zip",
+  "AGRO-2026-07.zip",
+  "AGRO-2026-08.zip",
+  "AGRO-2026-09.zip",
+  "AGRO-2026-10.zip",
+  "AGRO-2026-11.zip"
+ ],
+ "notas": [
+  {
+   "nf": "2112",
+   "uf": "PB",
+   "data": "2025-12-05",
+   "base": 1174.44,
+   "difal_pago": 21.12,
+   "difal_devido": 17.62,
+   "diferenca": 3.5,
+   "encargos": 0.0,
+   "pct_pago": 1.8,
+   "pct_devido": 1.5,
+   "guia": "PB",
+   "autuacao": false,
+   "estimada": true,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "2117",
+   "uf": "PI",
+   "data": "2025-12-05",
+   "base": 565.63,
+   "difal_pago": 87.67,
+   "difal_devido": 8.48,
+   "diferenca": 79.19,
+   "encargos": 0.0,
+   "pct_pago": 15.5,
+   "pct_devido": 1.5,
+   "guia": "DAR/PI",
+   "autuacao": true,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "2170",
+   "uf": "AM",
+   "data": "2025-12-15",
+   "base": 1642.04,
+   "difal_pago": 213.46,
+   "difal_devido": 24.63,
+   "diferenca": 188.83,
+   "encargos": 49.8,
+   "pct_pago": 13.0,
+   "pct_devido": 1.5,
+   "guia": "DAR/AM",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "2190",
+   "uf": "CE",
+   "data": "2025-12-17",
+   "base": 3479.0,
+   "difal_pago": 126.64,
+   "difal_devido": 126.64,
+   "diferenca": 0.0,
+   "encargos": 0.0,
+   "pct_pago": 3.64,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "2225",
+   "uf": "CE",
+   "data": "2025-12-22",
+   "base": 312.0,
+   "difal_pago": 40.56,
+   "difal_devido": 11.36,
+   "diferenca": 29.2,
+   "encargos": 0.0,
+   "pct_pago": 13.0,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "2251",
+   "uf": "PI",
+   "data": "2025-12-23",
+   "base": 112.93,
+   "difal_pago": 17.5,
+   "difal_devido": 1.69,
+   "diferenca": 15.81,
+   "encargos": 3.05,
+   "pct_pago": 15.5,
+   "pct_devido": 1.5,
+   "guia": "DAR/PI",
+   "autuacao": true,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "2257",
+   "uf": "PI",
+   "data": "2025-12-23",
+   "base": 193.36,
+   "difal_pago": 29.97,
+   "difal_devido": 2.9,
+   "diferenca": 27.07,
+   "encargos": 6.5,
+   "pct_pago": 15.5,
+   "pct_devido": 1.5,
+   "guia": "DAR/PI",
+   "autuacao": true,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "2389",
+   "uf": "AM",
+   "data": "2026-01-07",
+   "base": 199.8,
+   "difal_pago": 25.97,
+   "difal_devido": 3.0,
+   "diferenca": 22.97,
+   "encargos": 8.2,
+   "pct_pago": 13.0,
+   "pct_devido": 1.5,
+   "guia": "DAR/AM",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "2410",
+   "uf": "PI",
+   "data": "2026-01-08",
+   "base": 394.18,
+   "difal_pago": 55.19,
+   "difal_devido": 5.91,
+   "diferenca": 49.28,
+   "encargos": 12.14,
+   "pct_pago": 14.0,
+   "pct_devido": 1.5,
+   "guia": "GNRE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "2454",
+   "uf": "CE",
+   "data": "2026-01-12",
+   "base": 119.71,
+   "difal_pago": 15.56,
+   "difal_devido": 4.36,
+   "diferenca": 11.2,
+   "encargos": 0.0,
+   "pct_pago": 13.0,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "2490",
+   "uf": "AM",
+   "data": "2026-01-14",
+   "base": 97.9,
+   "difal_pago": 12.72,
+   "difal_devido": 1.47,
+   "diferenca": 11.25,
+   "encargos": 3.33,
+   "pct_pago": 12.99,
+   "pct_devido": 1.5,
+   "guia": "DAR/AM",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "2506",
+   "uf": "TO",
+   "data": "2026-01-15",
+   "base": 1184.94,
+   "difal_pago": 90.22,
+   "difal_devido": 17.77,
+   "diferenca": 72.45,
+   "encargos": 0.0,
+   "pct_pago": 7.61,
+   "pct_devido": 1.5,
+   "guia": "DARE/TO",
+   "autuacao": false,
+   "estimada": true,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "2629",
+   "uf": "AL",
+   "data": "2026-01-26",
+   "base": 99.9,
+   "difal_pago": 3.89,
+   "difal_devido": 1.5,
+   "diferenca": 2.39,
+   "encargos": 0.0,
+   "pct_pago": 3.89,
+   "pct_devido": 1.5,
+   "guia": "DAR/AL",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "2646",
+   "uf": "CE",
+   "data": "2026-01-27",
+   "base": 155.44,
+   "difal_pago": 20.21,
+   "difal_devido": 5.66,
+   "diferenca": 14.55,
+   "encargos": 0.84,
+   "pct_pago": 13.0,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "2769",
+   "uf": "TO",
+   "data": "2026-02-09",
+   "base": 1481.83,
+   "difal_pago": 112.83,
+   "difal_devido": 22.23,
+   "diferenca": 90.6,
+   "encargos": 0.0,
+   "pct_pago": 7.61,
+   "pct_devido": 1.5,
+   "guia": "DARE/TO",
+   "autuacao": false,
+   "estimada": true,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "2794",
+   "uf": "TO",
+   "data": "2026-02-11",
+   "base": 6482.19,
+   "difal_pago": 712.68,
+   "difal_devido": 97.23,
+   "diferenca": 615.45,
+   "encargos": 0.0,
+   "pct_pago": 10.99,
+   "pct_devido": 1.5,
+   "guia": "DARE/TO",
+   "autuacao": false,
+   "estimada": true,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "2858",
+   "uf": "CE",
+   "data": "2026-02-16",
+   "base": 624.0,
+   "difal_pago": 81.12,
+   "difal_devido": 22.71,
+   "diferenca": 58.41,
+   "encargos": 0.0,
+   "pct_pago": 13.0,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "2869",
+   "uf": "AL",
+   "data": "2026-02-16",
+   "base": 197.09,
+   "difal_pago": 6.62,
+   "difal_devido": 2.96,
+   "diferenca": 3.66,
+   "encargos": 2.16,
+   "pct_pago": 3.36,
+   "pct_devido": 1.5,
+   "guia": "DAR/AL",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "2909",
+   "uf": "CE",
+   "data": "2026-02-19",
+   "base": 2782.79,
+   "difal_pago": 101.29,
+   "difal_devido": 101.29,
+   "diferenca": -0.0,
+   "encargos": 0.0,
+   "pct_pago": 3.64,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "2937",
+   "uf": "CE",
+   "data": "2026-02-20",
+   "base": 3663.3,
+   "difal_pago": 476.23,
+   "difal_devido": 133.34,
+   "diferenca": 342.89,
+   "encargos": 98.62,
+   "pct_pago": 13.0,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "2993",
+   "uf": "CE",
+   "data": "2026-02-25",
+   "base": 624.0,
+   "difal_pago": 81.12,
+   "difal_devido": 22.71,
+   "diferenca": 58.41,
+   "encargos": 10.37,
+   "pct_pago": 13.0,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "3009",
+   "uf": "AL",
+   "data": "2026-02-26",
+   "base": 469.17,
+   "difal_pago": 15.76,
+   "difal_devido": 7.04,
+   "diferenca": 8.72,
+   "encargos": 3.43,
+   "pct_pago": 3.36,
+   "pct_devido": 1.5,
+   "guia": "DAR/AL",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "3078",
+   "uf": "RN",
+   "data": "2026-03-03",
+   "base": 899.9,
+   "difal_pago": 32.75,
+   "difal_devido": 13.5,
+   "diferenca": 19.25,
+   "encargos": 3.21,
+   "pct_pago": 3.64,
+   "pct_devido": 1.5,
+   "guia": "GRI/RN",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "3131",
+   "uf": "CE",
+   "data": "2026-03-06",
+   "base": 32.5,
+   "difal_pago": 4.23,
+   "difal_devido": 1.18,
+   "diferenca": 3.05,
+   "encargos": 0.02,
+   "pct_pago": 13.02,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "3156",
+   "uf": "AL",
+   "data": "2026-03-09",
+   "base": 1709.85,
+   "difal_pago": 57.45,
+   "difal_devido": 25.65,
+   "diferenca": 31.8,
+   "encargos": 23.47,
+   "pct_pago": 3.36,
+   "pct_devido": 1.5,
+   "guia": "DAR/AL",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "3239",
+   "uf": "AM",
+   "data": "2026-03-18",
+   "base": 293.7,
+   "difal_pago": 38.18,
+   "difal_devido": 4.41,
+   "diferenca": 33.77,
+   "encargos": 5.65,
+   "pct_pago": 13.0,
+   "pct_devido": 1.5,
+   "guia": "DAR/AM",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "3276",
+   "uf": "AL",
+   "data": "2026-03-20",
+   "base": 197.09,
+   "difal_pago": 6.62,
+   "difal_devido": 2.96,
+   "diferenca": 3.66,
+   "encargos": 0.65,
+   "pct_pago": 3.36,
+   "pct_devido": 1.5,
+   "guia": "DAR/AL",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "3395",
+   "uf": "AL",
+   "data": "2026-04-02",
+   "base": 469.17,
+   "difal_pago": 16.5,
+   "difal_devido": 7.04,
+   "diferenca": 9.46,
+   "encargos": 5.4,
+   "pct_pago": 3.52,
+   "pct_devido": 1.5,
+   "guia": "DAR/AL",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "3420",
+   "uf": "PI",
+   "data": "2026-04-06",
+   "base": 799.6,
+   "difal_pago": 123.94,
+   "difal_devido": 11.99,
+   "diferenca": 111.95,
+   "encargos": 23.04,
+   "pct_pago": 15.5,
+   "pct_devido": 1.5,
+   "guia": "DAR/PI",
+   "autuacao": true,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "3477",
+   "uf": "PB",
+   "data": "2026-04-10",
+   "base": 1649.85,
+   "difal_pago": 214.48,
+   "difal_devido": 24.75,
+   "diferenca": 189.73,
+   "encargos": 54.7,
+   "pct_pago": 13.0,
+   "pct_devido": 1.5,
+   "guia": "GNRE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "3520",
+   "uf": "CE",
+   "data": "2026-04-14",
+   "base": 253.86,
+   "difal_pago": 33.0,
+   "difal_devido": 9.24,
+   "diferenca": 23.76,
+   "encargos": 0.4,
+   "pct_pago": 13.0,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "3573",
+   "uf": "TO",
+   "data": "2026-04-17",
+   "base": 382.36,
+   "difal_pago": 49.71,
+   "difal_devido": 5.74,
+   "diferenca": 43.97,
+   "encargos": 0.0,
+   "pct_pago": 13.0,
+   "pct_devido": 1.5,
+   "guia": "DARE/TO",
+   "autuacao": false,
+   "estimada": true,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "3600",
+   "uf": "AM",
+   "data": "2026-04-22",
+   "base": 767.3,
+   "difal_pago": 103.89,
+   "difal_devido": 11.51,
+   "diferenca": 92.38,
+   "encargos": 0.0,
+   "pct_pago": 13.54,
+   "pct_devido": 1.5,
+   "guia": "DAR/AM",
+   "autuacao": false,
+   "estimada": true,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "3626",
+   "uf": "CE",
+   "data": "2026-04-23",
+   "base": 239.8,
+   "difal_pago": 8.73,
+   "difal_devido": 8.73,
+   "diferenca": 0.0,
+   "encargos": 0.0,
+   "pct_pago": 3.64,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "3625",
+   "uf": "CE",
+   "data": "2026-04-23",
+   "base": 208.32,
+   "difal_pago": 7.58,
+   "difal_devido": 7.58,
+   "diferenca": -0.0,
+   "encargos": 0.19,
+   "pct_pago": 3.64,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "3634",
+   "uf": "CE",
+   "data": "2026-04-24",
+   "base": 187.01,
+   "difal_pago": 24.31,
+   "difal_devido": 6.81,
+   "diferenca": 17.5,
+   "encargos": 0.0,
+   "pct_pago": 13.0,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "3855",
+   "uf": "CE",
+   "data": "2026-05-08",
+   "base": 261.72,
+   "difal_pago": 9.53,
+   "difal_devido": 9.53,
+   "diferenca": 0.0,
+   "encargos": 0.18,
+   "pct_pago": 3.64,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "3913",
+   "uf": "RN",
+   "data": "2026-05-13",
+   "base": 110.76,
+   "difal_pago": 14.39,
+   "difal_devido": 1.66,
+   "diferenca": 12.73,
+   "encargos": 1.06,
+   "pct_pago": 12.99,
+   "pct_devido": 1.5,
+   "guia": "GRI/RN",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "3938",
+   "uf": "CE",
+   "data": "2026-05-14",
+   "base": 863.2,
+   "difal_pago": 112.22,
+   "difal_devido": 31.42,
+   "diferenca": 80.8,
+   "encargos": 1.35,
+   "pct_pago": 13.0,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "3980",
+   "uf": "AM",
+   "data": "2026-05-19",
+   "base": 178.1,
+   "difal_pago": 23.15,
+   "difal_devido": 2.67,
+   "diferenca": 20.48,
+   "encargos": 7.49,
+   "pct_pago": 13.0,
+   "pct_devido": 1.5,
+   "guia": "DAR/AM",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "3979",
+   "uf": "AM",
+   "data": "2026-05-19",
+   "base": 177.66,
+   "difal_pago": 23.09,
+   "difal_devido": 2.66,
+   "diferenca": 20.43,
+   "encargos": 7.48,
+   "pct_pago": 13.0,
+   "pct_devido": 1.5,
+   "guia": "DAR/AM",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "3990",
+   "uf": "CE",
+   "data": "2026-05-19",
+   "base": 421.77,
+   "difal_pago": 15.35,
+   "difal_devido": 15.35,
+   "diferenca": -0.0,
+   "encargos": 1.95,
+   "pct_pago": 3.64,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "4080",
+   "uf": "PI",
+   "data": "2026-05-25",
+   "base": 768.4,
+   "difal_pago": 119.1,
+   "difal_devido": 11.53,
+   "diferenca": 107.57,
+   "encargos": 2.75,
+   "pct_pago": 15.5,
+   "pct_devido": 1.5,
+   "guia": "DAR/PI",
+   "autuacao": true,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "4110",
+   "uf": "AL",
+   "data": "2026-05-27",
+   "base": 1439.9,
+   "difal_pago": 50.63,
+   "difal_devido": 21.6,
+   "diferenca": 29.03,
+   "encargos": 4.48,
+   "pct_pago": 3.52,
+   "pct_devido": 1.5,
+   "guia": "DAR/AL",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "4109",
+   "uf": "AL",
+   "data": "2026-05-27",
+   "base": 1439.9,
+   "difal_pago": 50.63,
+   "difal_devido": 21.6,
+   "diferenca": 29.03,
+   "encargos": 4.48,
+   "pct_pago": 3.52,
+   "pct_devido": 1.5,
+   "guia": "DAR/AL",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "4240",
+   "uf": "AM",
+   "data": "2026-06-05",
+   "base": 129.9,
+   "difal_pago": 16.88,
+   "difal_devido": 1.95,
+   "diferenca": 14.93,
+   "encargos": 5.17,
+   "pct_pago": 12.99,
+   "pct_devido": 1.5,
+   "guia": "DAR/AM",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "4254",
+   "uf": "TO",
+   "data": "2026-06-08",
+   "base": 279.9,
+   "difal_pago": 36.39,
+   "difal_devido": 4.2,
+   "diferenca": 32.19,
+   "encargos": 0.0,
+   "pct_pago": 13.0,
+   "pct_devido": 1.5,
+   "guia": "DARE/TO",
+   "autuacao": false,
+   "estimada": true,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "4277",
+   "uf": "PB",
+   "data": "2026-06-09",
+   "base": 259.8,
+   "difal_pago": 33.77,
+   "difal_devido": 3.9,
+   "diferenca": 29.87,
+   "encargos": 8.23,
+   "pct_pago": 13.0,
+   "pct_devido": 1.5,
+   "guia": "GNRE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "4347",
+   "uf": "RN",
+   "data": "2026-06-15",
+   "base": 239.9,
+   "difal_pago": 31.18,
+   "difal_devido": 3.6,
+   "diferenca": 27.58,
+   "encargos": 2.15,
+   "pct_pago": 13.0,
+   "pct_devido": 1.5,
+   "guia": "GRI/RN",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "4364",
+   "uf": "RN",
+   "data": "2026-06-15",
+   "base": 559.8,
+   "difal_pago": 72.77,
+   "difal_devido": 8.4,
+   "diferenca": 64.37,
+   "encargos": 5.38,
+   "pct_pago": 13.0,
+   "pct_devido": 1.5,
+   "guia": "GRI/RN",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "4414",
+   "uf": "RN",
+   "data": "2026-06-18",
+   "base": 248.6,
+   "difal_pago": 32.31,
+   "difal_devido": 3.73,
+   "diferenca": 28.58,
+   "encargos": 2.07,
+   "pct_pago": 13.0,
+   "pct_devido": 1.5,
+   "guia": "GRI/RN",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "4480",
+   "uf": "CE",
+   "data": "2026-06-24",
+   "base": 3890.1,
+   "difal_pago": 141.6,
+   "difal_devido": 141.6,
+   "diferenca": 0.0,
+   "encargos": 0.0,
+   "pct_pago": 3.64,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "4511",
+   "uf": "PB",
+   "data": "2026-06-26",
+   "base": 233.2,
+   "difal_pago": 30.32,
+   "difal_devido": 3.5,
+   "diferenca": 26.82,
+   "encargos": 7.39,
+   "pct_pago": 13.0,
+   "pct_devido": 1.5,
+   "guia": "GNRE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "4611",
+   "uf": "CE",
+   "data": "2026-07-06",
+   "base": 119.71,
+   "difal_pago": 15.56,
+   "difal_devido": 4.36,
+   "diferenca": 11.2,
+   "encargos": 0.09,
+   "pct_pago": 13.0,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "4648",
+   "uf": "CE",
+   "data": "2026-07-08",
+   "base": 259.8,
+   "difal_pago": 33.77,
+   "difal_devido": 9.46,
+   "diferenca": 24.31,
+   "encargos": 0.15,
+   "pct_pago": 13.0,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "4635",
+   "uf": "RN",
+   "data": "2026-07-08",
+   "base": 78.0,
+   "difal_pago": 10.14,
+   "difal_devido": 1.17,
+   "diferenca": 8.97,
+   "encargos": 0.0,
+   "pct_pago": 13.0,
+   "pct_devido": 1.5,
+   "guia": "GRI/RN",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "4691",
+   "uf": "CE",
+   "data": "2026-07-10",
+   "base": 648.88,
+   "difal_pago": 23.62,
+   "difal_devido": 23.62,
+   "diferenca": 0.0,
+   "encargos": 0.0,
+   "pct_pago": 3.64,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "4700",
+   "uf": "CE",
+   "data": "2026-07-13",
+   "base": 188.33,
+   "difal_pago": 24.48,
+   "difal_devido": 6.86,
+   "diferenca": 17.62,
+   "encargos": 0.0,
+   "pct_pago": 13.0,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "4734",
+   "uf": "CE",
+   "data": "2026-07-14",
+   "base": 440.3,
+   "difal_pago": 57.24,
+   "difal_devido": 16.03,
+   "diferenca": 41.21,
+   "encargos": 0.0,
+   "pct_pago": 13.0,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "4747",
+   "uf": "CE",
+   "data": "2026-07-15",
+   "base": 39.9,
+   "difal_pago": 1.45,
+   "difal_devido": 1.45,
+   "diferenca": -0.0,
+   "encargos": 0.0,
+   "pct_pago": 3.63,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "4745",
+   "uf": "PB",
+   "data": "2026-07-15",
+   "base": 414.96,
+   "difal_pago": 53.94,
+   "difal_devido": 6.22,
+   "diferenca": 47.72,
+   "encargos": 12.5,
+   "pct_pago": 13.0,
+   "pct_devido": 1.5,
+   "guia": "GNRE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "4779",
+   "uf": "AL",
+   "data": "2026-07-17",
+   "base": 189.9,
+   "difal_pago": 6.68,
+   "difal_devido": 2.85,
+   "diferenca": 3.83,
+   "encargos": 2.11,
+   "pct_pago": 3.52,
+   "pct_devido": 1.5,
+   "guia": "DAR/AL",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "4789",
+   "uf": "PB",
+   "data": "2026-07-17",
+   "base": 449.9,
+   "difal_pago": 58.49,
+   "difal_devido": 6.75,
+   "diferenca": 51.74,
+   "encargos": 13.56,
+   "pct_pago": 13.0,
+   "pct_devido": 1.5,
+   "guia": "GNRE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "4861",
+   "uf": "CE",
+   "data": "2026-07-23",
+   "base": 539.8,
+   "difal_pago": 19.65,
+   "difal_devido": 19.65,
+   "diferenca": 0.0,
+   "encargos": 1.06,
+   "pct_pago": 3.64,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "4904",
+   "uf": "AM",
+   "data": "2026-07-27",
+   "base": 1162.5,
+   "difal_pago": 151.12,
+   "difal_devido": 17.44,
+   "diferenca": 133.68,
+   "encargos": 11.49,
+   "pct_pago": 13.0,
+   "pct_devido": 1.5,
+   "guia": "DAR/AM",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "4933",
+   "uf": "CE",
+   "data": "2026-07-28",
+   "base": 111.16,
+   "difal_pago": 14.45,
+   "difal_devido": 4.05,
+   "diferenca": 10.4,
+   "encargos": 0.0,
+   "pct_pago": 13.0,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "4942",
+   "uf": "AM",
+   "data": "2026-07-29",
+   "base": 323.46,
+   "difal_pago": 42.04,
+   "difal_devido": 4.85,
+   "diferenca": 37.19,
+   "encargos": 4.31,
+   "pct_pago": 13.0,
+   "pct_devido": 1.5,
+   "guia": "DAR/AM",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "4982",
+   "uf": "CE",
+   "data": "2026-07-30",
+   "base": 26.73,
+   "difal_pago": 3.47,
+   "difal_devido": 0.97,
+   "diferenca": 2.5,
+   "encargos": 0.0,
+   "pct_pago": 12.98,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "4966",
+   "uf": "PI",
+   "data": "2026-07-30",
+   "base": 249.28,
+   "difal_pago": 34.9,
+   "difal_devido": 3.74,
+   "diferenca": 31.16,
+   "encargos": 8.09,
+   "pct_pago": 14.0,
+   "pct_devido": 1.5,
+   "guia": "GNRE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "5039",
+   "uf": "CE",
+   "data": "2026-08-03",
+   "base": 637.94,
+   "difal_pago": 82.93,
+   "difal_devido": 23.22,
+   "diferenca": 59.71,
+   "encargos": 0.0,
+   "pct_pago": 13.0,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "5084",
+   "uf": "CE",
+   "data": "2026-08-06",
+   "base": 170.91,
+   "difal_pago": 22.22,
+   "difal_devido": 6.22,
+   "diferenca": 16.0,
+   "encargos": 0.0,
+   "pct_pago": 13.0,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "5092",
+   "uf": "PI",
+   "data": "2026-08-06",
+   "base": 75.66,
+   "difal_pago": 10.59,
+   "difal_devido": 1.13,
+   "diferenca": 9.46,
+   "encargos": 2.34,
+   "pct_pago": 14.0,
+   "pct_devido": 1.5,
+   "guia": "GNRE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "5107",
+   "uf": "CE",
+   "data": "2026-08-07",
+   "base": 180.63,
+   "difal_pago": 23.48,
+   "difal_devido": 6.57,
+   "diferenca": 16.91,
+   "encargos": 0.0,
+   "pct_pago": 13.0,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "5149",
+   "uf": "CE",
+   "data": "2026-08-10",
+   "base": 379.8,
+   "difal_pago": 49.37,
+   "difal_devido": 13.82,
+   "diferenca": 35.55,
+   "encargos": 1.5,
+   "pct_pago": 13.0,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "5158",
+   "uf": "PB",
+   "data": "2026-08-11",
+   "base": 2532.0,
+   "difal_pago": 329.16,
+   "difal_devido": 37.98,
+   "diferenca": 291.18,
+   "encargos": 72.68,
+   "pct_pago": 13.0,
+   "pct_devido": 1.5,
+   "guia": "GNRE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "5199",
+   "uf": "RN",
+   "data": "2026-08-13",
+   "base": 208.9,
+   "difal_pago": 27.15,
+   "difal_devido": 3.13,
+   "diferenca": 24.02,
+   "encargos": 1.07,
+   "pct_pago": 13.0,
+   "pct_devido": 1.5,
+   "guia": "GRI/RN",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "5187",
+   "uf": "AM",
+   "data": "2026-08-13",
+   "base": 139.9,
+   "difal_pago": 18.18,
+   "difal_devido": 2.1,
+   "diferenca": 16.08,
+   "encargos": 2.8,
+   "pct_pago": 12.99,
+   "pct_devido": 1.5,
+   "guia": "DAR/AM",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "5288",
+   "uf": "PB",
+   "data": "2026-08-18",
+   "base": 1966.8,
+   "difal_pago": 255.68,
+   "difal_devido": 29.5,
+   "diferenca": 226.18,
+   "encargos": 52.57,
+   "pct_pago": 13.0,
+   "pct_devido": 1.5,
+   "guia": "GNRE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "5313",
+   "uf": "PB",
+   "data": "2026-08-19",
+   "base": 983.4,
+   "difal_pago": 127.84,
+   "difal_devido": 14.75,
+   "diferenca": 113.09,
+   "encargos": 25.86,
+   "pct_pago": 13.0,
+   "pct_devido": 1.5,
+   "guia": "GNRE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "5334",
+   "uf": "CE",
+   "data": "2026-08-21",
+   "base": 663.28,
+   "difal_pago": 24.14,
+   "difal_devido": 24.14,
+   "diferenca": -0.0,
+   "encargos": 0.0,
+   "pct_pago": 3.64,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "5365",
+   "uf": "CE",
+   "data": "2026-08-24",
+   "base": 208.9,
+   "difal_pago": 27.16,
+   "difal_devido": 7.6,
+   "diferenca": 19.56,
+   "encargos": 0.0,
+   "pct_pago": 13.0,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "5407",
+   "uf": "CE",
+   "data": "2026-08-26",
+   "base": 222.32,
+   "difal_pago": 28.9,
+   "difal_devido": 8.09,
+   "diferenca": 20.81,
+   "encargos": 0.0,
+   "pct_pago": 13.0,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "5439",
+   "uf": "RN",
+   "data": "2026-08-28",
+   "base": 375.88,
+   "difal_pago": 48.86,
+   "difal_devido": 5.64,
+   "diferenca": 43.22,
+   "encargos": 1.78,
+   "pct_pago": 13.0,
+   "pct_devido": 1.5,
+   "guia": "GRI/RN",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "5450",
+   "uf": "TO",
+   "data": "2026-08-28",
+   "base": 1330.51,
+   "difal_pago": 172.97,
+   "difal_devido": 19.96,
+   "diferenca": 153.01,
+   "encargos": 0.0,
+   "pct_pago": 13.0,
+   "pct_devido": 1.5,
+   "guia": "DARE/TO",
+   "autuacao": false,
+   "estimada": true,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "5496",
+   "uf": "CE",
+   "data": "2026-08-31",
+   "base": 474.82,
+   "difal_pago": 17.28,
+   "difal_devido": 17.28,
+   "diferenca": -0.0,
+   "encargos": 0.0,
+   "pct_pago": 3.64,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "5493",
+   "uf": "PI",
+   "data": "2026-08-31",
+   "base": 153.06,
+   "difal_pago": 21.43,
+   "difal_devido": 2.3,
+   "diferenca": 19.13,
+   "encargos": 3.49,
+   "pct_pago": 14.0,
+   "pct_devido": 1.5,
+   "guia": "GNRE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "5557",
+   "uf": "PB",
+   "data": "2026-09-04",
+   "base": 289.9,
+   "difal_pago": 37.69,
+   "difal_devido": 4.35,
+   "diferenca": 33.34,
+   "encargos": 5.23,
+   "pct_pago": 13.0,
+   "pct_devido": 1.5,
+   "guia": "GNRE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "5590",
+   "uf": "CE",
+   "data": "2026-09-08",
+   "base": 75.66,
+   "difal_pago": 9.84,
+   "difal_devido": 2.75,
+   "diferenca": 7.09,
+   "encargos": 0.04,
+   "pct_pago": 13.01,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "5633",
+   "uf": "PB",
+   "data": "2026-09-10",
+   "base": 3948.34,
+   "difal_pago": 513.28,
+   "difal_devido": 59.23,
+   "diferenca": 454.05,
+   "encargos": 61.03,
+   "pct_pago": 13.0,
+   "pct_devido": 1.5,
+   "guia": "GNRE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "5632",
+   "uf": "PB",
+   "data": "2026-09-10",
+   "base": 3948.34,
+   "difal_pago": 513.28,
+   "difal_devido": 59.23,
+   "diferenca": 454.05,
+   "encargos": 61.03,
+   "pct_pago": 13.0,
+   "pct_devido": 1.5,
+   "guia": "GNRE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "5627",
+   "uf": "RN",
+   "data": "2026-09-10",
+   "base": 387.5,
+   "difal_pago": 50.37,
+   "difal_devido": 5.81,
+   "diferenca": 44.56,
+   "encargos": 3.13,
+   "pct_pago": 13.0,
+   "pct_devido": 1.5,
+   "guia": "GRI/RN",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "5653",
+   "uf": "RN",
+   "data": "2026-09-11",
+   "base": 24.37,
+   "difal_pago": 3.16,
+   "difal_devido": 0.37,
+   "diferenca": 2.79,
+   "encargos": 0.0,
+   "pct_pago": 12.97,
+   "pct_devido": 1.5,
+   "guia": "GRI/RN",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "5763",
+   "uf": "CE",
+   "data": "2026-09-17",
+   "base": 479.8,
+   "difal_pago": 17.46,
+   "difal_devido": 17.46,
+   "diferenca": -0.0,
+   "encargos": 0.1,
+   "pct_pago": 3.64,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "5770",
+   "uf": "PB",
+   "data": "2026-09-18",
+   "base": 191.42,
+   "difal_pago": 24.88,
+   "difal_devido": 2.87,
+   "diferenca": 22.01,
+   "encargos": 2.3,
+   "pct_pago": 13.0,
+   "pct_devido": 1.5,
+   "guia": "GNRE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "5801",
+   "uf": "CE",
+   "data": "2026-09-21",
+   "base": 71.02,
+   "difal_pago": 9.23,
+   "difal_devido": 2.59,
+   "diferenca": 6.64,
+   "encargos": 0.0,
+   "pct_pago": 13.0,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "5793",
+   "uf": "CE",
+   "data": "2026-09-21",
+   "base": 368.4,
+   "difal_pago": 13.41,
+   "difal_devido": 13.41,
+   "diferenca": 0.0,
+   "encargos": 0.14,
+   "pct_pago": 3.64,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "5825",
+   "uf": "AL",
+   "data": "2026-09-22",
+   "base": 109.11,
+   "difal_pago": 3.84,
+   "difal_devido": 1.64,
+   "diferenca": 2.2,
+   "encargos": 0.41,
+   "pct_pago": 3.52,
+   "pct_devido": 1.5,
+   "guia": "DAR/AL",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "5839",
+   "uf": "CE",
+   "data": "2026-09-24",
+   "base": 368.4,
+   "difal_pago": 47.89,
+   "difal_devido": 13.41,
+   "diferenca": 34.48,
+   "encargos": 0.0,
+   "pct_pago": 13.0,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "5871",
+   "uf": "CE",
+   "data": "2026-09-28",
+   "base": 119.71,
+   "difal_pago": 15.56,
+   "difal_devido": 4.36,
+   "diferenca": 11.2,
+   "encargos": 0.0,
+   "pct_pago": 13.0,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "5986",
+   "uf": "AL",
+   "data": "2026-10-06",
+   "base": 118.08,
+   "difal_pago": 4.15,
+   "difal_devido": 1.77,
+   "diferenca": 2.38,
+   "encargos": 0.44,
+   "pct_pago": 3.51,
+   "pct_devido": 1.5,
+   "guia": "DAR/AL",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "6018",
+   "uf": "CE",
+   "data": "2026-10-08",
+   "base": 387.4,
+   "difal_pago": 50.36,
+   "difal_devido": 14.1,
+   "diferenca": 36.26,
+   "encargos": 0.0,
+   "pct_pago": 13.0,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "6032",
+   "uf": "RN",
+   "data": "2026-10-09",
+   "base": 1328.57,
+   "difal_pago": 172.71,
+   "difal_devido": 19.93,
+   "diferenca": 152.78,
+   "encargos": 0.0,
+   "pct_pago": 13.0,
+   "pct_devido": 1.5,
+   "guia": "GRI/RN",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "6029",
+   "uf": "RN",
+   "data": "2026-10-09",
+   "base": 1328.57,
+   "difal_pago": 172.71,
+   "difal_devido": 19.93,
+   "diferenca": 152.78,
+   "encargos": 0.0,
+   "pct_pago": 13.0,
+   "pct_devido": 1.5,
+   "guia": "GRI/RN",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "6033",
+   "uf": "CE",
+   "data": "2026-10-09",
+   "base": 38.17,
+   "difal_pago": 1.39,
+   "difal_devido": 1.39,
+   "diferenca": 0.0,
+   "encargos": 0.0,
+   "pct_pago": 3.64,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "6031",
+   "uf": "RN",
+   "data": "2026-10-09",
+   "base": 1328.57,
+   "difal_pago": 172.71,
+   "difal_devido": 19.93,
+   "diferenca": 152.78,
+   "encargos": 0.0,
+   "pct_pago": 13.0,
+   "pct_devido": 1.5,
+   "guia": "GRI/RN",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "6030",
+   "uf": "RN",
+   "data": "2026-10-09",
+   "base": 1328.57,
+   "difal_pago": 172.71,
+   "difal_devido": 19.93,
+   "diferenca": 152.78,
+   "encargos": 0.0,
+   "pct_pago": 13.0,
+   "pct_devido": 1.5,
+   "guia": "GRI/RN",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "6035",
+   "uf": "RN",
+   "data": "2026-10-09",
+   "base": 239.9,
+   "difal_pago": 31.18,
+   "difal_devido": 3.6,
+   "diferenca": 27.58,
+   "encargos": 1.94,
+   "pct_pago": 13.0,
+   "pct_devido": 1.5,
+   "guia": "GRI/RN",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "6059",
+   "uf": "CE",
+   "data": "2026-10-13",
+   "base": 134.9,
+   "difal_pago": 4.91,
+   "difal_devido": 4.91,
+   "diferenca": -0.0,
+   "encargos": 0.0,
+   "pct_pago": 3.64,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "6070",
+   "uf": "PB",
+   "data": "2026-10-14",
+   "base": 1522.0,
+   "difal_pago": 197.86,
+   "difal_devido": 22.83,
+   "diferenca": 175.03,
+   "encargos": 10.45,
+   "pct_pago": 13.0,
+   "pct_devido": 1.5,
+   "guia": "GNRE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "6131",
+   "uf": "RN",
+   "data": "2026-10-16",
+   "base": 193.7,
+   "difal_pago": 25.18,
+   "difal_devido": 2.91,
+   "diferenca": 22.27,
+   "encargos": 0.38,
+   "pct_pago": 13.0,
+   "pct_devido": 1.5,
+   "guia": "GRI/RN",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "6169",
+   "uf": "CE",
+   "data": "2026-10-20",
+   "base": 70.42,
+   "difal_pago": 2.56,
+   "difal_devido": 2.56,
+   "diferenca": -0.0,
+   "encargos": 0.0,
+   "pct_pago": 3.64,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "6163",
+   "uf": "CE",
+   "data": "2026-10-20",
+   "base": 502.43,
+   "difal_pago": 18.29,
+   "difal_devido": 18.29,
+   "diferenca": 0.0,
+   "encargos": 0.0,
+   "pct_pago": 3.64,
+   "pct_devido": 3.64,
+   "guia": "DAE/CE",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "prop",
+   "reducao": true
+  },
+  {
+   "nf": "6233",
+   "uf": "AL",
+   "data": "2026-10-26",
+   "base": 301.61,
+   "difal_pago": 10.61,
+   "difal_devido": 4.52,
+   "diferenca": 6.09,
+   "encargos": 0.99,
+   "pct_pago": 3.52,
+   "pct_devido": 1.5,
+   "guia": "DAR/AL",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "6298",
+   "uf": "RN",
+   "data": "2026-10-30",
+   "base": 1308.36,
+   "difal_pago": 47.62,
+   "difal_devido": 19.63,
+   "diferenca": 27.99,
+   "encargos": 0.0,
+   "pct_pago": 3.64,
+   "pct_devido": 1.5,
+   "guia": "GRI/RN",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "6299",
+   "uf": "RN",
+   "data": "2026-10-30",
+   "base": 1308.36,
+   "difal_pago": 47.62,
+   "difal_devido": 19.63,
+   "diferenca": 27.99,
+   "encargos": 0.0,
+   "pct_pago": 3.64,
+   "pct_devido": 1.5,
+   "guia": "GRI/RN",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "6296",
+   "uf": "RN",
+   "data": "2026-10-30",
+   "base": 1308.36,
+   "difal_pago": 47.62,
+   "difal_devido": 19.63,
+   "diferenca": 27.99,
+   "encargos": 0.0,
+   "pct_pago": 3.64,
+   "pct_devido": 1.5,
+   "guia": "GRI/RN",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "6297",
+   "uf": "RN",
+   "data": "2026-10-30",
+   "base": 1308.36,
+   "difal_pago": 47.62,
+   "difal_devido": 19.63,
+   "diferenca": 27.99,
+   "encargos": 0.0,
+   "pct_pago": 3.64,
+   "pct_devido": 1.5,
+   "guia": "GRI/RN",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  },
+  {
+   "nf": "6319",
+   "uf": "AL",
+   "data": "2026-11-03",
+   "base": 189.25,
+   "difal_pago": 6.65,
+   "difal_devido": 2.84,
+   "diferenca": 3.81,
+   "encargos": 0.59,
+   "pct_pago": 3.51,
+   "pct_devido": 1.5,
+   "guia": "DAR/AL",
+   "autuacao": false,
+   "estimada": false,
+   "metodo": "carga",
+   "reducao": true
+  }
+ ],
+ "conferir": [
+  {
+   "nf": "2112",
+   "uf": "PB",
+   "zip": "AGRO-2025-12.zip",
+   "motivos": [
+    "PB: valores fora do texto do PDF; usado o valor do nome do arquivo"
+   ]
+  },
+  {
+   "nf": "2225",
+   "uf": "CE",
+   "zip": "AGRO-2025-12.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "2190",
+   "uf": "CE",
+   "zip": "AGRO-2025-12.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "2454",
+   "uf": "CE",
+   "zip": "AGRO-2026-01.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "2794",
+   "uf": "TO",
+   "zip": "AGRO-2026-02.zip",
+   "motivos": [
+    "DARE/TO: valores fora do texto do PDF; usado o valor do nome do arquivo"
+   ]
+  },
+  {
+   "nf": "2769",
+   "uf": "TO",
+   "zip": "AGRO-2026-02.zip",
+   "motivos": [
+    "DARE/TO: valores fora do texto do PDF; usado o valor do nome do arquivo"
+   ]
+  },
+  {
+   "nf": "3131",
+   "uf": "CE",
+   "zip": "AGRO-2026-03.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "2881",
+   "uf": "TO",
+   "zip": "AGRO-2026-03.zip",
+   "motivos": [
+    "DARE/TO: valores fora do texto do PDF; usado o valor do nome do arquivo"
+   ]
+  },
+  {
+   "nf": "2858",
+   "uf": "CE",
+   "zip": "AGRO-2026-03.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "2909",
+   "uf": "CE",
+   "zip": "AGRO-2026-03.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "2506",
+   "uf": "TO",
+   "zip": "AGRO-2026-03.zip",
+   "motivos": [
+    "DARE/TO: valores fora do texto do PDF; usado o valor do nome do arquivo"
+   ]
+  },
+  {
+   "nf": "3276",
+   "uf": "AL",
+   "zip": "AGRO-2026-03.zip",
+   "motivos": [
+    "multa/juros de R$ 0.65 pela diferença do total (leitor não achou no PDF)"
+   ]
+  },
+  {
+   "nf": "3009",
+   "uf": "AL",
+   "zip": "AGRO-2026-04.zip",
+   "motivos": [
+    "multa/juros de R$ 3.43 pela diferença do total (leitor não achou no PDF)"
+   ]
+  },
+  {
+   "nf": "2251",
+   "uf": "PI",
+   "zip": "AGRO-2026-04.zip",
+   "motivos": [
+    "multa/juros de R$ 0.39 pela diferença do total (leitor não achou no PDF)"
+   ]
+  },
+  {
+   "nf": "2646",
+   "uf": "CE",
+   "zip": "AGRO-2026-04.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "2257",
+   "uf": "PI",
+   "zip": "AGRO-2026-04.zip",
+   "motivos": [
+    "multa/juros de R$ 0.66 pela diferença do total (leitor não achou no PDF)"
+   ]
+  },
+  {
+   "nf": "3573",
+   "uf": "TO",
+   "zip": "AGRO-2026-05.zip",
+   "motivos": [
+    "DARE/TO: valores fora do texto do PDF; usado o valor do nome do arquivo"
+   ]
+  },
+  {
+   "nf": "2993",
+   "uf": "CE",
+   "zip": "AGRO-2026-05.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "3626",
+   "uf": "CE",
+   "zip": "AGRO-2026-05.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "2869",
+   "uf": "AL",
+   "zip": "AGRO-2026-05.zip",
+   "motivos": [
+    "multa/juros de R$ 2.16 pela diferença do total (leitor não achou no PDF)"
+   ]
+  },
+  {
+   "nf": "3520",
+   "uf": "CE",
+   "zip": "AGRO-2026-05.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "3156",
+   "uf": "AL",
+   "zip": "AGRO-2026-05.zip",
+   "motivos": [
+    "multa/juros de R$ 23.47 pela diferença do total (leitor não achou no PDF)"
+   ]
+  },
+  {
+   "nf": "3600",
+   "uf": "AM",
+   "zip": "AGRO-2026-05.zip",
+   "motivos": [
+    "DAR/AM: valores fora do texto do PDF; usado o valor do nome do arquivo"
+   ]
+  },
+  {
+   "nf": "3634",
+   "uf": "CE",
+   "zip": "AGRO-2026-05.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "4110",
+   "uf": "AL",
+   "zip": "AGRO-2026-06.zip",
+   "motivos": [
+    "multa/juros de R$ 4.48 pela diferença do total (leitor não achou no PDF)"
+   ]
+  },
+  {
+   "nf": "3855",
+   "uf": "CE",
+   "zip": "AGRO-2026-06.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "4109",
+   "uf": "AL",
+   "zip": "AGRO-2026-06.zip",
+   "motivos": [
+    "multa/juros de R$ 4.48 pela diferença do total (leitor não achou no PDF)"
+   ]
+  },
+  {
+   "nf": "3938",
+   "uf": "CE",
+   "zip": "AGRO-2026-06.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "4480",
+   "uf": "CE",
+   "zip": "AGRO-2026-07.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "4700",
+   "uf": "CE",
+   "zip": "AGRO-2026-07.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "3395",
+   "uf": "AL",
+   "zip": "AGRO-2026-07.zip",
+   "motivos": [
+    "multa/juros de R$ 5.40 pela diferença do total (leitor não achou no PDF)"
+   ]
+  },
+  {
+   "nf": "3625",
+   "uf": "CE",
+   "zip": "AGRO-2026-07.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "4691",
+   "uf": "CE",
+   "zip": "AGRO-2026-07.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "4734",
+   "uf": "CE",
+   "zip": "AGRO-2026-07.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "4648",
+   "uf": "CE",
+   "zip": "AGRO-2026-07.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "2937",
+   "uf": "CE",
+   "zip": "AGRO-2026-08.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "3990",
+   "uf": "CE",
+   "zip": "AGRO-2026-08.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "4933",
+   "uf": "CE",
+   "zip": "AGRO-2026-08.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "4254",
+   "uf": "TO",
+   "zip": "AGRO-2026-08.zip",
+   "motivos": [
+    "DARE/TO: valores fora do texto do PDF; usado o valor do nome do arquivo"
+   ]
+  },
+  {
+   "nf": "4982",
+   "uf": "CE",
+   "zip": "AGRO-2026-08.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "5039",
+   "uf": "CE",
+   "zip": "AGRO-2026-08.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "5107",
+   "uf": "CE",
+   "zip": "AGRO-2026-08.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "4611",
+   "uf": "CE",
+   "zip": "AGRO-2026-09.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "4747",
+   "uf": "CE",
+   "zip": "AGRO-2026-09.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "5149",
+   "uf": "CE",
+   "zip": "AGRO-2026-09.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "5801",
+   "uf": "CE",
+   "zip": "AGRO-2026-09.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "4779",
+   "uf": "AL",
+   "zip": "AGRO-2026-09.zip",
+   "motivos": [
+    "multa/juros de R$ 2.11 pela diferença do total (leitor não achou no PDF)"
+   ]
+  },
+  {
+   "nf": "5268",
+   "uf": "CE",
+   "zip": "AGRO-2026-09.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "5496",
+   "uf": "CE",
+   "zip": "AGRO-2026-09.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "4861",
+   "uf": "CE",
+   "zip": "AGRO-2026-09.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "5365",
+   "uf": "CE",
+   "zip": "AGRO-2026-09.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "3420",
+   "uf": "PI",
+   "zip": "AGRO-2026-09.zip",
+   "motivos": [
+    "multa/juros de R$ 2.59 pela diferença do total (leitor não achou no PDF)"
+   ]
+  },
+  {
+   "nf": "5407",
+   "uf": "CE",
+   "zip": "AGRO-2026-09.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "5450",
+   "uf": "TO",
+   "zip": "AGRO-2026-09.zip",
+   "motivos": [
+    "DARE/TO: valores fora do texto do PDF; usado o valor do nome do arquivo"
+   ]
+  },
+  {
+   "nf": "5084",
+   "uf": "CE",
+   "zip": "AGRO-2026-09.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "5334",
+   "uf": "CE",
+   "zip": "AGRO-2026-10.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "5839",
+   "uf": "CE",
+   "zip": "AGRO-2026-10.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "6233",
+   "uf": "AL",
+   "zip": "AGRO-2026-10.zip",
+   "motivos": [
+    "multa/juros de R$ 0.99 pela diferença do total (leitor não achou no PDF)"
+   ]
+  },
+  {
+   "nf": "5793",
+   "uf": "CE",
+   "zip": "AGRO-2026-10.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "6169",
+   "uf": "CE",
+   "zip": "AGRO-2026-10.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "5590",
+   "uf": "CE",
+   "zip": "AGRO-2026-10.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "5825",
+   "uf": "AL",
+   "zip": "AGRO-2026-10.zip",
+   "motivos": [
+    "multa/juros de R$ 0.41 pela diferença do total (leitor não achou no PDF)"
+   ]
+  },
+  {
+   "nf": "5986",
+   "uf": "AL",
+   "zip": "AGRO-2026-10.zip",
+   "motivos": [
+    "multa/juros de R$ 0.44 pela diferença do total (leitor não achou no PDF)"
+   ]
+  },
+  {
+   "nf": "5871",
+   "uf": "CE",
+   "zip": "AGRO-2026-10.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "6018",
+   "uf": "CE",
+   "zip": "AGRO-2026-10.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "5763",
+   "uf": "CE",
+   "zip": "AGRO-2026-10.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "6033",
+   "uf": "CE",
+   "zip": "AGRO-2026-10.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "6163",
+   "uf": "CE",
+   "zip": "AGRO-2026-11.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  },
+  {
+   "nf": "6319",
+   "uf": "AL",
+   "zip": "AGRO-2026-11.zip",
+   "motivos": [
+    "multa/juros de R$ 0.59 pela diferença do total (leitor não achou no PDF)"
+   ]
+  },
+  {
+   "nf": "6059",
+   "uf": "CE",
+   "zip": "AGRO-2026-11.zip",
+   "motivos": [
+    "multa maior que o principal: campos trocados no PDF (corrigido)"
+   ]
+  }
+ ],
+ "regra": "comparação só com notas em que todos os itens têm NCM 8436 (igual ao histórico da AVIC); autuações à parte",
+ "foraDaComparacao": [
+  {
+   "nf": "2815",
+   "uf": "AM",
+   "data": "2026-02-12",
+   "difal_pago": 16.35
+  },
+  {
+   "nf": "2881",
+   "uf": "TO",
+   "data": "2026-02-16",
+   "difal_pago": 40.89
+  },
+  {
+   "nf": "4512",
+   "uf": "AM",
+   "data": "2026-06-26",
+   "difal_pago": 10.25
+  },
+  {
+   "nf": "5268",
+   "uf": "CE",
+   "data": "2026-08-18",
+   "difal_pago": 48.88
+  }
+ ]
+}

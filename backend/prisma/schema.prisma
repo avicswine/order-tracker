@@ -415,3 +415,206 @@ model MlNotificacao {
   @@index([entregueEm, recebidoEm])
   @@map("ml_notificacoes")
 }
+
+// ---------------------------------------------------------------------------
+// Monitor de DIFAL
+//
+// Nossos produtos de NCM 8436 têm a redução do Convênio ICMS 52/91: carga total
+// de 5,6%, sendo 4,1% já recolhidos na origem (RS), restando 1,5% de DIFAL para
+// o estado de destino. Quem paga esse 1,5% depende do canal e do destinatário:
+//   - venda no ML para quem não tem IE  -> o ML paga e cobra de nós (lançamento CDIFAL)
+//   - balcão ou Loja Integrada, sem IE  -> nós emitimos e pagamos a guia
+//   - destinatário com IE (contribuinte) -> o DIFAL é dele, não nosso
+// ---------------------------------------------------------------------------
+
+// Uma nota fiscal de saída, com o DIFAL calculado e o confronto com o que o ML
+// cobrou e com o que foi pago em guia.
+model DifalNota {
+  id              String   @id @default(cuid())
+  empresa         String   // AVIC | AGRO
+  nfNumero        String
+  nfSerie         String?
+  nfChave         String?  @unique
+  blingId         String?  // id da NF no Bling, para reconsultar
+  emitidaEm       DateTime
+  naturezaOperacao String?
+
+  // destinatário — só o necessário para o cálculo (LGPD: sem CPF, sem endereço completo)
+  clienteNome     String
+  clienteUf       String   // UF que define a alíquota de destino
+  clienteTemIe    Boolean  @default(false) // com IE = contribuinte = DIFAL é dele
+  clienteIe       String?
+
+  // valores da nota
+  valorProdutos   Float
+  valorFrete      Float    @default(0)
+  valorNota       Float
+  valorComReducao Float    @default(0) // parcela dos itens com NCM 8436
+  valorSemReducao Float    @default(0) // demais itens
+
+  // canal de venda, que define quem paga
+  canalId         String?  // id da loja no Bling (0 = balcão)
+  canalNome       String?
+  canalTipo       String?  // MercadoLivre | LojaIntegrada | Api | ...
+  mlOrderId       String?  // para casar com a cobrança do ML
+  // tipo de envio da venda do ML (FULL, Coleta, A combinar, ME1, Agência, Flex), lido uma vez da API do ML
+  mlLogistica     String?
+  // rastreio do Mercado Envios (vendas por Coleta, Agência, FULL, Flex), lido de /shipments/{id} do ML
+  mlEnvioId        String?
+  mlEnvioStatus    String?   // ready_to_ship | shipped | delivered | not_delivered | cancelled ...
+  mlEnvioSubstatus String?   // ex.: out_for_delivery
+  mlPrevisao       DateTime?
+  mlEnvioLidoEm    DateTime?
+  mlPackId        String?
+
+  // o que calculamos
+  difalCalculado  Float    @default(0)
+  difalMetodo     String?  // carga | prop | sem_reducao | isento
+  calculoDetalhe  Json?    // a conta aberta, para a contabilidade conferir
+  // itens da NF como vieram do Bling: [{ sku, descricao, ncm, quantidade, unidade, valorUnitario, valorTotal }]
+  itens           Json?
+
+  // o que o ML cobrou de nós (lançamento CDIFAL do faturamento)
+  difalCobradoMl  Float?
+  cobradoMlEm     DateTime?
+
+  // o que foi recolhido em guia
+  difalPagoGuia   Float?
+  guiaPagaEm      DateTime?
+
+  responsavel     DifalResponsavel @default(NOSSO)
+  situacao        DifalSituacao    @default(PENDENTE)
+  divergencia     Float?           // diferença entre o calculado e o cobrado/pago
+  observacao      String?
+
+  // O que a guia (GNRE) exige do destinatário, lido do XML da nota:
+  // código IBGE do município com 5 dígitos (sem a UF) e o CPF/CNPJ.
+  // O documento fica aqui só para montar a guia — nunca vai para tela nem para log.
+  municipioIbgeDestino  String?
+  documentoDestinatario String?
+
+  // rastro da guia gerada a partir desta nota
+  guiaGeradaEm    DateTime?
+  guiaLoteId      String?   // identificador do lote GNRE em que a guia saiu
+  // venda do ML em que nós pagamos a guia e o José anexou o comprovante na venda do ML
+  comprovanteMlEnviadoEm DateTime?
+
+  criadoEm        DateTime @default(now())
+  atualizadoEm    DateTime @updatedAt
+
+  @@unique([empresa, nfNumero])
+  @@index([emitidaEm])
+  @@index([responsavel, situacao])
+  @@index([clienteUf])
+  @@index([mlOrderId])
+  @@map("difal_notas")
+}
+
+// Alíquota interna e método de cálculo de cada estado. Fica em tabela, e não no
+// código, porque muda por ato do fisco e a contabilidade precisa poder ajustar.
+model DifalAliquota {
+  uf              String   @id   // sigla do estado de destino
+  nome            String
+  aliquotaInterna Float          // alíquota interna cheia, sem fundo de pobreza
+  fcp             Float    @default(0) // fundo de combate à pobreza, quando houver
+  interestadual   Float    @default(7) // alíquota do RS para este estado: 7 ou 12
+  metodo          String   @default("carga") // carga | prop
+  posicaoFisco    Boolean  @default(false)   // true = há posição do fisco; false = regra geral
+  nota            String?
+
+  // O que as guias já pagas provam sobre este estado. Vale mais que a teoria:
+  // é o que o fisco de fato aceitou. Alimentado pelas guias de DIFAL auditadas.
+  guiasComReducao Int?     // guias em que a redução do Convênio 52/91 foi aplicada
+  guiasTotal      Int?     // guias auditadas deste estado
+  metodoObservado String?  // método que as guias mostram (pode diferir do configurado)
+  evidenciaEm     DateTime?
+
+  // Parâmetros da GNRE desta UF. O código da receita não é fixo em lei: cada
+  // estado publica o seu no serviço GnreConfigUF, e é de lá que deve vir.
+  codigoReceitaGnre  String?
+  tipoDocOrigemGnre  String  @default("10")     // 10 = NF-e, conforme o manual
+  // quando a guia vence: "saida" = antes de a mercadoria sair (por operação);
+  // "dia15" = até o dia 15 do mês seguinte (quando a UF admite apuração)
+  vencimentoRegra    String  @default("saida")
+  // campos extras OBRIGATÓRIOS da receita nesta UF (GnreConfigUF), já classificados:
+  // [{ codigo, titulo, conteudo: "chaveNfe" | "dataEmissao" | "observacao" | "desconhecido" }]
+  camposExtrasGnre   Json?
+  // GnreConfigUF exigePeriodoReferencia: a guia leva referencia.periodo = 0 (mensal, XSD dados_gnre_v2.00)
+  exigePeriodoGnre   Boolean  @default(false)
+
+  atualizadoEm    DateTime @updatedAt
+
+  @@map("difal_aliquotas")
+}
+
+// Dados do emitente que entram na GNRE, por empresa. Vêm do bloco <emit> do XML
+// das nossas próprias notas, então não precisam de cadastro à mão.
+model DifalEmitente {
+  empresa        String   @id    // AVIC | AGRO
+  cnpj           String
+  inscricaoEstadual String?
+  razaoSocial    String
+  endereco       String
+  municipioIbge  String          // 5 dígitos, sem a UF
+  uf             String
+  cep            String
+  telefone       String?
+  atualizadoEm   DateTime @updatedAt
+
+  @@map("difal_emitentes")
+}
+
+// Quem é o responsável pelo recolhimento do DIFAL daquela nota.
+enum DifalResponsavel {
+  ML_PAGA      // venda no Mercado Livre: o ML recolhe e cobra de nós depois
+  NOSSO        // balcão, Loja Integrada: a guia é nossa
+  CLIENTE      // destinatário contribuinte, com inscrição estadual
+  SEM_DIFAL    // venda dentro do RS ou operação sem diferencial
+}
+
+enum DifalSituacao {
+  PENDENTE     // calculado, aguardando guia ou cobrança do ML
+  CONFERIDO    // o que cobraram bate com o que calculamos
+  DIVERGENTE   // o ML cobrou diferente do calculado
+  PAGO         // guia recolhida
+  ATRASADO     // passou do prazo sem guia
+}
+
+// Lançamentos CDIFAL da fatura do Mercado Livre (o que ele cobra de nós pelo DIFAL que
+// recolheu). O ML não informa pedido nem envio nesses lançamentos, então o fechamento é
+// por mês e por empresa — nunca nota a nota.
+model DifalCobrancaMl {
+  id        String   @id      // "EMPRESA:detail_id"
+  empresa   String            // AVIC | AGRO
+  periodo   String            // chave do período da fatura, ex.: 2026-11-01
+  data      DateTime          // data do lançamento
+  natureza  String            // CHARGE (cobrou) | BONUS (estornou)
+  valor     Float             // já vem negativo no estorno
+  criadoEm  DateTime @default(now())
+
+  @@index([empresa, periodo])
+  @@map("difal_cobrancas_ml")
+}
+
+// Lote GNRE montado a partir das notas (guiaLoteId das difal_notas aponta para cá).
+// Guarda o XML enviado e o que o portal respondeu: recibo, situação, resultado e o PDF
+// das guias em base64. Gerar/enviar lote NÃO paga nada — o pagamento continua no banco.
+model DifalLoteGnre {
+  id                String    @id        // EMPRESA-AAAAMMDDHHMMSS
+  empresa           String
+  ambiente          String               // homologacao | producao (de onde saiu/para onde foi)
+  xml               String
+  guias             Int
+  total             Float
+  criadoEm          DateTime  @default(now())
+  enviadoEm         DateTime?
+  numeroRecibo      String?
+  situacaoCodigo    String?              // última situação devolvida pelo portal
+  situacaoDescricao String?
+  consultadoEm      DateTime?
+  resultadoXml      String?
+  pdfGuias          String?              // base64
+
+  @@index([empresa, criadoEm])
+  @@map("difal_lotes_gnre")
+}

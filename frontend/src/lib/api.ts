@@ -161,3 +161,339 @@ export interface MlConversa {
   naoLidas: number
   mensagens: { de: string; texto: string; data: string | null }[]
 }
+
+// --- Monitor de DIFAL ---------------------------------------------------
+// Quem recolhe o diferencial de alíquota de cada nota: o Mercado Livre (que
+// depois cobra de nós), nós mesmos por guia, ou o próprio cliente quando ele é
+// contribuinte com inscrição estadual.
+export type DifalResponsavel = 'ML_PAGA' | 'NOSSO' | 'CLIENTE' | 'SEM_DIFAL'
+export type DifalSituacao = 'PENDENTE' | 'CONFERIDO' | 'DIVERGENTE' | 'PAGO' | 'ATRASADO'
+
+export interface DifalImportacaoStatus {
+  emAndamento: boolean
+  iniciadaEm: string | null
+  terminadaEm: string | null
+  resultado:
+    | { empresa: string; lidas: number; gravadas: number; atualizadas: number; ignoradas: number; puladas: number; erros: string[] }[]
+    | null
+  erro: string | null
+}
+
+/** item da NF guardado na importação (tooltip no número da nota) */
+export interface DifalItemNota {
+  sku: string | null
+  descricao: string | null
+  ncm: string | null
+  quantidade: number | null
+  unidade: string | null
+  valorUnitario: number | null
+  valorTotal: number
+}
+
+
+/** guia gerada, com situação no portal e pagamento (aba 'O que já pagamos') */
+export interface DifalGuiaEmitida {
+  id: string
+  empresa: string
+  nfNumero: string
+  clienteNome: string
+  clienteUf: string
+  estadoComCobranca: boolean
+  canal: string | null
+  ml: boolean
+  mlLogistica: string | null
+  mlOrderId: string | null
+  valorNota: number
+  difalCalculado: number
+  calculoDetalhe: DifalCalculoDetalhe | null
+  itens: DifalItemNota[] | null
+  emitidaEm: string
+  loteId: string
+  ambiente: string | null
+  geradaEm: string
+  enviadaEm: string | null
+  situacaoPortal: string | null
+  linhaDigitavel: string | null
+  atrasada: boolean
+  pagaEm: string | null
+  valorPago: number | null
+  comprovanteMlEnviadoEm: string | null
+}
+
+export interface DifalResumo {
+  porResponsavel: {
+    responsavel: DifalResponsavel
+    notas: number
+    calculado: number
+    cobradoMl: number
+    pagoGuia: number
+  }[]
+  aPagar: { notas: number; valor: number }
+  divergentes: { notas: number; valor: number }
+}
+
+export interface DifalAliquota {
+  uf: string
+  nome: string
+  aliquotaInterna: number
+  fcp: number
+  interestadual: number
+  metodo: string
+  posicaoFisco: boolean
+  nota: string | null
+  codigoReceitaGnre: string | null
+  vencimentoRegra: string
+}
+
+export interface DifalGuiaPendente {
+  id: string
+  empresa: string
+  nfNumero: string
+  clienteNome: string
+  itens: DifalItemNota[] | null
+  emitidaEm: string
+  clienteUf: string
+  valorNota: number
+  difalCalculado: number
+  pronta: boolean
+  faltando: string[]
+  /** último dia para pagar sem multa/juros (AAAA-MM-DD) */
+  prazo: string
+  /** passou do prazo: vai para a contabilidade, não para lote */
+  atrasada: boolean
+  /** rastreio do Mercado Envios lido da API do ML (vendas por Coleta, Agência, FULL, Flex) */
+  envioMl: { status: string | null; substatus: string | null; previsao: string | null; lidoEm: string | null } | null
+  /** envio no order-tracker; null = nota não está lá (retirada, Mercado Envios, Shopee…) */
+  envio: {
+    pedidoId: string
+    situacao: 'PENDING' | 'IN_TRANSIT' | 'DELIVERED' | 'CANCELLED'
+    transportadora: string | null
+    enviadoEm: string | null
+    previsao: string | null
+    entregueEm: string | null
+    ultimoRastreio: string | null
+    temOcorrencia: boolean
+  } | null
+  /** venda do ML: depois de pagar, anexar o comprovante na venda do ML */
+  ml: boolean
+  mlOrderId: string | null
+  guiaGeradaEm: string | null
+  /** guia processada pelo portal: libera 'Comprovante enviado' */
+  /** situação da guia no portal: 0 aceita, 1/2 recusada, 3 erro de comunicação, 4 pendente; null = sem resultado */
+  situacaoGuia: string | null
+  guiaAceita: boolean
+  situacao: string
+  observacao: string | null
+  /** estado em que já tivemos cobrança de DIFAL */
+  estadoComCobranca: boolean
+  /** a conta do DIFAL feita na importação (calculo.ts) */
+  calculoDetalhe: DifalCalculoDetalhe | null
+  /** plataforma da venda e, no ML, o tipo de envio (FULL, Coleta, A combinar, ME1, Agência, Flex) */
+  canal: string | null
+  mlLogistica: string | null
+}
+
+/** espelho do 'detalhe' montado em backend/src/services/difal/calculo.ts */
+export interface DifalCalculoDetalhe {
+  uf?: string
+  aliquotaInterna?: number
+  fcp?: number
+  interestadual?: number
+  freteRateado?: number
+  /** base do imposto = valor total da NF (notas calculadas antes de 20/11/2026 não têm) */
+  valorNota?: number
+  /** valor da NF − produtos − frete: negativo = desconto; positivo = outras despesas, IPI */
+  ajusteNota?: number
+  motivo?: string
+  erro?: string
+  comReducao?: {
+    valor: number
+    difal: number
+    metodo?: 'carga' | 'prop'
+    explicacao?: string
+    cargaTotal?: number
+    cargaOrigem?: number
+    cargaDevida?: number
+    baseReduzida?: number
+    diferencaAliquotas?: number
+  }
+  semReducao?: { valor: number; difal: number; aliquotaCheia: number }
+}
+
+
+export interface DifalHistorico {
+  apuradoEm: string
+  periodo: { de: string; ate: string }
+  resumo: {
+    notas: number
+    guiasTotal: number
+    pago: number
+    devido: number
+    aMais: number
+    encargos: number
+    autuacoes: { notas: number; valor: number }
+    guiasComReducao: number
+    guiasComparadas: number
+  }
+  estados: {
+    uf: string
+    estado: string
+    notas: number
+    base: number
+    pago: number
+    devido: number
+    aMais: number
+    pctCobrado: number
+    pctDevido: number
+    encargos: number
+    metodo: string
+  }[]
+  meses: { mes: string; label: string; notas: number; pago: number; devido: number; aMais: number }[]
+  notas: {
+    nf: string
+    uf: string
+    estado: string
+    data: string
+    mes_label: string
+    base: number
+    icms_origem: number
+    difal_pago: number
+    difal_devido: number
+    diferenca: number
+    pct_pago: number
+    pct_devido: number
+    encargos: number
+    guia: string
+    autuacao: boolean
+  }[]
+}
+
+export interface DifalFechamentoMes {
+  mes: string
+  empresa: string
+  cobradoMl: number
+  lancamentos: number
+  calculado: number
+  notas: number
+  /** guias que o ML pagou, lidas dos ZIPs de comprovantes (0 = mês sem ZIP) */
+  guiasZip: number
+  pagoZip: number
+  devidoZip: number
+  aMaisZip: number
+  encargosZip: number
+}
+
+export interface DifalSincronizacaoMl {
+  empresa: string
+  periodos: string[]
+  lidos: number
+  cdifal: number
+  erro?: string
+}
+
+export interface DifalPortalStatus {
+  ambiente: 'homologacao' | 'producao'
+  host: string
+  empresas: { AVIC: boolean; AGRO: boolean }
+}
+
+export interface DifalReceitaUf {
+  codigo: string
+  descricao: string
+  courier: boolean
+  exigeDetalhamentoReceita: boolean
+  exigeProduto: boolean
+  exigePeriodoReferencia: boolean
+  exigeDocumentoOrigem: boolean
+  exigeDataVencimento: boolean
+  exigeContribuinteDestinatario: string
+  exigeCamposAdicionais: boolean
+  tiposDocumentosOrigem: { codigo: string; descricao: string }[]
+  camposAdicionais: { codigo: string; titulo: string; obrigatorio: boolean; tipo: string }[]
+}
+
+export interface DifalConfigUf {
+  uf: string
+  situacao: { codigo: string; descricao: string }
+  receitas: DifalReceitaUf[]
+  limites: { guiasPorLote?: string; itensPorGuia?: string; itensPorLote?: string }
+}
+
+export interface DifalGuiaResultado {
+  situacaoGuia: string
+  situacaoTexto: string
+  identificadorGuia?: string
+  ufFavorecida?: string
+  valorGNRE?: string
+  linhaDigitavel?: string
+  qrcodePayload?: string
+  codigoBarras?: string
+  dataLimitePagamento?: string
+  /** a nota desta guia foi devolvida à fila: NÃO pagar por este lote */
+  devolvida?: boolean
+  motivos: { codigo: string; descricao: string; campo?: string }[]
+}
+
+export interface DifalLote {
+  id: string
+  empresa: string
+  ambiente: string
+  guias: number
+  total: number
+  criadoEm: string
+  enviadoEm: string | null
+  numeroRecibo: string | null
+  situacaoCodigo: string | null
+  situacaoDescricao: string | null
+  consultadoEm: string | null
+  temPdf: boolean
+  guiasResultado: DifalGuiaResultado[]
+}
+
+export const difalApi = {
+  resumo: (params?: { desde?: string }) =>
+    api.get<DifalResumo>('/difal/resumo', { params }).then((r) => r.data),
+  aliquotas: () => api.get<DifalAliquota[]>('/difal/aliquotas').then((r) => r.data),
+  historico: () => api.get<DifalHistorico>('/difal/historico').then((r) => r.data),
+  importar: (dias?: number) =>
+    api.post<{ ok: boolean; iniciada: boolean }>('/difal/importar', { dias }).then((r) => r.data),
+  importarStatus: () => api.get<DifalImportacaoStatus>('/difal/importar/status').then((r) => r.data),
+  atualizarAliquota: (uf: string, dados: { codigoReceitaGnre?: string; vencimentoRegra?: string; tipoDocOrigemGnre?: string; camposAdicionais?: DifalReceitaUf['camposAdicionais']; exigeProduto?: boolean }) =>
+    api.put<DifalAliquota>(`/difal/aliquotas/${uf}`, dados).then((r) => r.data),
+  portalStatus: () => api.get<DifalPortalStatus>('/difal/portal/status').then((r) => r.data),
+  portalConfigUf: (uf: string, empresa: string) =>
+    api.get<DifalConfigUf>(`/difal/portal/config/${uf}`, { params: { empresa } }).then((r) => r.data),
+  lotes: () => api.get<DifalLote[]>('/difal/lotes').then((r) => r.data),
+  enviarLote: (id: string) =>
+    api.post<{ numeroRecibo: string | null; situacaoCodigo: string; situacaoDescricao: string }>(`/difal/lotes/${id}/enviar`).then((r) => r.data),
+  consultarLote: (id: string) =>
+    api.post<{ situacao: { codigo: string; descricao: string }; guias: DifalGuiaResultado[]; temPdf: boolean }>(`/difal/lotes/${id}/consultar`).then((r) => r.data),
+  // downloads passam pelo axios para levar o token de login
+  devolverRecusadas: (id: string) =>
+    api.post<{ ok: boolean; notasDevolvidas: number }>(`/difal/lotes/${id}/devolver-recusadas`).then((r) => r.data),
+  desfazerLote: (id: string) =>
+    api.post<{ ok: boolean; notasDevolvidas: number }>(`/difal/lotes/${id}/desfazer`).then((r) => r.data),
+  baixarXmlLote: (id: string) =>
+    api.get<Blob>(`/difal/lotes/${id}/xml`, { responseType: 'blob' }).then((r) => ({ arquivo: r.data, nome: `gnre-lote-${id}.xml` })),
+  baixarPdfLote: (id: string) =>
+    api.get<Blob>(`/difal/lotes/${id}/pdf`, { responseType: 'blob' }).then((r) => ({ arquivo: r.data, nome: `gnre-guias-${id}.pdf` })),
+  fechamentoMensal: () => api.get<DifalFechamentoMes[]>('/difal/fechamento-mensal').then((r) => r.data),
+  /** meses de fatura a ler no ML: 2 no dia a dia; 12 só para completar o histórico, uma vez */
+  sincronizarCobrancasMl: (meses: number) =>
+    api.post<DifalSincronizacaoMl[]>('/difal/cobrancas-ml/sincronizar', { meses }).then((r) => r.data),
+  marcarComprovanteMl: (id: string) => api.post<{ ok: boolean }>(`/difal/notas/${id}/comprovante-ml`).then((r) => r.data),
+  guiasEmitidas: () => api.get<{ guias: DifalGuiaEmitida[]; alertas: { tipo: string; texto: string }[] }>('/difal/guias-emitidas').then((r) => r.data),
+  simularRotina: () =>
+    api.post<{ mensagem: string; pulou?: string; agendada: boolean; modoCompleto: boolean; temNumero: boolean; ultimaExecucao: { em: string; ok: boolean; enviadaWhatsapp: boolean; resumo: string } | null }>('/difal/rotina/simular').then((r) => r.data),
+  marcarPagas: (ids: string[], data: string | null) => api.post<{ ok: boolean; notas: number; recusadas: number }>('/difal/guias-emitidas/pagas', { ids, data }).then((r) => r.data),
+  guiasPendentes: () => api.get<DifalGuiaPendente[]>('/difal/guias-pendentes').then((r) => r.data),
+  // devolve o XML do lote GNRE como arquivo para baixar
+  gerarLote: (ids: string[]) =>
+    api.post<Blob>('/difal/guias/lote', { ids }, { responseType: 'blob' }).then((r) => ({
+      arquivo: r.data,
+      nome: /filename="([^"]+)"/.exec(r.headers['content-disposition'] ?? '')?.[1] ?? 'gnre-lote.xml',
+      loteId: String(r.headers['x-lote-id'] ?? ''),
+      guias: Number(r.headers['x-lote-guias'] ?? 0),
+      total: Number(r.headers['x-lote-total'] ?? 0),
+    })),
+}

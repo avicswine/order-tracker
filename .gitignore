@@ -1,9 +1,19 @@
 node_modules/
 dist/
 .env
+.env.*
 *.env.local
 .DS_Store
 .bling-tokens.json
+
+# certificados digitais (A1) nunca entram no git
+Certificados/
+*.pfx
+*.PFX
+*.p12
+
+# backups locais de dados (scripts de correção)
+backend/backups/
 
 # previa gerada pelo script de conferencia do rastreio (nao versionar)
 backend/previa-rastreio.png

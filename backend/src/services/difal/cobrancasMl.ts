@@ -1,0 +1,245 @@
+/**
+ * Busca na fatura do Mercado Livre os lançamentos CDIFAL (o DIFAL que ele recolheu e
+ * cobra de nós) e grava em difal_cobrancas_ml.
+ *
+ * Fonte: API de faturamento do ML, a mesma usada pelo cmvsync (ml_cobrancas.py):
+ *   GET /billing/integration/monthly/periods?group=ML&document_type=BILL   (x-version: 2)
+ *   GET /billing/integration/periods/key/{chave}/group/ML/details           (x-version: 2)
+ * A paginação é por `from_id` (o `offset` tem teto de 10.000 e perde registros).
+ * O detalhe traz TODAS as tarifas do período; guardamos só as de sub_type CDIFAL.
+ *
+ * Só leitura no ML. Poucas chamadas: 1 de períodos + as páginas de detalhe (1.000 por
+ * página) de cada mês pedido — por isso o dia a dia lê só 2 meses; 12 meses só num botão à parte, uma vez.
+ */
+import axios, { AxiosError } from 'axios'
+import type { PrismaClient } from '@prisma/client'
+import { mlAuth, type MlCompany } from '../mercadolivre'
+// apuração dos ZIPs de comprovantes que o ML mandou (guias que ele pagou), por empresa
+import historicoAvic from './dados/historico-guias.json'
+import historicoAgro from './dados/historico-guias-agro.json'
+
+const ML_API = 'https://api.mercadolibre.com'
+const PAGINA = 1000
+const SUB_TIPO_DIFAL = 'CDIFAL'
+const ESPERAS_429_MS = [5000, 15000, 40000]
+
+/** empresa do monitor → conta do ML no order-tracker */
+const CONTA_ML: Record<string, MlCompany> = { AVIC: 'avic', AGRO: 'agro' }
+
+type Cabecalhos = { headers: Record<string, string> }
+
+interface DetalheMl {
+  charge_info?: {
+    detail_id?: number | string
+    detail_sub_type?: string
+    detail_type?: string
+    detail_amount?: number | string
+    creation_date_time?: string
+  }
+  sales_info?: { sale_date_time?: string }[]
+}
+
+export interface ResultadoCobrancas {
+  empresa: string
+  periodos: string[]
+  lidos: number
+  cdifal: number
+  erro?: string
+}
+
+async function getComEspera<T>(url: string, params: Record<string, unknown>, H: Cabecalhos): Promise<T> {
+  for (let tentativa = 0; ; tentativa++) {
+    try {
+      const { data } = await axios.get<T>(url, {
+        params,
+        headers: { ...H.headers, 'x-version': '2' },
+        timeout: 30000,
+      })
+      return data
+    } catch (e) {
+      const status = (e as AxiosError).response?.status
+      if (status !== 429 || tentativa >= ESPERAS_429_MS.length) throw e
+      await new Promise((r) => setTimeout(r, ESPERAS_429_MS[tentativa]))
+    }
+  }
+}
+
+async function periodos(H: Cabecalhos, meses: number): Promise<string[]> {
+  const d = await getComEspera<{ results?: { key?: string }[] }>(
+    `${ML_API}/billing/integration/monthly/periods`,
+    { group: 'ML', document_type: 'BILL', limit: Math.min(meses, 12), offset: 0 },
+    H
+  )
+  return (d.results ?? []).map((p) => p.key).filter((k): k is string => !!k)
+}
+
+async function* detalhes(H: Cabecalhos, chave: string): AsyncGenerator<DetalheMl[]> {
+  let fromId: string | number = 0
+  while (true) {
+    const d: { results?: DetalheMl[]; last_id?: string | number } = await getComEspera(
+      `${ML_API}/billing/integration/periods/key/${chave}/group/ML/details`,
+      { document_type: 'BILL', limit: PAGINA, from_id: fromId, sort_by: 'ID', order_by: 'ASC' },
+      H
+    )
+    const res = d.results ?? []
+    if (!res.length) return
+    yield res
+    // para só quando a página vem vazia ou o id não avança (regra da doc do ML;
+    // página curta NÃO significa fim)
+    const ultimo: string | number | undefined = d.last_id ?? res[res.length - 1]?.charge_info?.detail_id
+    if (!ultimo || String(ultimo) === String(fromId)) return
+    fromId = ultimo
+  }
+}
+
+export async function sincronizarCobrancasMl(prisma: PrismaClient, meses = 2): Promise<ResultadoCobrancas[]> {
+  const saida: ResultadoCobrancas[] = []
+  for (const [empresa, conta] of Object.entries(CONTA_ML)) {
+    const r: ResultadoCobrancas = { empresa, periodos: [], lidos: 0, cdifal: 0 }
+    saida.push(r)
+    try {
+      const auth = await mlAuth(conta)
+      if (!auth) {
+        r.erro = `conta do Mercado Livre da ${empresa} não autorizada no order-tracker`
+        continue
+      }
+      r.periodos = await periodos(auth.H, meses)
+      for (const chave of r.periodos) {
+        for await (const pagina of detalhes(auth.H, chave)) {
+          r.lidos += pagina.length
+          for (const x of pagina) {
+            const ci = x.charge_info ?? {}
+            if (ci.detail_sub_type !== SUB_TIPO_DIFAL || !ci.detail_id) continue
+            const quando = x.sales_info?.[0]?.sale_date_time ?? ci.creation_date_time
+            await prisma.difalCobrancaMl.upsert({
+              where: { id: `${empresa}:${ci.detail_id}` },
+              update: { valor: Number(ci.detail_amount ?? 0), natureza: ci.detail_type ?? '' },
+              create: {
+                id: `${empresa}:${ci.detail_id}`,
+                empresa,
+                periodo: chave,
+                data: quando ? new Date(quando) : new Date(),
+                natureza: ci.detail_type ?? '',
+                valor: Number(ci.detail_amount ?? 0),
+              },
+            })
+            r.cdifal++
+          }
+        }
+      }
+    } catch (e) {
+      // erro de API nunca passa em silêncio; sem token na mensagem
+      const status = (e as AxiosError).response?.status
+      r.erro = status ? `API do Mercado Livre respondeu ${status}` : (e as Error).message
+    }
+  }
+  for (const r of saida) {
+    console.log(`[DIFAL fatura ML] ${r.empresa}: ${r.periodos.length} período(s) ${r.periodos.map((p) => p.slice(0, 7)).join(', ') || '-'} · ${r.lidos} tarifas lidas · ${r.cdifal} CDIFAL${r.erro ? ` · ERRO: ${r.erro}` : ''}`)
+  }
+  return saida
+}
+
+export interface FechamentoMes {
+  mes: string // AAAA-MM
+  empresa: string
+  cobradoMl: number // soma dos lançamentos CDIFAL do período
+  lancamentos: number
+  calculado: number // soma do nosso cálculo nas notas em que o ML recolhe
+  notas: number
+  // guias que o ML pagou, lidas dos ZIPs de comprovantes (0 = mês sem ZIP)
+  guiasZip: number
+  pagoZip: number // DIFAL principal pago pelo ML (sem multa e juros; autuações fora)
+  devidoZip: number // o que era devido pela nossa conta (1,5% / método do estado)
+  aMaisZip: number // pago − devido
+  encargosZip: number // multa e juros pagos nessas guias
+}
+
+interface NotaHistorico { data: string; difal_pago: number; difal_devido: number; encargos: number; autuacao: boolean }
+interface Historico { notas: NotaHistorico[] }
+
+/** empresa → apuração dos ZIPs */
+const HISTORICOS: { empresa: string; dados: Historico }[] = [
+  { empresa: 'AVIC', dados: historicoAvic as Historico },
+  { empresa: 'AGRO', dados: historicoAgro as Historico },
+]
+
+/** primeiro mês com guia nos ZIPs: o fechamento começa nele */
+function primeiroMesZip(): string | null {
+  const meses = HISTORICOS.flatMap((h) => h.dados.notas.map((n) => n.data.slice(0, 7))).sort()
+  return meses[0] ?? null
+}
+
+/** AAAA-MM de 'desde' até o mês atual */
+function mesesAte(desde: string, ate: string): string[] {
+  const lista: string[] = []
+  let [a, m] = desde.split('-').map(Number)
+  for (;;) {
+    const mes = `${a}-${String(m).padStart(2, '0')}`
+    lista.push(mes)
+    if (mes >= ate) return lista
+    m++
+    if (m > 12) { m = 1; a++ }
+  }
+}
+
+/**
+ * Fechamento por mês e empresa, de todos os meses possíveis (desde a primeira guia dos ZIPs, ou os últimos 6 meses):
+ * guias que o ML pagou (ZIPs) × devido pela nossa conta, cobrança CDIFAL da fatura × calculado nas notas.
+ */
+export async function fechamentoMensal(prisma: PrismaClient, meses = 6): Promise<FechamentoMes[]> {
+  const agora = new Date()
+  const janela = new Date(Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth() - (meses - 1), 1)).toISOString().slice(0, 7)
+  const doZip = primeiroMesZip()
+  const desdeStr = doZip && doZip < janela ? doZip : janela
+  const desde = new Date(`${desdeStr}-01T00:00:00Z`)
+
+  const [cobrancas, notas] = await Promise.all([
+    prisma.difalCobrancaMl.findMany({ where: { periodo: { gte: `${desdeStr}-01` } } }),
+    prisma.difalNota.findMany({
+      // vendas em que nós pagamos a guia e mandamos o comprovante ao ML não são cobrança do ML
+      // só vendas com DIFAL e que o ML recolhe: sem guia nossa (de 20/11/2026 em diante nós pagamos no dia)
+      where: { responsavel: 'ML_PAGA', emitidaEm: { gte: desde }, comprovanteMlEnviadoEm: null, guiaGeradaEm: null, difalCalculado: { gt: 0 } },
+      select: { empresa: true, emitidaEm: true, difalCalculado: true },
+    }),
+  ])
+
+  const mapa = new Map<string, FechamentoMes>()
+  const linha = (mes: string, empresa: string) => {
+    const k = `${mes}|${empresa}`
+    if (!mapa.has(k)) {
+      mapa.set(k, { mes, empresa, cobradoMl: 0, lancamentos: 0, calculado: 0, notas: 0,
+        guiasZip: 0, pagoZip: 0, devidoZip: 0, aMaisZip: 0, encargosZip: 0 })
+    }
+    return mapa.get(k)!
+  }
+  // todos os meses aparecem, para as duas empresas, mesmo sem dado (o mês vazio também é informação)
+  for (const mes of mesesAte(desdeStr, agora.toISOString().slice(0, 7))) for (const emp of Object.keys(CONTA_ML)) linha(mes, emp)
+  for (const h of HISTORICOS) {
+    for (const n of h.dados.notas) {
+      if (n.autuacao) continue // autuação é lançamento do fisco, não DIFAL normal (fica no histórico à parte)
+      const l = linha(n.data.slice(0, 7), h.empresa)
+      l.guiasZip++
+      l.pagoZip += n.difal_pago
+      l.devidoZip += n.difal_devido
+      l.encargosZip += n.encargos
+    }
+  }
+  for (const c of cobrancas) {
+    const l = linha(c.periodo.slice(0, 7), c.empresa)
+    l.cobradoMl += c.valor
+    l.lancamentos++
+  }
+  for (const n of notas) {
+    const l = linha(n.emitidaEm.toISOString().slice(0, 7), n.empresa)
+    l.calculado += n.difalCalculado
+    l.notas++
+  }
+  const r2 = (v: number) => Math.round(v * 100) / 100
+  return [...mapa.values()]
+    .map((l) => ({
+      ...l,
+      cobradoMl: r2(l.cobradoMl), calculado: r2(l.calculado),
+      pagoZip: r2(l.pagoZip), devidoZip: r2(l.devidoZip), aMaisZip: r2(l.pagoZip - l.devidoZip), encargosZip: r2(l.encargosZip),
+    }))
+    .sort((a, b) => b.mes.localeCompare(a.mes) || a.empresa.localeCompare(b.empresa))
+}
