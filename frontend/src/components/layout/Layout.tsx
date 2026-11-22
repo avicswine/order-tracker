@@ -14,9 +14,9 @@ export function Layout({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex min-h-screen bg-slate-50">
       <Sidebar minimizado={minimizado} onToggle={toggle} />
-      <main className={`flex-1 min-h-screen transition-all ${minimizado ? 'ml-16' : 'ml-60'}`}>{children}</main>
+      <main className={`min-h-screen min-w-0 flex-1 transition-[margin] ${minimizado ? 'ml-16' : 'ml-60'}`}>{children}</main>
     </div>
   )
 }
