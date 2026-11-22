@@ -1,6 +1,6 @@
 # STATUS — Order Tracker
 
-Última atualização: 2026-11-20 (DIFAL em produção no portal GNRE; primeira guia real; base pelo valor da NF; pagar no dia da emissão; Fechamento ML com AVIC e AGRO; DIFAL pago no cmvsync)
+Última atualização: 2026-11-22 (padronização visual do painel e do Portal Cliente, PR #33, em produção)
 
 ## Regra de trabalho (definida por José em 2026-11-07)
 
@@ -9,6 +9,28 @@
 que é inferência, nunca apresentar como fato. O motivo: na sessão de 07/11 três
 afirmações minhas sobre políticas do ML caíram quando a fonte foi cobrada, gerando
 retrabalho e custo.
+
+## Padronização visual (22/11/2026, PR #33, em produção)
+
+Todo o painel e o Portal Cliente com a mesma cara. Só visual: nenhuma rota, API, regra ou permissão mudou.
+
+- **Onde mexer no visual** (um lugar só, painel e Portal leem daqui):
+  - `frontend/tailwind.tema.js`: cores (primária azul petróleo `#0E5A6B`, grafite `#1E293B`), 3 sombras, fonte do
+    sistema, transição de 150 ms.
+  - `frontend/src/componentes.css`: botões (`btn-primary`, `btn-secondary`, `btn-outline`, `btn-danger`, `btn-ghost`,
+    `btn-sm`), campos (`input`, `label`, `checkbox`), `card`, `resumo-*`, `tabela` (cabeçalho fixo, zebra, `num` à
+    direita), `selo`, `abas`/`aba`, `segmentos`, `alerta-*`, `estado-vazio`/`estado-carregando`, `janela`, `linha-tempo`.
+  - `frontend/src/lib/estilo.ts`: tons dos selos e a cor de cada status de pedido.
+- **Cores de status** (iguais em todas as telas e no Portal): Faturado âmbar · Em trânsito azul · Entregue verde ·
+  Entregue c/ ocorrência âmbar forte · Ocorrência vermelho · Atrasado laranja · Cancelado **cinza**.
+- **R$ e datas** sempre `R$ 1.234,56`, `21/11/2026`, `21/11/2026 às 14:30` (`formatBRL`, `formatDate`, `formatDateTime`
+  em `frontend/src/lib/utils.ts`). A data da nota no DIFAL continua lida em UTC (`dataBr`).
+- **Celular:** menu lateral escondido, abre pelo botão ☰ (fecha tocando fora, com Esc ou escolhendo a página).
+- **DIFAL:** saiu o visual "futurista" (`difal.css` apagado); usa os componentes padrão.
+- **Separação:** link escondido do menu (app sem uso por enquanto); continua em `/separacao`. O app de Separação
+  **não** foi padronizado (fonte grande e botões altos de propósito para o galpão).
+- **Teste local:** usuários de teste só no banco do PC (Administrador e Visualizador), criados por
+  `backend/src/_usuarios_teste_local.ts` (não versionado); senhas em `backend/.env.usuarios-teste` (ignorado pelo git).
 
 ## Monitor de DIFAL — ESTADO ATUAL (2026-11-20, tudo na `main` e em produção)
 
