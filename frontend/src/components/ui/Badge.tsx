@@ -1,4 +1,5 @@
-import { STATUS_COLORS, STATUS_DOT, STATUS_LABELS } from '../../lib/utils'
+import { STATUS_LABELS, STATUS_TOM, TOM_OCORRENCIA, TOM_ENTREGUE_COM_OCORRENCIA } from '../../lib/utils'
+import { TOM, seloTom } from '../../lib/estilo'
 import type { OrderStatus } from '../../types'
 
 interface BadgeProps {
@@ -24,8 +25,8 @@ export function StatusBadge({ status, hasOccurrence, lastTracking }: BadgeProps)
   // Entregue, mas teve ocorrência no caminho → "Entregue" em âmbar (resolvido com problema)
   if (status === 'DELIVERED' && hasOccurrence) {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium bg-amber-100 text-amber-800 border-amber-200" title="Entregue após ocorrência no transporte">
-        <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+      <span className={seloTom(TOM_ENTREGUE_COM_OCORRENCIA)} title="Entregue após ocorrência no transporte">
+        <span className={`selo-ponto ${TOM[TOM_ENTREGUE_COM_OCORRENCIA].ponto}`} />
         Entregue (c/ ocorrência)
       </span>
     )
@@ -34,18 +35,16 @@ export function StatusBadge({ status, hasOccurrence, lastTracking }: BadgeProps)
   // Ocorrência ativa (não entregue) → vermelho com o tipo
   if (hasOccurrence) {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium bg-red-100 text-red-800 border-red-200">
-        <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+      <span className={seloTom(TOM_OCORRENCIA)}>
+        <span className={`selo-ponto ${TOM[TOM_OCORRENCIA].ponto}`} />
         {occurrenceLabel(lastTracking)}
       </span>
     )
   }
 
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium ${STATUS_COLORS[status]}`}
-    >
-      <span className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT[status]}`} />
+    <span className={seloTom(STATUS_TOM[status])}>
+      <span className={`selo-ponto ${TOM[STATUS_TOM[status]].ponto}`} />
       {STATUS_LABELS[status]}
     </span>
   )

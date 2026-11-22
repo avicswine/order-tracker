@@ -1,0 +1,125 @@
+/*
+ * Componentes visuais padrão do Order Tracker (painel e Portal Cliente).
+ * Cores, sombras e fonte vêm de tailwind.tema.js. Só visual: nada aqui muda comportamento.
+ */
+
+@layer base {
+  body {
+    @apply bg-slate-50 font-sans text-slate-900 antialiased;
+  }
+  h1 { @apply text-2xl font-bold text-slate-900; }
+  h2 { @apply text-lg font-semibold text-slate-900; }
+  /* foco visível igual em tudo que recebe teclado */
+  :focus-visible { @apply outline-none ring-2 ring-primaria-500 ring-offset-2; }
+}
+
+@layer components {
+  /* ---------- botões: primário, secundário, contorno, perigo, só texto; tamanho normal e pequeno ---------- */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium transition
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primaria-500 focus-visible:ring-offset-2
+           disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-sm { @apply px-3 py-1.5 text-xs; }
+  .btn-primary { @apply btn bg-primaria-600 text-white hover:bg-primaria-700; }
+  .btn-secondary { @apply btn border border-slate-300 bg-white text-slate-700 hover:bg-slate-50; }
+  .btn-outline { @apply btn border border-primaria-600 bg-white text-primaria-700 hover:bg-primaria-50; }
+  .btn-danger { @apply btn bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-500; }
+  .btn-ghost { @apply btn text-slate-600 hover:bg-slate-100 hover:text-slate-900; }
+  /* botão só com ícone (fechar, engrenagem…) */
+  .btn-icone { @apply inline-flex items-center justify-center rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700; }
+
+  /* ---------- formulários ---------- */
+  .input {
+    @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-cartao transition
+           placeholder:text-slate-400 focus:border-primaria-500 focus:outline-none focus:ring-1 focus:ring-primaria-500
+           disabled:cursor-not-allowed disabled:bg-slate-100;
+  }
+  .input-sm { @apply px-2.5 py-1.5 text-xs; }
+  .label { @apply mb-1 block text-sm font-medium text-slate-700; }
+  .checkbox { @apply h-4 w-4 rounded border-slate-300 text-primaria-600 focus:ring-primaria-500; }
+  /* barra de filtros acima das tabelas */
+  .barra-filtros { @apply flex flex-wrap items-end gap-3 border-b border-slate-200 bg-white px-4 py-3; }
+
+  /* ---------- cartões, títulos de página e de seção ---------- */
+  .card { @apply rounded-lg border border-slate-200 bg-white shadow-cartao; }
+  .card-cabecalho { @apply flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3; }
+  .pagina { @apply mx-auto max-w-[1600px] space-y-6 p-4 sm:p-6; }
+  .pagina-titulo { @apply text-2xl font-bold text-slate-900; }
+  .pagina-subtitulo { @apply mt-1 text-sm text-slate-500; }
+  .secao-titulo { @apply text-base font-semibold text-slate-900; }
+
+  /* cards de resumo (totais, atrasados, pendentes) */
+  .resumo { @apply rounded-lg border border-slate-200 bg-white p-4 shadow-cartao transition; }
+  .resumo-rotulo { @apply text-xs font-medium uppercase tracking-wide text-slate-500; }
+  .resumo-valor { @apply mt-1 text-2xl font-bold tabular-nums text-slate-900; }
+  .resumo-detalhe { @apply mt-1 text-xs text-slate-500; }
+  .resumo-clicavel { @apply cursor-pointer hover:border-primaria-300 hover:shadow-suspenso; }
+  .resumo-ativo { @apply border-primaria-500 ring-1 ring-primaria-500; }
+
+  /* ---------- tabelas ---------- */
+  .tabela-caixa { @apply overflow-x-auto; }
+  .tabela { @apply w-full text-sm; }
+  .tabela thead th {
+    @apply sticky top-0 z-10 whitespace-nowrap border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500;
+  }
+  .tabela tbody tr { @apply border-b border-slate-100 transition-colors; }
+  .tabela tbody tr:nth-child(even) { @apply bg-slate-50/60; }
+  .tabela tbody tr:hover { @apply bg-primaria-50/70; }
+  .tabela td { @apply px-4 py-2.5 align-middle text-slate-700; }
+  /* números e valores: à direita, algarismos da mesma largura */
+  .num { @apply text-right tabular-nums; }
+
+  /* ---------- selos de status (sempre o mesmo formato; a cor vem de lib/estilo.ts) ---------- */
+  .selo { @apply inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-medium; }
+  .selo-ponto { @apply h-1.5 w-1.5 flex-shrink-0 rounded-full; }
+
+  /* ---------- abas ---------- */
+  .abas { @apply flex gap-1 overflow-x-auto border-b border-slate-200; }
+  .aba { @apply -mb-px whitespace-nowrap border-b-2 border-transparent px-4 py-2.5 text-sm font-medium text-slate-500 transition hover:text-slate-800; }
+  .aba-ativa { @apply border-primaria-600 text-primaria-700; }
+
+  /* ---------- alertas (faixas de aviso) ---------- */
+  .alerta { @apply rounded-lg border px-4 py-3 text-sm; }
+  .alerta-info { @apply alerta border-primaria-200 bg-primaria-50 text-primaria-800; }
+  .alerta-ok { @apply alerta border-emerald-200 bg-emerald-50 text-emerald-800; }
+  .alerta-aviso { @apply alerta border-amber-200 bg-amber-50 text-amber-900; }
+  .alerta-erro { @apply alerta border-red-200 bg-red-50 text-red-800; }
+
+  /* ---------- estados: vazio, carregando, erro ---------- */
+  .estado-vazio { @apply flex flex-col items-center justify-center gap-2 px-4 py-12 text-center text-sm text-slate-500; }
+  .estado-carregando { @apply flex items-center justify-center gap-3 px-4 py-12 text-sm text-slate-500; }
+  .estado-erro { @apply mx-4 my-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-center text-sm text-red-800; }
+
+  /* ---------- janelas (modal) e menus suspensos ---------- */
+  .janela-fundo { @apply absolute inset-0 bg-slate-900/50 backdrop-blur-sm; }
+  .janela { @apply relative z-10 w-full rounded-lg bg-white shadow-janela animar-entrada; }
+  .suspenso { @apply rounded-lg border border-slate-200 bg-white shadow-suspenso; }
+
+  /* ---------- linha do tempo / histórico ---------- */
+  .linha-tempo { @apply relative space-y-4 border-l-2 border-slate-200 pl-5; }
+  .linha-tempo-item { @apply relative; }
+  .linha-tempo-ponto { @apply absolute -left-[27px] top-1 h-3 w-3 rounded-full border-2 border-white bg-slate-300 ring-1 ring-slate-200; }
+  .linha-tempo-ponto-atual { @apply bg-primaria-600 ring-primaria-200; }
+  .linha-tempo-data { @apply text-xs text-slate-500; }
+  .linha-tempo-texto { @apply text-sm text-slate-800; }
+}
+
+@layer utilities {
+  /* entrada de janela: aparece em 150 ms, sem exagero */
+  .animar-entrada { animation: animar-entrada 150ms ease both; }
+}
+
+@keyframes animar-entrada {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* quem pede menos movimento no sistema não vê animação nem transição */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
