@@ -39,8 +39,6 @@
   .input-sm { @apply px-2.5 py-1.5 text-xs; }
   .label { @apply mb-1 block text-sm font-medium text-slate-700; }
   .checkbox { @apply h-4 w-4 rounded border-slate-300 text-primaria-600 focus:ring-primaria-500; }
-  /* barra de filtros acima das tabelas */
-  .barra-filtros { @apply flex flex-wrap items-end gap-3 border-b border-slate-200 bg-white px-4 py-3; }
 
   /* ---------- cartões, títulos de página e de seção ---------- */
   .card { @apply rounded-lg border border-slate-200 bg-white shadow-cartao; }
@@ -99,12 +97,10 @@
   /* ---------- estados: vazio, carregando, erro ---------- */
   .estado-vazio { @apply flex flex-col items-center justify-center gap-2 px-4 py-12 text-center text-sm text-slate-500; }
   .estado-carregando { @apply flex items-center justify-center gap-3 px-4 py-12 text-sm text-slate-500; }
-  .estado-erro { @apply mx-4 my-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-center text-sm text-red-800; }
 
   /* ---------- janelas (modal) e menus suspensos ---------- */
   .janela-fundo { @apply absolute inset-0 bg-slate-900/50 backdrop-blur-sm; }
   .janela { @apply relative z-10 max-h-[calc(100vh-2rem)] w-full overflow-y-auto rounded-lg bg-white shadow-janela animar-entrada; }
-  .suspenso { @apply rounded-lg border border-slate-200 bg-white shadow-suspenso; }
 
   /* ---------- linha do tempo / histórico ---------- */
   .linha-tempo { @apply relative space-y-4 border-l-2 border-slate-200 pl-5; }
