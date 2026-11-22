@@ -45,6 +45,11 @@ export function formatDateTime(date: string | null | undefined) {
   return formatDate(date, "dd/MM/yyyy 'às' HH:mm")
 }
 
+/** dinheiro sempre como R$ 1.234,56 */
+export function formatBRL(valor: number | null | undefined) {
+  return (valor ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
+
 export const STATUS_LABELS: Record<OrderStatus, string> = {
   PENDING: 'Faturado',
   IN_TRANSIT: 'Em Trânsito',

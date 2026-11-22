@@ -5,6 +5,7 @@ import { Modal } from '../components/ui/Modal'
 import { Spinner } from '../components/ui/Spinner'
 import { useAuth } from '../contexts/AuthContext'
 import type { Pendencia, PendenciaStatus, PendenciaTipo, PendenciaLookupOrder } from '../types'
+import { formatDate, formatDateTime } from '../lib/utils'
 
 const EMPRESA_LABEL: Record<string, string> = {
   '47715256000149': 'AVIC',
@@ -84,9 +85,6 @@ const STATUS_BADGE: Record<PendenciaStatus, string> = {
   RESOLVIDA: 'bg-green-100 text-green-700',
 }
 
-function fmtData(iso: string) {
-  return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })
-}
 
 // Sigla da empresa a partir do CNPJ, aceitando formatado ou só dígitos
 function empresaSigla(cnpj: string | null): string | null {
@@ -111,7 +109,7 @@ function PrazoMl({ p }: { p: Pendencia }) {
   const cor = horas <= 0 ? 'text-red-600 font-bold' : horas <= 24 ? 'text-red-600 font-semibold' : horas <= 48 ? 'text-amber-600 font-semibold' : 'text-gray-500'
   const texto = horas <= 0
     ? 'prazo ML vencido!'
-    : `ML até ${prazo.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} ${prazo.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+    : `ML até ${formatDateTime(p.mlDueDate)}`
   return <div className={`text-[10px] leading-tight mt-0.5 whitespace-nowrap ${cor}`} title="Prazo máximo para responder ao Mercado Livre">⏳ {texto}</div>
 }
 
@@ -460,14 +458,14 @@ export function PendenciasPage() {
                         <span className="text-gray-600">{p.responsavel ?? '—'}</span>
                       )}
                     </td>
-                    <td className="px-2 py-2 text-gray-500 whitespace-nowrap">{fmtData(p.createdAt)}</td>
+                    <td className="px-2 py-2 text-gray-500 whitespace-nowrap">{formatDate(p.createdAt)}</td>
                     <td className="px-2 py-2 whitespace-nowrap"><DiasBadge p={p} /></td>
                     <td className="px-2 py-2 text-gray-500 min-w-[180px]">
                       {notasReais.length > 0 ? (
                         <div
                           className="text-xs leading-snug"
                           style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
-                          title={notasReais.map((n) => `${fmtData(n.createdAt)} — ${n.texto}`).join('\n')}
+                          title={notasReais.map((n) => `${formatDate(n.createdAt)} — ${n.texto}`).join('\n')}
                         >
                           💬{notasReais.length > 1 ? ` (${notasReais.length})` : ''} {notasReais[0].texto}
                         </div>
@@ -506,7 +504,7 @@ export function PendenciasPage() {
                           </button>
                         )}
                         {p.status === 'RESOLVIDA' && (
-                          <span className="text-[11px] text-green-600 font-medium">✓ {p.resolvedAt ? fmtData(p.resolvedAt) : ''}</span>
+                          <span className="text-[11px] text-green-600 font-medium">✓ {p.resolvedAt ? formatDate(p.resolvedAt) : ''}</span>
                         )}
                         {canWrite && (
                           <button
@@ -689,7 +687,7 @@ function InboxMlModal({ conversas, erros, onClose }: { conversas: MlConversa[]; 
                       }`}>
                         <p className="whitespace-pre-wrap">{m.texto}</p>
                         <p className="mt-0.5 text-[10px] opacity-60">
-                          {m.de === 'vendedor' ? 'Você' : c.comprador}{m.data ? ` · ${new Date(m.data).toLocaleString('pt-BR')}` : ''}
+                          {m.de === 'vendedor' ? 'Você' : c.comprador}{m.data ? ` · ${formatDateTime(m.data)}` : ''}
                         </p>
                       </div>
                     ))}
@@ -757,7 +755,7 @@ function MensagensMlModal({ pendencia, onClose }: { pendencia: Pendencia; onClos
                 <div key={i} className={`rounded-lg px-3 py-2 text-sm ${de.cor} ${m.de === 'vendedor' ? 'ml-8' : 'mr-8'}`}>
                   <p className="whitespace-pre-wrap">{m.texto}</p>
                   <p className="mt-1 text-[10px] opacity-70">
-                    {de.nome}{m.data ? ` · ${new Date(m.data).toLocaleString('pt-BR')}` : ''}
+                    {de.nome}{m.data ? ` · ${formatDateTime(m.data)}` : ''}
                   </p>
                 </div>
               )
@@ -1023,7 +1021,7 @@ function DetalheModal({ pendencia, canWrite, onClose, onStatus, onResponsavel }:
           <div><span className="text-gray-500">Cliente:</span> <span className="font-medium">{pendencia.customerName}</span></div>
           <div><span className="text-gray-500">Empresa:</span> {empresaSigla(pendencia.senderCnpj) ?? '—'}</div>
           <div><span className="text-gray-500">Origem:</span> {ORIGEM_LABEL[pendencia.origem]}</div>
-          <div><span className="text-gray-500">Criada em:</span> {fmtData(pendencia.createdAt)}</div>
+          <div><span className="text-gray-500">Criada em:</span> {formatDate(pendencia.createdAt)}</div>
           <div className="col-span-2 flex items-center gap-2">
             <span className="text-gray-500">Responsável:</span>
             {canWrite ? (
@@ -1049,9 +1047,9 @@ function DetalheModal({ pendencia, canWrite, onClose, onStatus, onResponsavel }:
                   <b>Rastreio:</b> {pendencia.order.lastTracking ?? 'sem movimentação'}
                   <div className="mt-0.5 text-[11px] text-gray-400">
                     {pendencia.order.orderNumber}
-                    {pendencia.order.shippedAt && ` · envio ${fmtData(pendencia.order.shippedAt)}`}
-                    {pendencia.order.estimatedDelivery && ` · previsão ${fmtData(pendencia.order.estimatedDelivery)}`}
-                    {pendencia.order.deliveredAt && ` · entregue ${fmtData(pendencia.order.deliveredAt)}`}
+                    {pendencia.order.shippedAt && ` · envio ${formatDate(pendencia.order.shippedAt)}`}
+                    {pendencia.order.estimatedDelivery && ` · previsão ${formatDate(pendencia.order.estimatedDelivery)}`}
+                    {pendencia.order.deliveredAt && ` · entregue ${formatDate(pendencia.order.deliveredAt)}`}
                   </div>
                 </div>
                 <button
@@ -1072,7 +1070,7 @@ function DetalheModal({ pendencia, canWrite, onClose, onStatus, onResponsavel }:
                           <span className={`mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full ${i === 0 ? 'bg-blue-600' : 'bg-gray-300'}`} />
                           <div>
                             <p className={i === 0 ? 'font-medium text-gray-800' : 'text-gray-600'}>{e.description}</p>
-                            {e.date && <p className="text-[10px] text-gray-400">{new Date(e.date).toLocaleString('pt-BR')}</p>}
+                            {e.date && <p className="text-[10px] text-gray-400">{formatDateTime(e.date)}</p>}
                           </div>
                         </li>
                       ))}
@@ -1149,7 +1147,7 @@ function DetalheModal({ pendencia, canWrite, onClose, onStatus, onResponsavel }:
                 <div key={n.id} className="rounded-lg bg-gray-50 px-3 py-2">
                   <p className="text-sm text-gray-700 whitespace-pre-wrap">{n.texto}</p>
                   <p className="mt-1 text-xs text-gray-400">
-                    {new Date(n.createdAt).toLocaleString('pt-BR')}{n.autor ? ` · ${n.autor}` : ''}
+                    {formatDateTime(n.createdAt)}{n.autor ? ` · ${n.autor}` : ''}
                   </p>
                 </div>
               ))}

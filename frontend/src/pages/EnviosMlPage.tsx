@@ -1,17 +1,10 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { mlApi, type MlEnvio, type MlEnviosCiclo } from '../lib/api'
+import { formatDate, formatDateTime } from '../lib/utils'
 
 const EMPRESA_LABEL: Record<string, string> = { avic: 'AVIC', agro: 'Agrogranja', equi: 'Equipage' }
 
-function data(s: string | null) {
-  if (!s) return '—'
-  return new Date(s).toLocaleDateString('pt-BR')
-}
-function dataHora(s: string | null) {
-  if (!s) return '—'
-  return new Date(s).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
-}
 
 /** O que falta avisar ao ML neste pedido. */
 function pendencia(e: MlEnvio): 'nada' | 'shipped' | 'delivered' | 'ambos' {
@@ -49,9 +42,9 @@ function PrazoMl({ e }: { e: MlEnvio }) {
     ? (entregue ? 'bg-red-50 text-red-600' : 'bg-red-100 text-red-700')
     : dias === 0 ? 'bg-amber-50 text-amber-700' : 'bg-gray-50 text-gray-500'
   const texto = dias > 0
-    ? `${data(e.mlPromessaEntrega)} · ${entregue ? `atrasou ${dias}d` : `venceu há ${dias}d`}`
-    : dias === 0 ? `${data(e.mlPromessaEntrega)} · vence hoje`
-    : `${data(e.mlPromessaEntrega)} · faltam ${-dias}d`
+    ? `${formatDate(e.mlPromessaEntrega)} · ${entregue ? `atrasou ${dias}d` : `venceu há ${dias}d`}`
+    : dias === 0 ? `${formatDate(e.mlPromessaEntrega)} · vence hoje`
+    : `${formatDate(e.mlPromessaEntrega)} · faltam ${-dias}d`
 
   return <span title="Prazo prometido pelo ML ao comprador"><Selo texto={texto} cor={cor} /></span>
 }
@@ -237,14 +230,14 @@ export function EnviosMlPage() {
                       <td className="px-3 py-2 max-w-[15rem] truncate" title={e.customerName}>{e.customerName}</td>
                       <td className="px-3 py-2 whitespace-nowrap">
                         {e.status === 'DELIVERED'
-                          ? <Selo texto={`entregue ${data(e.deliveredAt)}`} cor="bg-green-50 text-green-700" />
+                          ? <Selo texto={`entregue ${formatDate(e.deliveredAt)}`} cor="bg-green-50 text-green-700" />
                           : e.status === 'IN_TRANSIT'
-                            ? <Selo texto={`em trânsito ${data(e.shippedAt)}`} cor="bg-blue-50 text-blue-700" />
+                            ? <Selo texto={`em trânsito ${formatDate(e.shippedAt)}`} cor="bg-blue-50 text-blue-700" />
                             : <Selo texto={e.status === 'PENDING' ? 'aguardando CT-e' : 'cancelado'} cor="bg-gray-100 text-gray-500" />}
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap"><PrazoMl e={e} /></td>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-500">{dataHora(e.mlShippedNotifiedAt)}</td>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-500">{dataHora(e.mlDeliveredNotifiedAt)}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-500">{formatDateTime(e.mlShippedNotifiedAt)}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-500">{formatDateTime(e.mlDeliveredNotifiedAt)}</td>
                       <td className="px-3 py-2">
                         {e.mlEnvioErro
                           ? <span className="text-red-600" title={e.mlEnvioErro}>erro: {e.mlEnvioErro.slice(0, 60)}</span>

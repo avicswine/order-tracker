@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
 import { carriersApi } from '../lib/api'
 import type { CarrierRanking, DelayedOrderInfo } from '../types'
+import { formatBRL, formatDate } from '../lib/utils'
 
 type SortKey = 'total' | 'delayed' | 'delayRate' | 'deliveryRate' | 'totalNfValue' | 'avgDeliveryDays' | 'occurrences' | 'occurrenceRate'
 
@@ -10,9 +11,6 @@ function pct(value: number) {
   return `${(value * 100).toFixed(1)}%`
 }
 
-function formatBRL(value: number) {
-  return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-}
 
 function DelayBar({ rate }: { rate: number }) {
   const pctVal = Math.min(rate * 100, 100)
@@ -45,10 +43,6 @@ function SortButton({ label, sortKey, current, onSort }: {
   )
 }
 
-function fmtDate(iso: string | null | undefined) {
-  if (!iso) return '—'
-  return new Date(iso).toLocaleDateString('pt-BR')
-}
 
 function buildOrderTrackingUrl(
   trackingSystem: string,
@@ -146,10 +140,10 @@ function DelayedCell({ count, orders, trackingSystem, trackingIdentifier }: { co
               </div>
               <p className="text-gray-200 mt-1">{o.customerName}</p>
               <div className="flex gap-4 mt-1 text-gray-400">
-                <span className="whitespace-nowrap">Envio: {fmtDate(o.shippedAt)}</span>
-                <span className="whitespace-nowrap">Previsão: {fmtDate(o.estimatedDelivery)}</span>
+                <span className="whitespace-nowrap">Envio: {formatDate(o.shippedAt)}</span>
+                <span className="whitespace-nowrap">Previsão: {formatDate(o.estimatedDelivery)}</span>
                 {o.deliveredAt && (
-                  <span className="whitespace-nowrap">Entregue: {fmtDate(o.deliveredAt)}</span>
+                  <span className="whitespace-nowrap">Entregue: {formatDate(o.deliveredAt)}</span>
                 )}
               </div>
             </div>

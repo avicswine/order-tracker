@@ -10,6 +10,7 @@ import './difal.css'
 import { StatusBadge } from '../components/ui/Badge'
 import { OrderDetailModal } from '../components/orders/OrderDetailModal'
 import { ordersApi } from '../lib/api'
+import { formatBRL as brl, formatDate, formatDateTime } from '../lib/utils'
 import type { Order } from '../types'
 
 // Ícones simples desenhados aqui mesmo (sem biblioteca nova)
@@ -171,10 +172,6 @@ function tipoDocPreferido(r: DifalReceitaUf): string | undefined {
   return ['10', '22', '24'].find((t) => aceitos.includes(t)) ?? aceitos[0]
 }
 
-function brl(v: number | null | undefined) {
-  return (v ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-}
-
 // busca da lista: sem diferença de acento nem maiúscula; todas as palavras digitadas precisam aparecer
 const semAcento = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
 function bateBusca(busca: string, g: { empresa: string; nfNumero: string; clienteNome: string; clienteUf: string; canal: string | null; mlLogistica: string | null; mlOrderId: string | null; itens: DifalItemNota[] | null }, extra: (string | null | undefined)[] = []) {
@@ -326,7 +323,7 @@ function Vendas({ lugarCards }: { lugarCards: HTMLElement | null }) {
       onClick={() => importar.mutate()}
       disabled={importando}
       title={`Atualizar do Bling: busca as notas dos últimos 90 dias e calcula o DIFAL por NCM e estado (só leitura no Bling).${
-        !importando && resumoImportacao ? `\nÚltima importação (${new Date(terminadaEm!).toLocaleString('pt-BR')}): ${resumoImportacao}` : ''}`}
+        !importando && resumoImportacao ? `\nÚltima importação (${formatDateTime(terminadaEm)}): ${resumoImportacao}` : ''}`}
       aria-label="Atualizar do Bling"
       className="difal-btn ml-auto inline-flex h-9 items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-sky-500 px-2.5 text-sm font-medium text-white shadow-md shadow-indigo-500/30 hover:from-indigo-500 hover:to-sky-400 disabled:opacity-60"
     >
@@ -779,7 +776,7 @@ function CelulasEnvio({ envio, envioMl }: { envio: DifalGuiaPendente['envio']; e
     const [texto, cor] = envioMl.substatus === 'out_for_delivery'
       ? ['Saiu para entrega', 'bg-sky-100 text-sky-800']
       : STATUS_ENVIO_ML[envioMl.status] ?? [envioMl.status, 'bg-slate-100 text-slate-600']
-    const lido = envioMl.lidoEm ? `rastreio do ML · lido em ${new Date(envioMl.lidoEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}` : 'rastreio do ML'
+    const lido = envioMl.lidoEm ? `rastreio do ML · lido em ${formatDateTime(envioMl.lidoEm)}` : 'rastreio do ML'
     return (
       <>
         <td className="px-2 py-2.5 text-xs text-slate-600">
@@ -788,7 +785,7 @@ function CelulasEnvio({ envio, envioMl }: { envio: DifalGuiaPendente['envio']; e
         </td>
         <td className="px-2 py-2.5"><span className={`rounded-full px-2.5 py-1 text-xs font-medium ${cor}`}>{texto}</span></td>
         <td className="px-2 py-2.5 text-xs text-slate-400">—</td>
-        <td className="px-2 py-2.5 text-xs text-slate-600">{envioMl.previsao ? new Date(envioMl.previsao).toLocaleDateString('pt-BR') : '—'}</td>
+        <td className="px-2 py-2.5 text-xs text-slate-600">{formatDate(envioMl.previsao)}</td>
       </>
     )
   }
@@ -1170,7 +1167,7 @@ function LotesGnre() {
                       {g.devolvida && <span className="mr-1 rounded bg-slate-800 px-1.5 py-0.5 font-semibold text-white">devolvida à fila · NÃO PAGAR</span>}
                       <span className={g.devolvida ? 'text-slate-400 line-through' : g.situacaoGuia === '0' ? 'text-emerald-700' : 'text-red-700'}>{g.situacaoTexto}</span>
                       {' · '}{g.identificadorGuia ? `NF ${g.identificadorGuia}` : g.ufFavorecida}
-                      {g.valorGNRE && <> · R$ {g.valorGNRE}</>}
+                      {g.valorGNRE && <> · {brl(Number(g.valorGNRE))}</>}
                       {g.dataLimitePagamento && <> · pagar até {g.dataLimitePagamento}</>}
                       {g.linhaDigitavel && <> · linha digitável <code className="select-all break-all rounded bg-white px-1 py-0.5 ring-1 ring-slate-200">{g.linhaDigitavel}</code></>}
                       {g.motivos.map((m) => <span key={m.codigo} className="text-red-700"> · {m.codigo} {m.descricao}{m.campo ? ` (${m.campo})` : ''}</span>)}
@@ -1220,7 +1217,7 @@ function RotinaDiaria() {
                 Última execução:{' '}
                 {r.ultimaExecucao ? (
                   <b className={r.ultimaExecucao.ok ? 'text-emerald-700' : 'text-rose-700'}>
-                    {new Date(r.ultimaExecucao.em).toLocaleString('pt-BR')} · {r.ultimaExecucao.ok ? 'ok' : 'FALHOU'} · {r.ultimaExecucao.enviadaWhatsapp ? 'WhatsApp enviado' : 'WhatsApp NÃO enviado'} — {r.ultimaExecucao.resumo}
+                    {formatDateTime(r.ultimaExecucao.em)} · {r.ultimaExecucao.ok ? 'ok' : 'FALHOU'} · {r.ultimaExecucao.enviadaWhatsapp ? 'WhatsApp enviado' : 'WhatsApp NÃO enviado'} — {r.ultimaExecucao.resumo}
                   </b>
                 ) : <b>nenhuma desde o último deploy</b>}
               </li>

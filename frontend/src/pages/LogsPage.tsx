@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import api from '../lib/api'
+import { formatDateTime } from '../lib/utils'
 
 interface Notification {
   id: string
@@ -34,10 +35,6 @@ const CHANNEL_STYLE = {
   EMAIL:    { bg: 'bg-blue-100 text-blue-700',   icon: '✉️' },
 }
 
-function formatDateTime(iso: string) {
-  const d = new Date(iso)
-  return `${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
-}
 
 function formatPhone(r: string | null) {
   if (!r) return '—'
