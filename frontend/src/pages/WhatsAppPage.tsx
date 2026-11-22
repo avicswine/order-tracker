@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../lib/api'
+import { TOM, seloTom, type Tom } from '../lib/estilo'
 
 type WppStatus = 'iniciando' | 'qr' | 'conectando' | 'pronto' | 'desconectado'
 
@@ -17,12 +18,12 @@ const COMPANY_LABELS: Record<string, string> = {
   agro: 'Agrogranja',
 }
 
-const STATUS_CONFIG: Record<WppStatus, { label: string; color: string; dot: string }> = {
-  iniciando:    { label: 'Iniciando…',    color: 'text-gray-500',  dot: 'bg-gray-400' },
-  qr:           { label: 'Aguardando QR', color: 'text-amber-600', dot: 'bg-amber-400 animate-pulse' },
-  conectando:   { label: 'Conectando…',   color: 'text-blue-600',  dot: 'bg-blue-400 animate-pulse' },
-  pronto:       { label: 'Conectado',     color: 'text-green-600', dot: 'bg-green-500' },
-  desconectado: { label: 'Desconectado',  color: 'text-red-500',   dot: 'bg-red-400' },
+const STATUS_CONFIG: Record<WppStatus, { label: string; tom: Tom; piscando?: boolean }> = {
+  iniciando:    { label: 'Iniciando…',    tom: 'cinza' },
+  qr:           { label: 'Aguardando QR', tom: 'ambar', piscando: true },
+  conectando:   { label: 'Conectando…',   tom: 'azul', piscando: true },
+  pronto:       { label: 'Conectado',     tom: 'verde' },
+  desconectado: { label: 'Desconectado',  tom: 'vermelho' },
 }
 
 function WppCard({ company, data }: { company: 'avic' | 'agro'; data: WppInstanceStatus }) {
@@ -39,31 +40,31 @@ function WppCard({ company, data }: { company: 'avic' | 'agro'; data: WppInstanc
   })
 
   return (
-    <div className="card p-6 space-y-5">
+    <div className="card space-y-5 p-6">
       {/* Cabeçalho */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-gray-800">{COMPANY_LABELS[company]}</h2>
+          <h2 className="text-lg font-semibold">{COMPANY_LABELS[company]}</h2>
           {data.numero && (
-            <p className="text-sm text-gray-500 mt-0.5 font-mono">{data.numero}</p>
+            <p className="text-sm text-slate-500 mt-0.5 font-mono">{data.numero}</p>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          <div className={`w-2.5 h-2.5 rounded-full ${cfg.dot}`} />
-          <span className={`text-sm font-medium ${cfg.color}`}>{cfg.label}</span>
+        <div className={seloTom(cfg.tom)}>
+          <span className={`selo-ponto ${TOM[cfg.tom].ponto} ${cfg.piscando ? 'animate-pulse' : ''}`} />
+          {cfg.label}
         </div>
       </div>
 
       {/* QR Code */}
       {data.status === 'qr' && data.qr && (
         <div className="flex flex-col items-center gap-3 py-2">
-          <p className="text-sm text-gray-600 text-center">
+          <p className="text-sm text-slate-600 text-center">
             Abra o WhatsApp no celular → <strong>Dispositivos conectados</strong> → <strong>Conectar dispositivo</strong> → escaneie o QR abaixo:
           </p>
           <img
             src={data.qr}
             alt="QR Code WhatsApp"
-            className="w-52 h-52 border-2 border-gray-200 rounded-lg"
+            className="w-52 h-52 border-2 border-slate-200 rounded-lg"
           />
         </div>
       )}
@@ -71,15 +72,15 @@ function WppCard({ company, data }: { company: 'avic' | 'agro'; data: WppInstanc
       {/* Estado vazio */}
       {(data.status === 'iniciando' || data.status === 'conectando') && (
         <div className="text-center py-4">
-          <div className="inline-block w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm text-gray-500 mt-2">
+          <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-primaria-600 border-t-transparent" />
+          <p className="text-sm text-slate-500 mt-2">
             {data.status === 'iniciando' ? 'Iniciando cliente WhatsApp…' : 'Autenticando com o WhatsApp…'}
           </p>
         </div>
       )}
 
       {data.status === 'desconectado' && !data.qr && (
-        <p className="text-sm text-gray-500 text-center py-2">
+        <p className="text-sm text-slate-500 text-center py-2">
           Desconectado. Clique em <strong>Reiniciar</strong> para gerar um novo QR.
         </p>
       )}
@@ -89,14 +90,14 @@ function WppCard({ company, data }: { company: 'avic' | 'agro'; data: WppInstanc
         <button
           onClick={() => restart.mutate()}
           disabled={restart.isPending}
-          className="btn-secondary flex-1 text-sm"
+          className="btn-secondary flex-1"
         >
           {restart.isPending ? 'Reiniciando…' : '🔄 Reiniciar'}
         </button>
         <button
           onClick={() => logout.mutate()}
           disabled={logout.isPending || data.status === 'desconectado'}
-          className="btn-secondary flex-1 text-sm text-red-600 hover:text-red-700 disabled:opacity-40"
+          className="btn-secondary flex-1 text-red-700 hover:bg-red-50"
         >
           {logout.isPending ? 'Deslogando…' : '🚪 Deslogar'}
         </button>
@@ -122,31 +123,31 @@ export function WhatsAppPage() {
   )
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="pagina">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">WhatsApp</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Gerencie as instâncias de envio de notificações</p>
+          <h1 className="pagina-titulo">WhatsApp</h1>
+          <p className="pagina-subtitulo">Gerencie as instâncias de envio de notificações</p>
         </div>
-        <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-gray-600">
+        <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-slate-600">
           <input
             type="checkbox"
             checked={autoRefresh}
             onChange={e => setAutoRefresh(e.target.checked)}
-            className="rounded border-gray-300"
+            className="checkbox"
           />
           Atualizar automaticamente
         </label>
       </div>
 
       {needsAction && (
-        <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-lg px-4 py-3 text-sm">
+        <div className="alerta-aviso">
           ⚠️ Uma ou mais instâncias precisam de atenção — escaneie o QR ou reinicie.
         </div>
       )}
 
       {isLoading ? (
-        <div className="text-center text-gray-400 py-12">Carregando…</div>
+        <div className="estado-carregando">Carregando…</div>
       ) : data ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <WppCard company="avic" data={data.avic} />
@@ -155,8 +156,8 @@ export function WhatsAppPage() {
       ) : null}
 
       <div className="card p-5 space-y-3">
-        <h3 className="font-semibold text-gray-800 text-sm">Como funciona</h3>
-        <ul className="text-sm text-gray-600 space-y-1.5 list-disc list-inside">
+        <h3 className="secao-titulo">Como funciona</h3>
+        <ul className="text-sm text-slate-600 space-y-1.5 list-disc list-inside">
           <li>Notificações são enviadas automaticamente a cada atualização de rastreio</li>
           <li><strong>AVIC</strong> envia via instância AVIC · <strong>Agrogranja</strong> envia via instância AGRO</li>
           <li>Se o número não for celular válido, o envio é feito por <strong>e-mail</strong></li>
