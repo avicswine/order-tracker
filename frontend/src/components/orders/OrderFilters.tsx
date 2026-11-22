@@ -25,7 +25,7 @@ export function OrderFiltersBar({ filters, onChange }: Props) {
       <div className="flex-1 min-w-48">
         <label className="label">Buscar</label>
         <div className="relative">
-          <svg className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
           <input
@@ -105,11 +105,7 @@ export function OrderFiltersBar({ filters, onChange }: Props) {
             <button
               key={days}
               onClick={() => onChange({ ...filters, nfStartDate: active ? undefined : dateStr, page: 1 })}
-              className={`text-sm font-medium px-3 py-1.5 rounded-md border transition-colors ${
-                active
-                  ? 'bg-blue-600 text-white border-blue-600'
-                  : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400 hover:text-blue-600'
-              }`}
+              className={`${active ? 'btn-primary' : 'btn-secondary'} btn-sm`}
             >
               {days} dias
             </button>
@@ -122,7 +118,7 @@ export function OrderFiltersBar({ filters, onChange }: Props) {
         <label className="flex items-center gap-2 cursor-pointer select-none">
           <input
             type="checkbox"
-            className="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+            className="checkbox text-orange-600 focus:ring-orange-500"
             checked={filters.delayed === true}
             onChange={(e) => onChange({ ...filters, delayed: e.target.checked || undefined, page: 1 })}
           />
@@ -135,7 +131,7 @@ export function OrderFiltersBar({ filters, onChange }: Props) {
         <label className="flex items-center gap-2 cursor-pointer select-none">
           <input
             type="checkbox"
-            className="h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
+            className="checkbox text-red-600 focus:ring-red-500"
             checked={filters.hasOccurrence === true}
             onChange={(e) => onChange({ ...filters, hasOccurrence: e.target.checked || undefined, page: 1 })}
           />

@@ -1,3 +1,6 @@
+/* mesmos componentes visuais do painel (botões, campos, selos, linha do tempo…) */
+@import '../../frontend/src/componentes.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

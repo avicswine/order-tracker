@@ -25,11 +25,11 @@ export function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+    <div className="flex min-h-screen items-center justify-center bg-slate-50 p-4">
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="flex items-center gap-3 justify-center mb-8">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primaria-600">
             <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                 d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
@@ -37,16 +37,16 @@ export function LoginPage() {
             </svg>
           </div>
           <div>
-            <p className="text-lg font-bold text-gray-900 leading-tight">OrderTracker</p>
-            <p className="text-xs text-gray-500">Rastreamento de Pedidos</p>
+            <p className="text-lg font-bold leading-tight text-slate-900">OrderTracker</p>
+            <p className="text-xs text-slate-500">Rastreamento de Pedidos</p>
           </div>
         </div>
 
         <div className="card p-8">
-          <h1 className="text-xl font-semibold text-gray-900 mb-6">Entrar</h1>
+          <h1 className="mb-6 text-lg font-semibold">Entrar</h1>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+              <label className="label">Email</label>
               <input
                 type="email"
                 name="email"
@@ -59,7 +59,7 @@ export function LoginPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Senha</label>
+              <label className="label">Senha</label>
               <input
                 type="password"
                 name="password"
@@ -71,9 +71,9 @@ export function LoginPage() {
               />
             </div>
             {error && (
-              <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
+              <p className="alerta-erro">{error}</p>
             )}
-            <button type="submit" className="btn-primary w-full justify-center" disabled={loading}>
+            <button type="submit" className="btn-primary w-full" disabled={loading}>
               {loading ? 'Entrando...' : 'Entrar'}
             </button>
           </form>

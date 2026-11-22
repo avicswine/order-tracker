@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import api from '../lib/api'
+import { formatDateTime } from '../lib/utils'
+import { seloTom, type Tom } from '../lib/estilo'
 
 interface Notification {
   id: string
@@ -30,14 +32,10 @@ const COMPANY_BY_CNPJ: Record<string, string> = {
 }
 
 const CHANNEL_STYLE = {
-  WHATSAPP: { bg: 'bg-green-100 text-green-700', icon: '💬' },
-  EMAIL:    { bg: 'bg-blue-100 text-blue-700',   icon: '✉️' },
+  WHATSAPP: { tom: 'verde' as Tom, icon: '💬' },
+  EMAIL:    { tom: 'primaria' as Tom, icon: '✉️' },
 }
 
-function formatDateTime(iso: string) {
-  const d = new Date(iso)
-  return `${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
-}
 
 function formatPhone(r: string | null) {
   if (!r) return '—'
@@ -67,14 +65,14 @@ export function LogsPage() {
   const totalPages = data?.meta.totalPages ?? 1
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="pagina">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Logs de Notificações</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Histórico de mensagens enviadas aos clientes</p>
+        <h1 className="pagina-titulo">Logs de Notificações</h1>
+        <p className="pagina-subtitulo">Histórico de mensagens enviadas aos clientes</p>
       </div>
 
       {/* Filtros */}
-      <div className="card p-4 flex flex-wrap gap-3 items-end">
+      <div className="card flex flex-wrap items-end gap-3 p-4">
         <div>
           <label className="label">Canal</label>
           <select className="input w-40" value={channel} onChange={e => { setChannel(e.target.value); setPage(1) }}>
@@ -105,59 +103,60 @@ export function LogsPage() {
             Limpar
           </button>
         )}
-        <span className="text-sm text-gray-500 ml-auto self-end">
+        <span className="text-sm text-slate-500 ml-auto self-end">
           {total} registro{total !== 1 ? 's' : ''}
         </span>
       </div>
 
       {/* Tabela */}
       <div className="card overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b border-gray-200">
+        <div className="tabela-caixa">
+        <table className="tabela">
+          <thead>
             <tr>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Data/Hora</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Pedido</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Cliente</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Canal</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Destinatário</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Evento</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
+              <th>Data/Hora</th>
+              <th>Pedido</th>
+              <th>Cliente</th>
+              <th>Canal</th>
+              <th>Destinatário</th>
+              <th>Evento</th>
+              <th>Status</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody>
             {isLoading ? (
-              <tr><td colSpan={7} className="text-center py-12 text-gray-400">Carregando...</td></tr>
+              <tr><td colSpan={7}><div className="estado-carregando">Carregando...</div></td></tr>
             ) : data?.data.length === 0 ? (
-              <tr><td colSpan={7} className="text-center py-12 text-gray-400">Nenhum registro encontrado</td></tr>
+              <tr><td colSpan={7}><div className="estado-vazio">Nenhum registro encontrado</div></td></tr>
             ) : data?.data.map(n => {
               const ch = CHANNEL_STYLE[n.channel]
               const company = n.order.senderCnpj ? COMPANY_BY_CNPJ[n.order.senderCnpj] ?? '' : ''
               return (
-                <tr key={n.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{formatDateTime(n.sentAt)}</td>
-                  <td className="px-4 py-3">
-                    <div className="font-mono font-medium text-gray-800">{n.order.nfNumber ? String(parseInt(n.order.nfNumber, 10)) : n.order.orderNumber}</div>
-                    {company && <div className="text-xs text-gray-400">{company}</div>}
+                <tr key={n.id}>
+                  <td className="text-slate-500 whitespace-nowrap">{formatDateTime(n.sentAt)}</td>
+                  <td>
+                    <div className="font-mono font-medium text-slate-800">{n.order.nfNumber ? String(parseInt(n.order.nfNumber, 10)) : n.order.orderNumber}</div>
+                    {company && <div className="text-xs text-slate-400">{company}</div>}
                   </td>
-                  <td className="px-4 py-3">
-                    <div className="text-gray-700 max-w-[180px] truncate">{n.order.customerName}</div>
+                  <td>
+                    <div className="text-slate-700 max-w-[180px] truncate">{n.order.customerName}</div>
                   </td>
-                  <td className="px-4 py-3">
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ch.bg}`}>
+                  <td>
+                    <span className={seloTom(ch.tom)}>
                       {ch.icon} {n.channel}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-gray-600 font-mono text-xs whitespace-nowrap">
+                  <td className="text-slate-600 font-mono text-xs whitespace-nowrap">
                     {formatPhone(n.recipient)}
                   </td>
-                  <td className="px-4 py-3 max-w-xs">
-                    <p className="text-gray-600 text-xs truncate" title={n.eventText ?? ''}>{n.eventText ?? '—'}</p>
+                  <td className="max-w-xs">
+                    <p className="text-slate-600 text-xs truncate" title={n.eventText ?? ''}>{n.eventText ?? '—'}</p>
                   </td>
-                  <td className="px-4 py-3">
+                  <td>
                     {n.success ? (
-                      <span className="text-xs font-medium text-green-600">✅ Enviado</span>
+                      <span className={seloTom('verde')}>Enviado</span>
                     ) : (
-                      <span className="text-xs font-medium text-red-500" title={n.error ?? ''}>❌ Falhou</span>
+                      <span className={seloTom('vermelho')} title={n.error ?? ''}>Falhou</span>
                     )}
                   </td>
                 </tr>
@@ -165,13 +164,14 @@ export function LogsPage() {
             })}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Paginação */}
       {totalPages > 1 && (
-        <div className="flex justify-center gap-2">
+        <div className="flex flex-wrap justify-center gap-2">
           <button className="btn-secondary" disabled={page === 1} onClick={() => setPage(p => p - 1)}>‹ Anterior</button>
-          <span className="text-sm text-gray-500 self-center">Página {page} de {totalPages}</span>
+          <span className="text-sm text-slate-500 self-center">Página {page} de {totalPages}</span>
           <button className="btn-secondary" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}>Próxima ›</button>
         </div>
       )}

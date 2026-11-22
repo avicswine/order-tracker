@@ -44,25 +44,16 @@ export function formatDateTime(date: string | null | undefined) {
   return formatDate(date, "dd/MM/yyyy 'às' HH:mm")
 }
 
+/** dinheiro sempre como R$ 1.234,56 */
+export function formatBRL(valor: number | null | undefined) {
+  return (valor ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
+
 export const STATUS_LABELS: Record<OrderStatus, string> = {
   PENDING: 'Faturado',
   IN_TRANSIT: 'Em Trânsito',
   DELIVERED: 'Entregue',
   CANCELLED: 'Cancelado',
-}
-
-export const STATUS_COLORS: Record<OrderStatus, string> = {
-  PENDING: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-  IN_TRANSIT: 'bg-blue-100 text-blue-800 border-blue-200',
-  DELIVERED: 'bg-green-100 text-green-800 border-green-200',
-  CANCELLED: 'bg-red-100 text-red-800 border-red-200',
-}
-
-export const STATUS_DOT: Record<OrderStatus, string> = {
-  PENDING: 'bg-yellow-400',
-  IN_TRANSIT: 'bg-blue-500',
-  DELIVERED: 'bg-green-500',
-  CANCELLED: 'bg-red-500',
 }
 
 export function formatCNPJ(value: string) {

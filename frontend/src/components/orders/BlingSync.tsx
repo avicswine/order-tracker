@@ -215,15 +215,16 @@ export function BlingSync() {
     <div className="flex items-center gap-3">
       {/* Modal: importação Bling */}
       {(blingRunning || blingResult || blingError) && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-2xl shadow-2xl p-6 w-80 flex flex-col gap-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="janela-fundo" />
+          <div className="janela flex max-w-sm flex-col gap-4 p-6">
             <div className="flex items-center justify-between">
-              <h3 className="text-base font-semibold text-gray-800">
+              <h3 className="secao-titulo">
                 {blingRunning ? 'Importando do Bling...' : blingError ? 'Erro na importação' : 'Importação concluída'}
               </h3>
               <button
                 onClick={() => { blingEsRef.current?.close(); setBlingRunning(false); closeBlingModal() }}
-                className="text-gray-400 hover:text-gray-600 text-lg leading-none"
+                className="btn-icone text-lg leading-none"
                 title="Fechar"
               >
                 ×
@@ -231,42 +232,42 @@ export function BlingSync() {
             </div>
 
             {blingRunning && !blingProgress && (
-              <p className="text-sm text-gray-500">Conectando ao Bling...</p>
+              <p className="text-sm text-slate-500">Conectando ao Bling...</p>
             )}
 
             {blingProgress && (
-              <div className="text-sm text-gray-600 space-y-1">
-                <p className="font-medium text-gray-700">{blingProgress.company}</p>
+              <div className="text-sm text-slate-600 space-y-1">
+                <p className="font-medium text-slate-700">{blingProgress.company}</p>
                 <p>
-                  <span className="font-medium text-green-600">{blingProgress.criados}</span>
-                  <span className="text-gray-400"> importados · </span>
-                  <span className="text-gray-500">{blingProgress.ignorados}</span>
-                  <span className="text-gray-400"> ignorados</span>
+                  <span className="font-medium text-emerald-600">{blingProgress.criados}</span>
+                  <span className="text-slate-400"> importados · </span>
+                  <span className="text-slate-500">{blingProgress.ignorados}</span>
+                  <span className="text-slate-400"> ignorados</span>
                 </p>
                 {blingProgress.currentNf && (
-                  <p className="text-xs text-gray-400">NF {blingProgress.currentNf}</p>
+                  <p className="text-xs text-slate-400">NF {blingProgress.currentNf}</p>
                 )}
               </div>
             )}
 
             {blingError && (
               <>
-                <p className="text-sm text-red-600">{blingError}</p>
-                <button className="btn-primary text-sm w-full" onClick={closeBlingModal}>Fechar</button>
+                <p className="alerta-erro">{blingError}</p>
+                <button className="btn-primary w-full" onClick={closeBlingModal}>Fechar</button>
               </>
             )}
 
             {blingResult && !blingRunning && (
               <>
-                <div className="text-sm text-gray-700 space-y-1">
+                <div className="text-sm text-slate-700 space-y-1">
                   {blingResult.totalCriados > 0 ? (
-                    <p><span className="font-medium text-green-600">{blingResult.totalCriados}</span> novos pedidos importados</p>
+                    <p><span className="font-medium text-emerald-600">{blingResult.totalCriados}</span> novos pedidos importados</p>
                   ) : (
-                    <p className="text-gray-500">Nenhum pedido novo encontrado</p>
+                    <p className="text-slate-500">Nenhum pedido novo encontrado</p>
                   )}
-                  <p className="text-gray-400 text-xs">{blingResult.totalIgnorados} já existiam (ignorados)</p>
+                  <p className="text-slate-400 text-xs">{blingResult.totalIgnorados} já existiam (ignorados)</p>
                 </div>
-                <button className="btn-primary text-sm w-full" onClick={closeBlingModal}>Fechar</button>
+                <button className="btn-primary w-full" onClick={closeBlingModal}>Fechar</button>
               </>
             )}
           </div>
@@ -275,15 +276,16 @@ export function BlingSync() {
 
       {/* Modal: rastreamento */}
       {(trackingRunning || trackingResult || trackingError) && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-2xl shadow-2xl p-6 w-80 flex flex-col gap-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="janela-fundo" />
+          <div className="janela flex max-w-sm flex-col gap-4 p-6">
             <div className="flex items-center justify-between">
-              <h3 className="text-base font-semibold text-gray-800">
+              <h3 className="secao-titulo">
                 {trackingRunning ? 'Atualizando rastreamento...' : trackingError ? 'Erro no rastreamento' : 'Rastreamento concluído'}
               </h3>
               <button
                 onClick={() => { esRef.current?.close(); setTrackingRunning(false); closeTrackingModal() }}
-                className="text-gray-400 hover:text-gray-600 text-lg leading-none"
+                className="btn-icone text-lg leading-none"
                 title="Cancelar"
               >
                 ×
@@ -291,45 +293,45 @@ export function BlingSync() {
             </div>
 
             {trackingRunning && !trackingProgress && (
-              <p className="text-sm text-gray-500">Conectando...</p>
+              <p className="text-sm text-slate-500">Conectando...</p>
             )}
 
             {trackingProgress && (
               <>
-                <div className="w-full bg-gray-100 rounded-full h-2">
+                <div className="w-full bg-slate-100 rounded-full h-2">
                   <div
-                    className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                    className="h-2 rounded-full bg-primaria-600 transition-[width]"
                     style={{ width: `${Math.round((trackingProgress.current / trackingProgress.total) * 100)}%` }}
                   />
                 </div>
-                <div className="text-sm text-gray-600 space-y-0.5">
+                <div className="text-sm text-slate-600 space-y-0.5">
                   <p className="font-medium">
                     {trackingProgress.current} / {trackingProgress.total}
-                    <span className="text-gray-400 font-normal ml-2">
+                    <span className="text-slate-400 font-normal ml-2">
                       ({Math.round((trackingProgress.current / trackingProgress.total) * 100)}%)
                     </span>
                   </p>
-                  <p className="text-xs text-gray-500 truncate">{trackingProgress.orderNumber}</p>
-                  <p className="text-xs text-gray-400 truncate">{trackingProgress.carrier}</p>
+                  <p className="text-xs text-slate-500 truncate">{trackingProgress.orderNumber}</p>
+                  <p className="text-xs text-slate-400 truncate">{trackingProgress.carrier}</p>
                 </div>
               </>
             )}
 
             {trackingError && (
               <>
-                <p className="text-sm text-red-600">{trackingError}</p>
-                <button className="btn-primary text-sm w-full" onClick={closeTrackingModal}>Fechar</button>
+                <p className="alerta-erro">{trackingError}</p>
+                <button className="btn-primary w-full" onClick={closeTrackingModal}>Fechar</button>
               </>
             )}
 
             {trackingResult && !trackingRunning && (
               <>
-                <div className="text-sm text-gray-700 space-y-1">
-                  <p><span className="font-medium text-green-600">{trackingResult.atualizados}</span> rastreados com sucesso</p>
+                <div className="text-sm text-slate-700 space-y-1">
+                  <p><span className="font-medium text-emerald-600">{trackingResult.atualizados}</span> rastreados com sucesso</p>
                   {trackingResult.erros > 0 && (
-                    <p><span className="font-medium text-red-500">{trackingResult.erros}</span> com erro</p>
+                    <p><span className="font-medium text-red-700">{trackingResult.erros}</span> com erro</p>
                   )}
-                  <p className="text-gray-400 text-xs">Total: {trackingResult.total} pedidos</p>
+                  <p className="text-slate-400 text-xs">Total: {trackingResult.total} pedidos</p>
                 </div>
 
                 {trackingErrorOrders.length > 0 && (
@@ -338,12 +340,12 @@ export function BlingSync() {
                       <span className="text-xs font-medium text-red-600">NFs com erro</span>
                       <button
                         onClick={copyErrors}
-                        className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"
+                        className="text-xs text-slate-500 hover:text-slate-700 flex items-center gap-1"
                       >
                         {copied ? '✓ Copiado' : '📋 Copiar'}
                       </button>
                     </div>
-                    <div className="max-h-40 overflow-y-auto rounded-lg bg-gray-50 border border-gray-100 p-2 space-y-0.5">
+                    <div className="max-h-40 overflow-y-auto rounded-lg bg-slate-50 border border-slate-100 p-2 space-y-0.5">
                       {Object.entries(
                         trackingErrorOrders.reduce<Record<string, string[]>>((acc, o) => {
                           const empresa = o.orderNumber.split('-')[0]
@@ -353,9 +355,9 @@ export function BlingSync() {
                         }, {})
                       ).map(([empresa, nfs]) => (
                         <div key={empresa}>
-                          <p className="text-xs font-semibold text-gray-500 mt-1">{empresa}</p>
+                          <p className="text-xs font-semibold text-slate-500 mt-1">{empresa}</p>
                           {nfs.map((nf) => (
-                            <p key={nf} className="text-xs text-red-500 pl-2">{nf}</p>
+                            <p key={nf} className="pl-2 text-xs text-red-700">{nf}</p>
                           ))}
                         </div>
                       ))}
@@ -363,7 +365,7 @@ export function BlingSync() {
                   </div>
                 )}
 
-                <button className="btn-primary text-sm w-full" onClick={closeTrackingModal}>Fechar</button>
+                <button className="btn-primary w-full" onClick={closeTrackingModal}>Fechar</button>
               </>
             )}
           </div>
@@ -371,7 +373,7 @@ export function BlingSync() {
       )}
 
       {enrichMutation.data && (
-        <span className="text-xs text-gray-500">
+        <span className="text-xs text-slate-500">
           {enrichMutation.data.atualizados} transportadoras vinculadas
         </span>
       )}
@@ -379,7 +381,7 @@ export function BlingSync() {
       {anyConnected && (
         <>
           <button
-            className="btn-secondary text-sm"
+            className="btn-secondary"
             onClick={() => startBlingSync()}
             disabled={anyBusy}
           >
@@ -395,7 +397,7 @@ export function BlingSync() {
           </button>
 
           <button
-            className="btn-secondary text-sm"
+            className="btn-secondary"
             onClick={() => enrichMutation.mutate()}
             disabled={anyBusy}
             title="Busca transportadoras no Bling para pedidos que ainda não têm"
@@ -412,7 +414,7 @@ export function BlingSync() {
           </button>
 
           <button
-            className="btn-secondary text-sm"
+            className="btn-secondary"
             onClick={startTrackingSync}
             disabled={anyBusy}
             title="Consulta status de entrega nas transportadoras"
@@ -435,20 +437,20 @@ export function BlingSync() {
         {companies.map((company) => (
           <div key={company.key} className="relative group">
             {company.connected ? (
-              <div className="flex items-center gap-1 rounded-full bg-green-50 border border-green-200 px-2 py-1">
-                <span className="h-2 w-2 rounded-full bg-green-500" />
-                <span className="text-xs font-medium text-green-700">{company.name}</span>
+              <div className="flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2 py-1">
+                <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                <span className="text-xs font-medium text-emerald-700">{company.name}</span>
                 <button
                   onClick={() => startBlingSync(company.key)}
                   disabled={anyBusy}
-                  className="ml-1 text-green-400 hover:text-blue-500 leading-none disabled:opacity-40"
+                  className="ml-1 text-emerald-400 hover:text-primaria-500 leading-none disabled:opacity-40"
                   title={`Importar só ${company.name}`}
                 >
                   ↓
                 </button>
                 <button
                   onClick={() => disconnectMutation.mutate(company.key)}
-                  className="text-green-400 hover:text-red-500 leading-none"
+                  className="text-emerald-400 hover:text-red-500 leading-none"
                   title="Desconectar"
                 >
                   ×
@@ -457,19 +459,19 @@ export function BlingSync() {
             ) : company.configured ? (
               <a
                 href={`/api/bling/auth/${company.key}`}
-                className="flex items-center gap-1 rounded-full bg-gray-100 border border-gray-200 px-2 py-1 hover:bg-blue-50 hover:border-blue-200 transition-colors"
+                className="flex items-center gap-1 rounded-full bg-slate-100 border border-slate-200 px-2 py-1 hover:bg-primaria-50 hover:border-primaria-200 transition-colors"
                 title={`Conectar ${company.name}`}
               >
-                <span className="h-2 w-2 rounded-full bg-gray-300" />
-                <span className="text-xs text-gray-500">{company.name}</span>
+                <span className="h-2 w-2 rounded-full bg-slate-300" />
+                <span className="text-xs text-slate-500">{company.name}</span>
               </a>
             ) : (
               <div
-                className="flex items-center gap-1 rounded-full bg-gray-50 border border-dashed border-gray-200 px-2 py-1"
+                className="flex items-center gap-1 rounded-full bg-slate-50 border border-dashed border-slate-200 px-2 py-1"
                 title="Credenciais não configuradas"
               >
-                <span className="h-2 w-2 rounded-full bg-gray-200" />
-                <span className="text-xs text-gray-400">{company.name}</span>
+                <span className="h-2 w-2 rounded-full bg-slate-200" />
+                <span className="text-xs text-slate-400">{company.name}</span>
               </div>
             )}
           </div>

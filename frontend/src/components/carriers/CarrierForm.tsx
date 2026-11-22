@@ -65,17 +65,17 @@ export function CarrierFormModal({ open, onClose, carrier }: Props) {
         <div>
           <label className="label">Nome *</label>
           <input
-            className={`input ${errors.name ? 'border-red-400' : ''}`}
+            className={`input ${errors.name ? 'border-red-400 focus:border-red-500 focus:ring-red-500' : ''}`}
             placeholder="Razão social"
             {...register('name', { required: 'Obrigatório' })}
           />
-          {errors.name && <p className="mt-1 text-xs text-red-500">{errors.name.message}</p>}
+          {errors.name && <p className="mt-1 text-xs text-red-700">{errors.name.message}</p>}
         </div>
 
         <div>
           <label className="label">CNPJ *</label>
           <input
-            className={`input ${errors.cnpj ? 'border-red-400' : ''}`}
+            className={`input ${errors.cnpj ? 'border-red-400 focus:border-red-500 focus:ring-red-500' : ''}`}
             placeholder="00.000.000/0000-00"
             value={cnpjValue ?? ''}
             {...register('cnpj', {
@@ -87,19 +87,19 @@ export function CarrierFormModal({ open, onClose, carrier }: Props) {
             })}
             onChange={(e) => setValue('cnpj', formatCNPJ(e.target.value))}
           />
-          {errors.cnpj && <p className="mt-1 text-xs text-red-500">{errors.cnpj.message}</p>}
+          {errors.cnpj && <p className="mt-1 text-xs text-red-700">{errors.cnpj.message}</p>}
         </div>
 
         <div>
           <label className="label">Telefone *</label>
           <input
-            className={`input ${errors.phone ? 'border-red-400' : ''}`}
+            className={`input ${errors.phone ? 'border-red-400 focus:border-red-500 focus:ring-red-500' : ''}`}
             placeholder="(00) 00000-0000"
             value={phoneValue ?? ''}
             {...register('phone', { required: 'Obrigatório' })}
             onChange={(e) => setValue('phone', formatPhone(e.target.value))}
           />
-          {errors.phone && <p className="mt-1 text-xs text-red-500">{errors.phone.message}</p>}
+          {errors.phone && <p className="mt-1 text-xs text-red-700">{errors.phone.message}</p>}
         </div>
 
         <div>
@@ -109,7 +109,7 @@ export function CarrierFormModal({ open, onClose, carrier }: Props) {
             placeholder="(00) 00000-0000"
             {...register('whatsappResponsavel')}
           />
-          <p className="mt-1 text-xs text-gray-400">Recebe avisos automáticos de ocorrência e atraso desta transportadora.</p>
+          <p className="mt-1 text-xs text-slate-500">Recebe avisos automáticos de ocorrência e atraso desta transportadora.</p>
         </div>
 
         {/* Sistema de rastreamento */}
@@ -135,7 +135,7 @@ export function CarrierFormModal({ open, onClose, carrier }: Props) {
               placeholder="Ex: BAU, MNG..."
               {...register('trackingIdentifier')}
             />
-            <p className="mt-1 text-xs text-gray-400">Deixe em branco para buscar em toda a rede SSW</p>
+            <p className="mt-1 text-xs text-slate-500">Deixe em branco para buscar em toda a rede SSW</p>
           </div>
         )}
 
@@ -185,24 +185,24 @@ export function CarrierFormModal({ open, onClose, carrier }: Props) {
             <input
               id="active"
               type="checkbox"
-              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              className="checkbox"
               {...register('active')}
             />
-            <label htmlFor="active" className="text-sm font-medium text-gray-700">
+            <label htmlFor="active" className="text-sm font-medium text-slate-700">
               Transportadora ativa
             </label>
           </div>
         )}
 
         {!isEdit && trackingSystem === 'NONE' && (
-          <div className="flex items-start gap-2 rounded-lg border border-yellow-300 bg-yellow-50 px-3 py-2.5 text-sm text-yellow-800">
+          <div className="alerta-aviso flex items-start gap-2">
             <span className="mt-0.5 flex-shrink-0">⚠️</span>
             <span>Sistema de rastreamento não configurado. Deseja selecionar um sistema antes de cadastrar?</span>
           </div>
         )}
 
         {mutation.isError && (
-          <p className="text-sm text-red-600">
+          <p className="alerta-erro">
             Erro ao salvar. Verifique o CNPJ e tente novamente.
           </p>
         )}

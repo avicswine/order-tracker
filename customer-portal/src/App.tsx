@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { STATUS_TOM, TOM, TOM_ATRASADO, TOM_OCORRENCIA, seloTom } from '../../frontend/src/lib/estilo'
 
 const API_URL = typeof window !== 'undefined' ? window.location.origin : ''
 
@@ -31,13 +32,6 @@ const STATUS_LABEL: Record<OrderStatus, string> = {
   IN_TRANSIT: 'Em Trânsito',
   DELIVERED: 'Entregue',
   CANCELLED: 'Cancelado',
-}
-
-const STATUS_STYLE: Record<OrderStatus, string> = {
-  PENDING: 'bg-gray-100 text-gray-600',
-  IN_TRANSIT: 'bg-blue-100 text-blue-700',
-  DELIVERED: 'bg-green-100 text-green-700',
-  CANCELLED: 'bg-red-100 text-red-600',
 }
 
 function formatDate(iso: string | null | undefined): string {
@@ -94,7 +88,7 @@ function isOccurrence(text: string): boolean {
 function formatDateTime(iso: string | null | undefined): string {
   if (!iso) return '—'
   const d = new Date(iso)
-  return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+  return d.toLocaleDateString('pt-BR') + ' às ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 }
 
 function OrderCard({ order }: { order: Order }) {
@@ -106,29 +100,29 @@ function OrderCard({ order }: { order: Order }) {
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    <div className="card overflow-hidden">
       {/* Cabecalho */}
-      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+      <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
         <div>
-          <span className="text-xs text-gray-400 uppercase tracking-wide">NF</span>
-          <p className="font-semibold text-gray-800 text-lg leading-tight font-mono">
+          <span className="resumo-rotulo">NF</span>
+          <p className="font-mono text-lg font-semibold leading-tight text-slate-900">
             {order.nfNumber ? String(parseInt(order.nfNumber, 10)) : order.orderNumber}
           </p>
           {order.carrierName && (
-            <p className="text-xs text-gray-500 mt-0.5">{order.carrierName}</p>
+            <p className="mt-0.5 text-xs text-slate-500">{order.carrierName}</p>
           )}
         </div>
         <div className="flex flex-col items-end gap-1.5">
-          <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${STATUS_STYLE[order.status]}`}>
+          <span className={seloTom(STATUS_TOM[order.status])}>
             {STATUS_LABEL[order.status]}
           </span>
           {delayed && (
-            <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-orange-100 text-orange-600">
+            <span className={seloTom(TOM_ATRASADO)}>
               Entrega em atraso
             </span>
           )}
           {order.hasOccurrence && (
-            <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-orange-100 text-orange-700">
+            <span className={seloTom(TOM_OCORRENCIA)}>
               ⚠️ Intercorrencia
             </span>
           )}
@@ -136,33 +130,33 @@ function OrderCard({ order }: { order: Order }) {
       </div>
 
       {/* Datas e valor */}
-      <div className="grid grid-cols-2 gap-3 bg-gray-50 px-5 py-3 border-b border-gray-100 text-sm">
+      <div className="grid grid-cols-2 gap-3 border-b border-slate-200 bg-slate-50 px-5 py-3 text-sm">
         <div>
-          <p className="text-xs text-gray-400 mb-0.5">Emissao da NF</p>
-          <p className="font-medium text-gray-700">{formatDate(order.nfIssuedAt)}</p>
+          <p className="mb-0.5 text-xs text-slate-500">Emissao da NF</p>
+          <p className="font-medium text-slate-800">{formatDate(order.nfIssuedAt)}</p>
         </div>
         <div>
-          <p className="text-xs text-gray-400 mb-0.5">Valor da NF</p>
-          <p className="font-medium text-gray-700">{formatCurrency(order.nfValue)}</p>
+          <p className="mb-0.5 text-xs text-slate-500">Valor da NF</p>
+          <p className="font-medium text-slate-800">{formatCurrency(order.nfValue)}</p>
         </div>
         {order.shippedAt && (
           <div>
-            <p className="text-xs text-gray-400 mb-0.5">Data de Envio</p>
-            <p className="font-medium text-gray-700">{formatDate(order.shippedAt)}</p>
+            <p className="mb-0.5 text-xs text-slate-500">Data de Envio</p>
+            <p className="font-medium text-slate-800">{formatDate(order.shippedAt)}</p>
           </div>
         )}
         <div>
-          <p className="text-xs text-gray-400 mb-0.5">
+          <p className="mb-0.5 text-xs text-slate-500">
             {order.status === 'DELIVERED' ? 'Entregue em' : 'Previsao de Entrega'}
           </p>
-          <p className={`font-medium ${delayed ? 'text-orange-600' : 'text-gray-700'}`}>
+          <p className={`font-medium ${delayed ? TOM[TOM_ATRASADO].texto : 'text-slate-800'}`}>
             {order.status === 'DELIVERED'
               ? formatDate(order.deliveredAt)
               : formatDate(order.estimatedDelivery)}
             {delayed && (() => {
               const today = new Date(); today.setHours(0, 0, 0, 0)
               const dias = Math.floor((today.getTime() - new Date(order.estimatedDelivery!).setHours(0, 0, 0, 0)) / 86400000)
-              return <span className="ml-1.5 text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded">{dias}d</span>
+              return <span className={`ml-1.5 ${seloTom(TOM_ATRASADO)}`}>{dias}d</span>
             })()}
           </p>
         </div>
@@ -171,47 +165,41 @@ function OrderCard({ order }: { order: Order }) {
       {/* Rastreamento */}
       {events.length > 0 ? (
         <div className="px-5 py-4">
-          <p className="text-xs text-gray-400 uppercase tracking-wide mb-3">Rastreamento</p>
-          <div className="space-y-0 max-h-56 overflow-y-auto">
-            {events.map((ev, i) => {
-              const isFirst = i === 0
-              const isLast = i === events.length - 1
-              const occ = isOccurrence(ev.description)
-              const delivered = isDeliveredEvent(ev.description)
-              const dotColor = occ ? 'bg-orange-400' : delivered ? 'bg-green-500' : isFirst ? 'bg-blue-500' : 'bg-gray-300'
-              return (
-                <div key={i} className="flex gap-3">
-                  <div className="flex flex-col items-center">
-                    <div className={`h-2.5 w-2.5 rounded-full mt-1 flex-shrink-0 ${dotColor}`} />
-                    {!isLast && <div className="w-px flex-1 bg-gray-200 mt-1 mb-0" />}
-                  </div>
-                  <div className={`pb-3 ${isFirst ? '' : 'opacity-75'}`}>
-                    <p className={`text-sm font-medium ${occ ? 'text-orange-700' : delivered ? 'text-green-700' : 'text-gray-800'}`}>
+          <p className="resumo-rotulo mb-3">Rastreamento</p>
+          <div className="max-h-56 overflow-y-auto pl-2 pt-1">
+            <ol className="linha-tempo">
+              {events.map((ev, i) => {
+                const isFirst = i === 0
+                const occ = isOccurrence(ev.description)
+                const delivered = isDeliveredEvent(ev.description)
+                const ponto = occ ? TOM[TOM_ATRASADO].ponto : delivered ? TOM.verde.ponto : isFirst ? 'linha-tempo-ponto-atual' : ''
+                return (
+                  <li key={i} className={`linha-tempo-item ${isFirst ? '' : 'opacity-75'}`}>
+                    <span className={`linha-tempo-ponto ${ponto}`} />
+                    <p className={`linha-tempo-texto font-medium ${occ ? TOM[TOM_ATRASADO].texto : delivered ? TOM.verde.texto : ''}`}>
                       {formatTrackingText(ev.description)}
                     </p>
-                    {ev.date && (
-                      <p className="text-xs text-gray-400 mt-0.5">{formatDateTime(ev.date)}</p>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
+                    {ev.date && <p className="linha-tempo-data">{formatDateTime(ev.date)}</p>}
+                  </li>
+                )
+              })}
+            </ol>
           </div>
         </div>
       ) : order.lastTracking ? (
-        <div className={`mx-5 my-4 rounded-lg p-3 ${isOccurrence(order.lastTracking) ? 'bg-orange-50 border border-orange-200' : 'bg-blue-50 border border-blue-100'}`}>
-          <p className={`text-xs font-semibold uppercase tracking-wide mb-1 ${isOccurrence(order.lastTracking) ? 'text-orange-600' : 'text-blue-600'}`}>
+        <div className={`mx-5 my-4 ${isOccurrence(order.lastTracking) ? 'alerta border-orange-200 bg-orange-50' : 'alerta-info'}`}>
+          <p className={`mb-1 text-xs font-semibold uppercase tracking-wide ${isOccurrence(order.lastTracking) ? 'text-orange-700' : 'text-primaria-700'}`}>
             {isOccurrence(order.lastTracking) ? '⚠️ Intercorrencia' : 'Ultimo Rastreio'}
           </p>
-          <p className={`text-sm font-medium ${isOccurrence(order.lastTracking) ? 'text-orange-800' : 'text-blue-800'}`}>
+          <p className={`text-sm font-medium ${isOccurrence(order.lastTracking) ? 'text-orange-800' : 'text-primaria-800'}`}>
             {formatTrackingText(order.lastTracking)}
           </p>
           {order.lastTrackingAt && (
-            <p className="text-xs text-gray-500 mt-0.5">{formatDateTime(order.lastTrackingAt)}</p>
+            <p className="mt-0.5 text-xs text-slate-500">{formatDateTime(order.lastTrackingAt)}</p>
           )}
         </div>
       ) : (
-        <div className="px-5 py-4 text-sm text-gray-400 italic">
+        <div className="px-5 py-4 text-sm italic text-slate-500">
           Rastreamento ainda nao disponivel.
         </div>
       )}
@@ -253,36 +241,36 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="bg-white border-b border-gray-200 shadow-sm">
+    <div className="min-h-screen bg-slate-50">
+      <div className="border-b border-white/10 bg-secundaria-escura text-white">
         <div className="max-w-2xl mx-auto px-4 py-6">
-          <h1 className="text-2xl font-bold text-gray-800">Rastreamento de Pedidos</h1>
-          <p className="text-gray-500 text-sm mt-1">
+          <h1 className="text-2xl font-bold text-white">Rastreamento de Pedidos</h1>
+          <p className="mt-1 text-sm text-slate-300">
             Digite seu CNPJ ou CPF para visualizar suas entregas
           </p>
         </div>
       </div>
 
       <div className="max-w-2xl mx-auto px-4 py-8">
-        <form onSubmit={handleSearch} className="flex gap-3 mb-8">
+        <form onSubmit={handleSearch} className="mb-8 flex flex-col gap-3 sm:flex-row">
           <input
             type="text"
             value={doc}
             onChange={e => setDoc(maskDocument(e.target.value))}
             placeholder="000.000.000-00 ou 00.000.000/0000-00"
-            className="flex-1 border border-gray-300 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="input flex-1 py-3"
           />
           <button
             type="submit"
             disabled={loading}
-            className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-medium px-6 py-3 rounded-lg text-sm transition-colors"
+            className="btn-primary px-6 py-3"
           >
             {loading ? 'Buscando...' : 'Buscar'}
           </button>
         </form>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm mb-6">
+          <div className="alerta-erro mb-6">
             {error}
           </div>
         )}
@@ -290,16 +278,16 @@ export default function App() {
         {orders !== null && (
           <>
             {orders.length === 0 ? (
-              <div className="text-center py-12 text-gray-500">
-                <p className="text-lg">Nenhum pedido encontrado</p>
-                <p className="text-sm mt-1">Verifique se o documento informado esta correto.</p>
+              <div className="estado-vazio">
+                <p className="text-lg font-medium text-slate-700">Nenhum pedido encontrado</p>
+                <p className="text-sm">Verifique se o documento informado esta correto.</p>
               </div>
             ) : (
               <>
-                <p className="text-sm text-gray-500 mb-4">
+                <p className="mb-4 text-sm text-slate-500">
                   {orders.length} {orders.length === 1 ? 'pedido encontrado' : 'pedidos encontrados'}
                   {' · '}
-                  <span className="text-gray-400">Atualizado a cada 2 horas</span>
+                  <span className="text-slate-400">Atualizado a cada 2 horas</span>
                 </p>
                 <div className="space-y-4">
                   {orders.map(order => (
@@ -312,7 +300,7 @@ export default function App() {
         )}
 
         {!searched && (
-          <p className="text-center text-gray-400 text-sm mt-8">
+          <p className="mt-8 text-center text-sm text-slate-500">
             As informacoes sao atualizadas automaticamente a cada 2 horas.
           </p>
         )}

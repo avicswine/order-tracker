@@ -5,6 +5,8 @@ import { Modal } from '../components/ui/Modal'
 import { Spinner } from '../components/ui/Spinner'
 import { useAuth } from '../contexts/AuthContext'
 import type { Pendencia, PendenciaStatus, PendenciaTipo, PendenciaLookupOrder } from '../types'
+import { formatDate, formatDateTime } from '../lib/utils'
+import { TOM, seloTom, type Tom } from '../lib/estilo'
 
 const EMPRESA_LABEL: Record<string, string> = {
   '47715256000149': 'AVIC',
@@ -22,14 +24,14 @@ const TIPO_LABEL: Record<PendenciaTipo, string> = {
   OUTRO: 'Outro',
 }
 
-const TIPO_BADGE: Record<PendenciaTipo, string> = {
-  ATRASO: 'bg-amber-100 text-amber-700',
-  OCORRENCIA: 'bg-red-100 text-red-700',
-  DEFEITO: 'bg-purple-100 text-purple-700',
-  ITEM_FALTANTE: 'bg-orange-100 text-orange-700',
-  DEVOLUCAO: 'bg-blue-100 text-blue-700',
-  RECLAMACAO_ML: 'bg-yellow-100 text-yellow-800',
-  OUTRO: 'bg-gray-100 text-gray-600',
+const TIPO_TOM: Record<PendenciaTipo, Tom> = {
+  ATRASO: 'laranja',
+  OCORRENCIA: 'vermelho',
+  DEFEITO: 'primaria',
+  ITEM_FALTANTE: 'ambar',
+  DEVOLUCAO: 'azul',
+  RECLAMACAO_ML: 'ambarForte',
+  OUTRO: 'cinza',
 }
 
 const ORIGEM_LABEL: Record<string, string> = {
@@ -78,15 +80,12 @@ const STATUS_LABEL: Record<PendenciaStatus, string> = {
   RESOLVIDA: 'Resolvida',
 }
 
-const STATUS_BADGE: Record<PendenciaStatus, string> = {
-  ABERTA: 'bg-red-100 text-red-700',
-  EM_TRATAMENTO: 'bg-blue-100 text-blue-700',
-  RESOLVIDA: 'bg-green-100 text-green-700',
+const STATUS_TOM_PENDENCIA: Record<PendenciaStatus, Tom> = {
+  ABERTA: 'vermelho',
+  EM_TRATAMENTO: 'azul',
+  RESOLVIDA: 'verde',
 }
 
-function fmtData(iso: string) {
-  return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })
-}
 
 // Sigla da empresa a partir do CNPJ, aceitando formatado ou só dígitos
 function empresaSigla(cnpj: string | null): string | null {
@@ -108,19 +107,19 @@ function PrazoMl({ p }: { p: Pendencia }) {
   if (!p.mlDueDate || p.status === 'RESOLVIDA') return null
   const prazo = new Date(p.mlDueDate)
   const horas = (prazo.getTime() - Date.now()) / 3600000
-  const cor = horas <= 0 ? 'text-red-600 font-bold' : horas <= 24 ? 'text-red-600 font-semibold' : horas <= 48 ? 'text-amber-600 font-semibold' : 'text-gray-500'
+  const cor = horas <= 0 ? 'text-red-600 font-bold' : horas <= 24 ? 'text-red-600 font-semibold' : horas <= 48 ? 'text-amber-600 font-semibold' : 'text-slate-500'
   const texto = horas <= 0
     ? 'prazo ML vencido!'
-    : `ML até ${prazo.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} ${prazo.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
-  return <div className={`text-[10px] leading-tight mt-0.5 whitespace-nowrap ${cor}`} title="Prazo máximo para responder ao Mercado Livre">⏳ {texto}</div>
+    : `ML até ${formatDateTime(p.mlDueDate)}`
+  return <div className={`text-xs leading-tight mt-0.5 whitespace-nowrap ${cor}`} title="Prazo máximo para responder ao Mercado Livre">⏳ {texto}</div>
 }
 
 function DiasBadge({ p }: { p: Pendencia }) {
   const dias = diasEmAberto(p)
   if (p.status === 'RESOLVIDA') {
-    return <span className="text-xs text-gray-400">{dias}d</span>
+    return <span className="text-xs text-slate-400">{dias}d</span>
   }
-  const cor = dias >= DIAS_CRITICO ? 'text-red-600 font-bold' : dias >= DIAS_ALERTA ? 'text-amber-600 font-semibold' : 'text-gray-500'
+  const cor = dias >= DIAS_CRITICO ? 'text-red-600 font-bold' : dias >= DIAS_ALERTA ? 'text-amber-600 font-semibold' : 'text-slate-500'
   return <span className={`text-sm ${cor}`}>{dias === 0 ? 'hoje' : `${dias}d`}</span>
 }
 
@@ -252,26 +251,22 @@ export function PendenciasPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="pagina">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Pós-vendas</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Pendências de vendas: atrasos, extravios, defeitos e reclamações</p>
+          <h1 className="pagina-titulo">Pós-vendas</h1>
+          <p className="pagina-subtitulo">Pendências de vendas: atrasos, extravios, defeitos e reclamações</p>
         </div>
         <div className="flex items-center gap-2">
           <button
-            className={`relative rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${
-              inboxTotal > 0
-                ? 'border-yellow-300 bg-yellow-50 text-yellow-800 hover:bg-yellow-100'
-                : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
-            }`}
+            className={`relative ${inboxTotal > 0 ? 'btn border border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100' : 'btn-secondary'}`}
             onClick={() => setInboxAberto(true)}
             title="Conversas do pós-venda do ML aguardando resposta"
           >
             💬 Mensagens ML
             {inboxTotal > 0 && (
-              <span className="absolute -top-2 -right-2 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-[11px] font-bold text-white">
+              <span className="absolute -top-2 -right-2 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-xs font-bold text-white">
                 {inboxTotal}
               </span>
             )}
@@ -290,20 +285,20 @@ export function PendenciasPage() {
       <MlBanner canWrite={canWrite} pos="topo" />
 
       {/* Abas de status */}
-      <div className="flex items-center gap-2 flex-wrap">
-        {STATUS_TABS.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
-              tab === t.key ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-          >
-            {t.label}
-            <span className={`ml-1.5 text-xs ${tab === t.key ? 'text-blue-100' : 'text-gray-400'}`}>{contagem(t.key)}</span>
-          </button>
-        ))}
-        <div className="ml-auto flex items-center gap-2">
+      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-200">
+        <div className="abas border-b-0">
+          {STATUS_TABS.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`aba ${tab === t.key ? 'aba-ativa' : ''}`}
+            >
+              {t.label}
+              <span className={`ml-1.5 text-xs ${tab === t.key ? 'text-primaria-600' : 'text-slate-400'}`}>{contagem(t.key)}</span>
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-2 pb-2">
           <select className="input !w-auto text-sm" value={tipoFiltro} onChange={(e) => setTipoFiltro(e.target.value)}>
             <option value="">Todos os tipos</option>
             {Object.entries(TIPO_LABEL).map(([k, v]) => (
@@ -317,11 +312,7 @@ export function PendenciasPage() {
                 <button
                   key={k}
                   onClick={() => setOrigemFiltro((atual) => ativo ? atual.filter((o) => o !== k) : [...atual, k])}
-                  className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors border ${
-                    ativo
-                      ? 'bg-blue-600 border-blue-600 text-white'
-                      : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
-                  }`}
+                  className={`${ativo ? 'btn-primary' : 'btn-secondary'} btn-sm`}
                   title={ativo ? 'Clique para remover o filtro' : 'Clique para filtrar por esta origem'}
                 >
                   {label}
@@ -340,8 +331,8 @@ export function PendenciasPage() {
 
       {/* Barra de ações em massa */}
       {selecionadas.length > 0 && (
-        <div className="flex items-center gap-3 flex-wrap rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm">
-          <span className="font-medium text-blue-800">{selecionadas.length} selecionada{selecionadas.length > 1 ? 's' : ''}</span>
+        <div className="alerta-info flex flex-wrap items-center gap-3 py-2.5">
+          <span className="font-medium text-primaria-800">{selecionadas.length} selecionada{selecionadas.length > 1 ? 's' : ''}</span>
           <select className="input !w-auto text-sm" value={bulkStatus} onChange={(e) => setBulkStatus(e.target.value)}>
             <option value="">Mudar status...</option>
             <option value="ABERTA">Aberta</option>
@@ -353,7 +344,7 @@ export function PendenciasPage() {
             {RESPONSAVEIS.map((r) => <option key={r} value={r}>{r}</option>)}
           </select>
           <button
-            className="btn-primary !py-1.5 text-xs"
+            className="btn-primary btn-sm"
             disabled={(!bulkStatus && !bulkResp) || bulkMutation.isPending}
             onClick={() => bulkMutation.mutate({
               ids: selecionadas,
@@ -363,69 +354,69 @@ export function PendenciasPage() {
           >
             {bulkMutation.isPending ? <Spinner className="h-4 w-4" /> : 'Aplicar'}
           </button>
-          <button className="text-xs text-gray-500 underline" onClick={() => setSelecionadas([])}>Limpar seleção</button>
+          <button className="btn-ghost btn-sm" onClick={() => setSelecionadas([])}>Limpar seleção</button>
         </div>
       )}
 
       {/* Tabela */}
       <div className="card overflow-hidden">
         {isLoading ? (
-          <div className="flex items-center justify-center py-16"><Spinner className="h-8 w-8" /></div>
+          <div className="estado-carregando"><Spinner className="h-8 w-8" /></div>
         ) : !pendencias || pendencias.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-gray-500">
-            <svg className="h-12 w-12 mb-3 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div className="estado-vazio">
+            <svg className="h-12 w-12 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
                 d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <p className="font-medium">Nenhuma pendência {tab === 'ABERTA' ? 'aberta' : ''} 🎉</p>
+            <p className="font-medium text-slate-700">Nenhuma pendência {tab === 'ABERTA' ? 'aberta' : ''} 🎉</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead className="bg-gray-50 border-b border-gray-200">
+          <div className="tabela-caixa">
+            <table className="tabela tabela-compacta">
+              <thead>
                 <tr>
                   {canWrite && (
-                    <th className="px-2 py-2 w-8">
-                      <input type="checkbox" className="h-4 w-4 rounded border-gray-300" checked={todasMarcadas} onChange={toggleTodas} />
+                    <th className="w-8">
+                      <input type="checkbox" className="checkbox" checked={todasMarcadas} onChange={toggleTodas} />
                     </th>
                   )}
-                  <th className="px-2 py-2 text-left font-medium text-gray-500">Empresa</th>
-                  <th className="px-2 py-2 text-left font-medium text-gray-500">NF</th>
-                  <th className="px-2 py-2 text-left font-medium text-gray-500">Cliente</th>
-                  <th className="px-2 py-2 text-left font-medium text-gray-500">Tipo</th>
-                  <th className="px-2 py-2 text-left font-medium text-gray-500" title="Origem">Orig.</th>
-                  <th className="px-2 py-2 text-left font-medium text-gray-500">Status</th>
-                  <th className="px-2 py-2 text-left font-medium text-gray-500" title="Responsável">Resp.</th>
-                  <th className="px-2 py-2 text-left font-medium text-gray-500">Criada</th>
-                  <th className="px-2 py-2 text-left font-medium text-gray-500">Dias</th>
-                  <th className="px-2 py-2 text-left font-medium text-gray-500 w-full">Notas</th>
-                  <th className="px-2 py-2 text-right font-medium text-gray-500">Ações</th>
+                  <th>Empresa</th>
+                  <th>NF</th>
+                  <th>Cliente</th>
+                  <th>Tipo</th>
+                  <th title="Origem">Orig.</th>
+                  <th>Status</th>
+                  <th title="Responsável">Resp.</th>
+                  <th>Criada</th>
+                  <th>Dias</th>
+                  <th className="w-full">Notas</th>
+                  <th className="text-right">Ações</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody>
                 {pendencias.map((p) => {
                   const empresa = empresaSigla(p.senderCnpj)
                   // Coluna Notas mostra só o andamento real — registros de troca de
                   // responsável (👤) ficam apenas no histórico do detalhe
                   const notasReais = p.notas.filter((n) => !n.texto.startsWith('👤'))
                   return (
-                  <tr key={p.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setDetalhe(p)}>
+                  <tr key={p.id} className="cursor-pointer" onClick={() => setDetalhe(p)}>
                     {canWrite && (
-                      <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
-                        <input type="checkbox" className="h-4 w-4 rounded border-gray-300" checked={selecionadas.includes(p.id)} onChange={() => toggleUma(p.id)} />
+                      <td onClick={(e) => e.stopPropagation()}>
+                        <input type="checkbox" className="checkbox" checked={selecionadas.includes(p.id)} onChange={() => toggleUma(p.id)} />
                       </td>
                     )}
-                    <td className="px-2 py-2">
+                    <td>
                       {empresa ? (
-                        <span className={`inline-flex rounded px-1.5 py-0.5 text-[11px] font-bold ${EMPRESA_COR[empresa] ?? 'bg-gray-200 text-gray-600'}`}>
+                        <span className={`inline-flex rounded-lg px-1.5 py-0.5 text-xs font-bold ${EMPRESA_COR[empresa] ?? 'bg-slate-200 text-slate-600'}`}>
                           {empresa}
                         </span>
                       ) : '—'}
                     </td>
-                    <td className="px-2 py-2 font-medium whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                    <td className="font-medium whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                       {p.nfNumber ? (
                         <button
-                          className="text-blue-600 hover:underline"
+                          className="text-primaria-600 hover:underline"
                           title="Abrir DANFE (PDF)"
                           onClick={() => abrirDanfe(p)}
                         >
@@ -433,23 +424,23 @@ export function PendenciasPage() {
                         </button>
                       ) : '—'}
                     </td>
-                    <td className="px-2 py-2 text-gray-700 max-w-[150px] truncate" title={p.customerName}>{p.customerName}</td>
-                    <td className="px-2 py-2">
-                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium whitespace-nowrap ${TIPO_BADGE[p.tipo]}`}>
+                    <td className="text-slate-700 max-w-[150px] truncate" title={p.customerName}>{p.customerName}</td>
+                    <td>
+                      <span className={seloTom(TIPO_TOM[p.tipo])}>
                         {TIPO_LABEL[p.tipo]}
                       </span>
                     </td>
-                    <td className="px-2 py-2 text-gray-500 whitespace-nowrap" title={ORIGEM_LABEL[p.origem]}>{ORIGEM_ABREV[p.origem] ?? p.origem}</td>
-                    <td className="px-2 py-2">
-                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium whitespace-nowrap ${STATUS_BADGE[p.status]}`}>
+                    <td className="text-slate-500 whitespace-nowrap" title={ORIGEM_LABEL[p.origem]}>{ORIGEM_ABREV[p.origem] ?? p.origem}</td>
+                    <td>
+                      <span className={seloTom(STATUS_TOM_PENDENCIA[p.status])}>
                         {STATUS_LABEL[p.status]}
                       </span>
                       <PrazoMl p={p} />
                     </td>
-                    <td className="px-2 py-2 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                    <td className="whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                       {canWrite ? (
                         <select
-                          className="rounded border border-gray-200 bg-transparent px-1 py-0.5 text-xs text-gray-700 hover:border-gray-300"
+                          className="input input-sm w-auto py-0.5"
                           value={p.responsavel ?? ''}
                           onChange={(e) => respMutation.mutate({ pendencia: p, responsavel: e.target.value || null })}
                         >
@@ -457,17 +448,17 @@ export function PendenciasPage() {
                           {RESPONSAVEIS.map((r) => <option key={r} value={r}>{r}</option>)}
                         </select>
                       ) : (
-                        <span className="text-gray-600">{p.responsavel ?? '—'}</span>
+                        <span className="text-slate-600">{p.responsavel ?? '—'}</span>
                       )}
                     </td>
-                    <td className="px-2 py-2 text-gray-500 whitespace-nowrap">{fmtData(p.createdAt)}</td>
-                    <td className="px-2 py-2 whitespace-nowrap"><DiasBadge p={p} /></td>
-                    <td className="px-2 py-2 text-gray-500 min-w-[180px]">
+                    <td className="text-slate-500 whitespace-nowrap">{formatDate(p.createdAt)}</td>
+                    <td className="whitespace-nowrap"><DiasBadge p={p} /></td>
+                    <td className="text-slate-500 min-w-[180px]">
                       {notasReais.length > 0 ? (
                         <div
                           className="text-xs leading-snug"
                           style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
-                          title={notasReais.map((n) => `${fmtData(n.createdAt)} — ${n.texto}`).join('\n')}
+                          title={notasReais.map((n) => `${formatDate(n.createdAt)} — ${n.texto}`).join('\n')}
                         >
                           💬{notasReais.length > 1 ? ` (${notasReais.length})` : ''} {notasReais[0].texto}
                         </div>
@@ -483,11 +474,11 @@ export function PendenciasPage() {
                         '—'
                       )}
                     </td>
-                    <td className="px-2 py-2 text-right" onClick={(e) => e.stopPropagation()}>
+                    <td className="text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
                         {p.mlClaimId && (
                           <button
-                            className="rounded-lg p-1 text-yellow-500 hover:bg-yellow-50"
+                            className="btn-icone text-amber-600 hover:bg-amber-50 hover:text-amber-700"
                             title="Mensagens da reclamação no ML"
                             onClick={() => setMensagensDe(p)}
                           >
@@ -499,18 +490,18 @@ export function PendenciasPage() {
                         )}
                         {canWrite && p.status !== 'RESOLVIDA' && (
                           <button
-                            className="rounded-lg bg-green-50 px-2.5 py-1 text-[11px] font-medium text-green-700 hover:bg-green-100"
+                            className="btn btn-sm border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
                             onClick={() => setResolver(p)}
                           >
                             Resolver
                           </button>
                         )}
                         {p.status === 'RESOLVIDA' && (
-                          <span className="text-[11px] text-green-600 font-medium">✓ {p.resolvedAt ? fmtData(p.resolvedAt) : ''}</span>
+                          <span className="text-xs text-emerald-600 font-medium">✓ {p.resolvedAt ? formatDate(p.resolvedAt) : ''}</span>
                         )}
                         {canWrite && (
                           <button
-                            className="rounded-lg p-1 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                            className="btn-icone hover:bg-red-50 hover:text-red-600"
                             title="Excluir pendência"
                             onClick={() => excluir(p)}
                           >
@@ -589,15 +580,15 @@ function MlBanner({ canWrite, pos }: { canWrite: boolean; pos: 'topo' | 'rodape'
   if (pos === 'topo') {
     if (!pendenteConexao) return null
     return (
-      <div className="flex items-center gap-3 flex-wrap rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-2.5 text-sm">
-        <span className="font-medium text-yellow-800">🛒 Mercado Livre:</span>
+      <div className="alerta-aviso flex flex-wrap items-center gap-3 py-2.5">
+        <span className="font-medium text-amber-800">🛒 Mercado Livre:</span>
         {canWrite && naoAutorizadas.map(([c]) => (
-          <button key={c} className="rounded-lg bg-yellow-400 px-3 py-1 text-xs font-semibold text-yellow-900 hover:bg-yellow-500" onClick={() => conectar(c)}>
+          <button key={c} className="btn btn-sm bg-amber-500 text-amber-950 hover:bg-amber-600" onClick={() => conectar(c)}>
             Conectar {c.toUpperCase()}
           </button>
         ))}
         {autorizadas.length === 0 && naoAutorizadas.length === 0 && (
-          <span className="text-yellow-700">credenciais não configuradas no servidor</span>
+          <span className="text-amber-700">credenciais não configuradas no servidor</span>
         )}
       </div>
     )
@@ -606,14 +597,14 @@ function MlBanner({ canWrite, pos }: { canWrite: boolean; pos: 'topo' | 'rodape'
   // Rodapé: discreto, quando está tudo conectado
   if (pendenteConexao) return null
   return (
-    <div className="flex items-center gap-2 text-xs text-gray-400">
+    <div className="flex items-center gap-2 text-xs text-slate-400">
       <span>🛒 Mercado Livre:</span>
       {autorizadas.map(([c]) => (
         <span key={c}>{c.toUpperCase()} ✓</span>
       ))}
       {canWrite && (
         <button
-          className="ml-1 underline hover:text-gray-600"
+          className="ml-1 underline hover:text-slate-600"
           onClick={() => syncMutation.mutate()}
           disabled={syncMutation.isPending}
         >
@@ -639,11 +630,11 @@ function InboxMlModal({ conversas, erros, onClose }: { conversas: MlConversa[]; 
     <Modal open onClose={onClose} title={`Mensagens ML sem resposta (${conversas.length})`}>
       <div className="space-y-3">
         <div className="flex items-start justify-between gap-3">
-          <p className="text-xs text-gray-400">
+          <p className="text-xs text-slate-400">
             Conversas do pós-venda em que a última mensagem é do comprador (lidas ou não). Consultar aqui <b>não</b> marca como lida no ML.
           </p>
           <button
-            className="btn-secondary !py-1 text-xs whitespace-nowrap"
+            className="btn-secondary btn-sm"
             disabled={varredura.isPending}
             title="Varre todos os pedidos dos últimos 30 dias no ML — pega também mensagens já lidas sem resposta. Pode levar 1-2 min."
             onClick={() => varredura.mutate()}
@@ -652,44 +643,44 @@ function InboxMlModal({ conversas, erros, onClose }: { conversas: MlConversa[]; 
           </button>
         </div>
         {erros.length > 0 && (
-          <p className="text-xs text-amber-600">Aviso: {erros.join(' · ')}</p>
+          <p className="alerta-aviso text-xs">Aviso: {erros.join(' · ')}</p>
         )}
         {conversas.length === 0 && (
-          <p className="py-6 text-center text-sm text-gray-500">Nenhuma mensagem aguardando resposta 🎉</p>
+          <p className="estado-vazio">Nenhuma mensagem aguardando resposta 🎉</p>
         )}
         <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
           {conversas.map((c) => {
             const ultima = c.mensagens[c.mensagens.length - 1]
             const expandida = aberta === c.packId
             return (
-              <div key={c.packId} className="rounded-lg border border-gray-200">
+              <div key={c.packId} className="rounded-lg border border-slate-200">
                 <button
-                  className="w-full px-3 py-2 text-left hover:bg-gray-50"
+                  className="w-full px-3 py-2 text-left hover:bg-slate-50"
                   onClick={() => setAberta(expandida ? null : c.packId)}
                 >
                   <div className="flex items-center gap-2">
-                    <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${EMPRESA_COR[c.company] ?? 'bg-gray-200 text-gray-600'}`}>{c.company}</span>
-                    <span className="text-sm font-medium text-gray-800 truncate">{c.comprador}</span>
-                    <span className="ml-auto rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-600 whitespace-nowrap">
+                    <span className={`rounded-lg px-1.5 py-0.5 text-xs font-bold ${EMPRESA_COR[c.company] ?? 'bg-slate-200 text-slate-600'}`}>{c.company}</span>
+                    <span className="text-sm font-medium text-slate-800 truncate">{c.comprador}</span>
+                    <span className={`ml-auto ${seloTom('vermelho')}`}>
                       {c.naoLidas} sem resposta
                     </span>
                   </div>
-                  {c.item && <p className="mt-0.5 text-xs text-gray-500 truncate">{c.item}</p>}
+                  {c.item && <p className="mt-0.5 text-xs text-slate-500 truncate">{c.item}</p>}
                   {ultima && !expandida && (
-                    <p className="mt-1 text-xs text-gray-600 truncate">
+                    <p className="mt-1 text-xs text-slate-600 truncate">
                       {ultima.de === 'vendedor' ? 'Você: ' : ''}{ultima.texto}
                     </p>
                   )}
                 </button>
                 {expandida && (
-                  <div className="border-t border-gray-100 px-3 py-2 space-y-1.5">
+                  <div className="border-t border-slate-100 px-3 py-2 space-y-1.5">
                     {c.mensagens.map((m, i) => (
                       <div key={i} className={`rounded-lg px-2.5 py-1.5 text-xs ${
-                        m.de === 'vendedor' ? 'ml-6 bg-blue-50 text-blue-800' : 'mr-6 bg-gray-100 text-gray-700'
+                        m.de === 'vendedor' ? 'ml-6 bg-primaria-50 text-primaria-800' : 'mr-6 bg-slate-100 text-slate-700'
                       }`}>
                         <p className="whitespace-pre-wrap">{m.texto}</p>
-                        <p className="mt-0.5 text-[10px] opacity-60">
-                          {m.de === 'vendedor' ? 'Você' : c.comprador}{m.data ? ` · ${new Date(m.data).toLocaleString('pt-BR')}` : ''}
+                        <p className="mt-0.5 text-xs opacity-60">
+                          {m.de === 'vendedor' ? 'Você' : c.comprador}{m.data ? ` · ${formatDateTime(m.data)}` : ''}
                         </p>
                       </div>
                     ))}
@@ -703,7 +694,7 @@ function InboxMlModal({ conversas, erros, onClose }: { conversas: MlConversa[]; 
                       href={`https://www.mercadolivre.com.br/vendas/${c.packId}/detalhe`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-block pt-1 text-xs font-medium text-blue-600 hover:underline"
+                      className="inline-block pt-1 text-xs font-medium text-primaria-600 hover:underline"
                     >
                       abrir no Mercado Livre ↗
                     </a>
@@ -729,25 +720,25 @@ function MensagensMlModal({ pendencia, onClose }: { pendencia: Pendencia; onClos
   })
 
   const DE_LABEL: Record<string, { nome: string; cor: string }> = {
-    comprador: { nome: 'Comprador', cor: 'bg-gray-100 text-gray-800' },
-    vendedor: { nome: 'Nós', cor: 'bg-blue-50 text-blue-800 border border-blue-100' },
-    mediador: { nome: 'Mercado Livre', cor: 'bg-yellow-50 text-yellow-800 border border-yellow-100' },
+    comprador: { nome: 'Comprador', cor: 'bg-slate-100 text-slate-800' },
+    vendedor: { nome: 'Nós', cor: 'bg-primaria-50 text-primaria-800 border border-primaria-100' },
+    mediador: { nome: 'Mercado Livre', cor: 'bg-amber-50 text-amber-800 border border-amber-100' },
   }
 
   return (
     <Modal open onClose={onClose} title={`Mensagens ML — ${pendencia.nfNumber ? `NF ${pendencia.nfNumber}` : pendencia.customerName}`}>
       <div className="space-y-3">
         <PrazoMl p={pendencia} />
-        {isLoading && <div className="flex justify-center py-8"><Spinner className="h-6 w-6" /></div>}
+        {isLoading && <div className="estado-carregando"><Spinner className="h-6 w-6" /></div>}
         {isError && (
-          <p className="text-sm text-red-600">
+          <p className="alerta-erro">
             {error instanceof Error && 'response' in (error as object)
               ? ((error as { response?: { data?: { error?: string } } }).response?.data?.error ?? 'Falha ao buscar mensagens no ML.')
               : 'Falha ao buscar mensagens no ML.'}
           </p>
         )}
         {mensagens && mensagens.length === 0 && (
-          <p className="text-sm text-gray-500">Nenhuma mensagem nesta reclamação ainda.</p>
+          <p className="estado-vazio">Nenhuma mensagem nesta reclamação ainda.</p>
         )}
         {mensagens && mensagens.length > 0 && (
           <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
@@ -756,8 +747,8 @@ function MensagensMlModal({ pendencia, onClose }: { pendencia: Pendencia; onClos
               return (
                 <div key={i} className={`rounded-lg px-3 py-2 text-sm ${de.cor} ${m.de === 'vendedor' ? 'ml-8' : 'mr-8'}`}>
                   <p className="whitespace-pre-wrap">{m.texto}</p>
-                  <p className="mt-1 text-[10px] opacity-70">
-                    {de.nome}{m.data ? ` · ${new Date(m.data).toLocaleString('pt-BR')}` : ''}
+                  <p className="mt-1 text-xs opacity-70">
+                    {de.nome}{m.data ? ` · ${formatDateTime(m.data)}` : ''}
                   </p>
                 </div>
               )
@@ -777,7 +768,7 @@ function MensagensMlModal({ pendencia, onClose }: { pendencia: Pendencia; onClos
             href={`https://www.mercadolivre.com.br/vendas/${pendencia.mlOrderId}/detalhe`}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-block text-xs font-medium text-blue-600 hover:underline"
+            className="inline-block text-xs font-medium text-primaria-600 hover:underline"
           >
             abrir no Mercado Livre ↗
           </a>
@@ -815,12 +806,12 @@ function ResolverModal({ pendencia, pending, onClose, onConfirm }: {
             onChange={(e) => setTexto(e.target.value)}
             autoFocus
           />
-          <p className="mt-1 text-xs text-gray-400">O texto entra no histórico de anotações como conclusão.</p>
+          <p className="mt-1 text-xs text-slate-400">O texto entra no histórico de anotações como conclusão.</p>
         </div>
         <div className="flex justify-end gap-3">
           <button className="btn-secondary" onClick={onClose}>Cancelar</button>
           <button
-            className="btn-primary !bg-green-600 hover:!bg-green-700"
+            className="btn bg-emerald-600 text-white hover:bg-emerald-700"
             disabled={pending || !quem}
             title={!quem ? 'Selecione quem concluiu' : undefined}
             onClick={() => onConfirm(texto, quem)}
@@ -912,10 +903,10 @@ function NovaPendenciaModal({ open, onClose }: { open: boolean; onClose: () => v
             </button>
           </div>
           {buscando && (
-            <p className="mt-1 text-xs text-gray-400">Buscando no painel e no Bling — pode levar alguns segundos...</p>
+            <p className="mt-1 text-xs text-slate-400">Buscando no painel e no Bling — pode levar alguns segundos...</p>
           )}
           {lookupResult && lookupResult.length === 0 && (
-            <p className="mt-1 text-xs text-amber-600">
+            <p className="mt-1 text-xs text-amber-700">
               NF não encontrada no painel nem no Bling (últimos 6 meses){empresa ? '' : ' — tente selecionar a empresa'}. Preencha o cliente manualmente.
             </p>
           )}
@@ -925,7 +916,7 @@ function NovaPendenciaModal({ open, onClose }: { open: boolean; onClose: () => v
                 <button
                   key={o.id ?? o.orderNumber}
                   type="button"
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-left text-sm hover:bg-blue-50"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-left text-sm hover:bg-primaria-50"
                   onClick={() => selecionarPedido(o)}
                 >
                   <span className="font-medium">{o.orderNumber}</span> — {o.customerName}
@@ -934,11 +925,11 @@ function NovaPendenciaModal({ open, onClose }: { open: boolean; onClose: () => v
             </div>
           )}
           {pedido && (
-            <div className="mt-2 rounded-lg bg-blue-50 border border-blue-200 px-3 py-2 text-xs text-blue-800">
+            <div className="alerta-info mt-2 px-3 py-2 text-xs">
               ✓ <b>{pedido.orderNumber}</b> — {pedido.customerName}
               {pedido.carrier && <> · {pedido.carrier.name}</>}
-              {pedido.fonte === 'bling' && <> · <span className="text-blue-500">via Bling (sem rastreio no painel)</span></>}
-              {pedido.lastTracking && <div className="mt-1 text-blue-600 truncate">Rastreio: {pedido.lastTracking}</div>}
+              {pedido.fonte === 'bling' && <> · <span className="text-primaria-500">via Bling (sem rastreio no painel)</span></>}
+              {pedido.lastTracking && <div className="mt-1 text-primaria-600 truncate">Rastreio: {pedido.lastTracking}</div>}
             </div>
           )}
         </div>
@@ -948,7 +939,7 @@ function NovaPendenciaModal({ open, onClose }: { open: boolean; onClose: () => v
           <input className="input" placeholder="Nome do cliente" value={cliente} onChange={(e) => setCliente(e.target.value)} />
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <label className="label">Tipo *</label>
             <select className="input" value={tipo} onChange={(e) => setTipo(e.target.value as PendenciaTipo)}>
@@ -976,7 +967,7 @@ function NovaPendenciaModal({ open, onClose }: { open: boolean; onClose: () => v
           />
         </div>
 
-        {createMutation.isError && <p className="text-sm text-red-600">Erro ao salvar. Verifique os campos.</p>}
+        {createMutation.isError && <p className="alerta-erro">Erro ao salvar. Verifique os campos.</p>}
 
         <div className="flex justify-end gap-3 pt-2">
           <button type="button" className="btn-secondary" onClick={() => { reset(); onClose() }}>Cancelar</button>
@@ -1019,16 +1010,16 @@ function DetalheModal({ pendencia, canWrite, onClose, onStatus, onResponsavel }:
   return (
     <Modal open onClose={onClose} title={`${TIPO_LABEL[pendencia.tipo]} — ${pendencia.nfNumber ? `NF ${pendencia.nfNumber}` : pendencia.customerName}`}>
       <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-3 text-sm">
-          <div><span className="text-gray-500">Cliente:</span> <span className="font-medium">{pendencia.customerName}</span></div>
-          <div><span className="text-gray-500">Empresa:</span> {empresaSigla(pendencia.senderCnpj) ?? '—'}</div>
-          <div><span className="text-gray-500">Origem:</span> {ORIGEM_LABEL[pendencia.origem]}</div>
-          <div><span className="text-gray-500">Criada em:</span> {fmtData(pendencia.createdAt)}</div>
-          <div className="col-span-2 flex items-center gap-2">
-            <span className="text-gray-500">Responsável:</span>
+        <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+          <div><span className="text-slate-500">Cliente:</span> <span className="font-medium">{pendencia.customerName}</span></div>
+          <div><span className="text-slate-500">Empresa:</span> {empresaSigla(pendencia.senderCnpj) ?? '—'}</div>
+          <div><span className="text-slate-500">Origem:</span> {ORIGEM_LABEL[pendencia.origem]}</div>
+          <div><span className="text-slate-500">Criada em:</span> {formatDate(pendencia.createdAt)}</div>
+          <div className="flex items-center gap-2 sm:col-span-2">
+            <span className="text-slate-500">Responsável:</span>
             {canWrite ? (
               <select
-                className="input !w-auto !py-1 text-sm"
+                className="input input-sm w-auto"
                 value={pendencia.responsavel ?? ''}
                 onChange={(e) => onResponsavel(e.target.value || null)}
               >
@@ -1040,40 +1031,38 @@ function DetalheModal({ pendencia, canWrite, onClose, onStatus, onResponsavel }:
             )}
           </div>
           {pendencia.order?.carrier && (
-            <div className="col-span-2"><span className="text-gray-500">Transportadora:</span> {pendencia.order.carrier.name}</div>
+            <div className="sm:col-span-2"><span className="text-slate-500">Transportadora:</span> {pendencia.order.carrier.name}</div>
           )}
           {pendencia.order && (
-            <div className="col-span-2">
-              <div className="flex items-center gap-2 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">
+            <div className="sm:col-span-2">
+              <div className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
                 <div className="flex-1 min-w-0">
                   <b>Rastreio:</b> {pendencia.order.lastTracking ?? 'sem movimentação'}
-                  <div className="mt-0.5 text-[11px] text-gray-400">
+                  <div className="mt-0.5 text-xs text-slate-400">
                     {pendencia.order.orderNumber}
-                    {pendencia.order.shippedAt && ` · envio ${fmtData(pendencia.order.shippedAt)}`}
-                    {pendencia.order.estimatedDelivery && ` · previsão ${fmtData(pendencia.order.estimatedDelivery)}`}
-                    {pendencia.order.deliveredAt && ` · entregue ${fmtData(pendencia.order.deliveredAt)}`}
+                    {pendencia.order.shippedAt && ` · envio ${formatDate(pendencia.order.shippedAt)}`}
+                    {pendencia.order.estimatedDelivery && ` · previsão ${formatDate(pendencia.order.estimatedDelivery)}`}
+                    {pendencia.order.deliveredAt && ` · entregue ${formatDate(pendencia.order.deliveredAt)}`}
                   </div>
                 </div>
                 <button
-                  className="btn-secondary !py-1 text-xs whitespace-nowrap"
+                  className="btn-secondary btn-sm"
                   onClick={() => setRastreioAberto((v) => !v)}
                 >
                   🚚 {rastreioAberto ? 'Ocultar' : 'Rastreio'}
                 </button>
               </div>
               {rastreioAberto && (
-                <div className="mt-2 max-h-52 overflow-y-auto rounded-lg border border-gray-200 p-2">
+                <div className="mt-2 max-h-52 overflow-y-auto rounded-lg border border-slate-200 p-2">
                   {(pendencia.order.trackingEvents ?? []).length === 0 ? (
-                    <p className="px-1 py-2 text-xs text-gray-400">Nenhum evento de rastreio registrado.</p>
+                    <p className="estado-vazio py-4 text-xs">Nenhum evento de rastreio registrado.</p>
                   ) : (
-                    <ol className="space-y-1.5">
+                    <ol className="linha-tempo ml-2 mt-1">
                       {(pendencia.order.trackingEvents ?? []).map((e, i) => (
-                        <li key={i} className="flex gap-2 text-xs">
-                          <span className={`mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full ${i === 0 ? 'bg-blue-600' : 'bg-gray-300'}`} />
-                          <div>
-                            <p className={i === 0 ? 'font-medium text-gray-800' : 'text-gray-600'}>{e.description}</p>
-                            {e.date && <p className="text-[10px] text-gray-400">{new Date(e.date).toLocaleString('pt-BR')}</p>}
-                          </div>
+                        <li key={i} className="linha-tempo-item">
+                          <span className={`linha-tempo-ponto ${i === 0 ? 'linha-tempo-ponto-atual' : ''}`} />
+                          <p className={`text-xs ${i === 0 ? 'font-medium text-slate-800' : 'text-slate-600'}`}>{e.description}</p>
+                          {e.date && <p className="linha-tempo-data">{formatDateTime(e.date)}</p>}
                         </li>
                       ))}
                     </ol>
@@ -1083,20 +1072,20 @@ function DetalheModal({ pendencia, canWrite, onClose, onStatus, onResponsavel }:
             </div>
           )}
           {pendencia.descricao && (
-            <div className="col-span-2 whitespace-pre-wrap rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+            <div className="alerta-aviso whitespace-pre-wrap px-3 py-2 text-xs sm:col-span-2">
               {pendencia.descricao}
             </div>
           )}
-          {pendencia.mlClaimId && <div className="col-span-2"><PrazoMl p={pendencia} /></div>}
+          {pendencia.mlClaimId && <div className="sm:col-span-2"><PrazoMl p={pendencia} /></div>}
           {pendencia.mlClaimId && (
-            <div className="col-span-2 flex items-center gap-2 text-xs text-gray-500">
+            <div className="sm:col-span-2 flex items-center gap-2 text-xs text-slate-500">
               <span>Reclamação ML #{pendencia.mlClaimId}{pendencia.mlOrderId ? ` · Venda ${pendencia.mlOrderId}` : ''}</span>
               {pendencia.mlOrderId && (
                 <a
                   href={`https://www.mercadolivre.com.br/vendas/${pendencia.mlOrderId}/detalhe`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="font-medium text-blue-600 hover:underline"
+                  className="font-medium text-primaria-600 hover:underline"
                 >
                   Abrir no Mercado Livre ↗
                 </a>
@@ -1111,11 +1100,7 @@ function DetalheModal({ pendencia, canWrite, onClose, onStatus, onResponsavel }:
             {(['ABERTA', 'EM_TRATAMENTO', 'RESOLVIDA'] as PendenciaStatus[]).map((s) => (
               <button
                 key={s}
-                className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                  pendencia.status === s
-                    ? s === 'RESOLVIDA' ? 'bg-green-600 text-white' : s === 'EM_TRATAMENTO' ? 'bg-blue-600 text-white' : 'bg-amber-500 text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
+                className={`flex-1 ${pendencia.status === s ? `btn btn-sm border font-semibold ${TOM[STATUS_TOM_PENDENCIA[s]].selo}` : 'btn-secondary btn-sm'}`}
                 onClick={() => onStatus(s)}
               >
                 {s === 'ABERTA' ? 'Aberta' : s === 'EM_TRATAMENTO' ? 'Em tratamento' : 'Resolvida'}
@@ -1142,14 +1127,14 @@ function DetalheModal({ pendencia, canWrite, onClose, onStatus, onResponsavel }:
             </div>
           )}
           {notas.length === 0 ? (
-            <p className="text-xs text-gray-400">Nenhuma anotação ainda.</p>
+            <p className="text-xs text-slate-500">Nenhuma anotação ainda.</p>
           ) : (
             <div className="space-y-2 max-h-56 overflow-y-auto">
               {notas.map((n) => (
-                <div key={n.id} className="rounded-lg bg-gray-50 px-3 py-2">
-                  <p className="text-sm text-gray-700 whitespace-pre-wrap">{n.texto}</p>
-                  <p className="mt-1 text-xs text-gray-400">
-                    {new Date(n.createdAt).toLocaleString('pt-BR')}{n.autor ? ` · ${n.autor}` : ''}
+                <div key={n.id} className="rounded-lg bg-slate-50 px-3 py-2">
+                  <p className="text-sm text-slate-700 whitespace-pre-wrap">{n.texto}</p>
+                  <p className="mt-1 text-xs text-slate-400">
+                    {formatDateTime(n.createdAt)}{n.autor ? ` · ${n.autor}` : ''}
                   </p>
                 </div>
               ))}
@@ -1189,17 +1174,17 @@ function CaixaResposta({ onEnviar }: { onEnviar: (texto: string) => Promise<unkn
           onChange={(e) => setTexto(e.target.value)}
           rows={2}
           placeholder="Escreva a resposta — vai direto para o Mercado Livre"
-          className="flex-1 rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm resize-y focus:outline-none focus:ring-1 focus:ring-blue-400"
+          className="input flex-1 resize-y"
         />
         <button
-          className="self-end rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-40"
+          className="btn-primary self-end"
           disabled={enviando || !texto.trim()}
           onClick={enviar}
         >
           {enviando ? <Spinner className="h-4 w-4" /> : 'Enviar'}
         </button>
       </div>
-      {erro && <p className="text-xs text-red-600">{erro}</p>}
+      {erro && <p className="alerta-erro text-xs">{erro}</p>}
     </div>
   )
 }

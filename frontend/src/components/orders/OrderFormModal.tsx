@@ -69,22 +69,22 @@ export function OrderFormModal({ open, onClose, order }: Props) {
   return (
     <Modal open={open} onClose={onClose} title={isEdit ? 'Editar Pedido' : 'Novo Pedido'} size="lg">
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label className="label">Nº do Pedido *</label>
             <input
-              className={`input ${errors.orderNumber ? 'border-red-400' : ''}`}
+              className={`input ${errors.orderNumber ? 'border-red-400 focus:border-red-500 focus:ring-red-500' : ''}`}
               placeholder="PED-0001"
               {...register('orderNumber', { required: 'Obrigatório' })}
               disabled={isEdit}
             />
-            {errors.orderNumber && <p className="mt-1 text-xs text-red-500">{errors.orderNumber.message}</p>}
+            {errors.orderNumber && <p className="mt-1 text-xs text-red-700">{errors.orderNumber.message}</p>}
           </div>
 
           <div>
             <label className="label">Transportadora *</label>
             <select
-              className={`input ${errors.carrierId ? 'border-red-400' : ''}`}
+              className={`input ${errors.carrierId ? 'border-red-400 focus:border-red-500 focus:ring-red-500' : ''}`}
               {...register('carrierId', { required: 'Obrigatório' })}
             >
               <option value="">Selecionar...</option>
@@ -92,30 +92,30 @@ export function OrderFormModal({ open, onClose, order }: Props) {
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </select>
-            {errors.carrierId && <p className="mt-1 text-xs text-red-500">{errors.carrierId.message}</p>}
+            {errors.carrierId && <p className="mt-1 text-xs text-red-700">{errors.carrierId.message}</p>}
           </div>
 
           <div>
             <label className="label">Nome do Cliente *</label>
             <input
-              className={`input ${errors.customerName ? 'border-red-400' : ''}`}
+              className={`input ${errors.customerName ? 'border-red-400 focus:border-red-500 focus:ring-red-500' : ''}`}
               placeholder="Nome completo"
               {...register('customerName', { required: 'Obrigatório' })}
             />
-            {errors.customerName && <p className="mt-1 text-xs text-red-500">{errors.customerName.message}</p>}
+            {errors.customerName && <p className="mt-1 text-xs text-red-700">{errors.customerName.message}</p>}
           </div>
 
           <div>
             <label className="label">E-mail do Cliente</label>
             <input
               type="email"
-              className={`input ${errors.customerEmail ? 'border-red-400' : ''}`}
+              className={`input ${errors.customerEmail ? 'border-red-400 focus:border-red-500 focus:ring-red-500' : ''}`}
               placeholder="cliente@email.com"
               {...register('customerEmail', {
                 validate: (v) => !v || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) || 'E-mail inválido',
               })}
             />
-            {errors.customerEmail && <p className="mt-1 text-xs text-red-500">{errors.customerEmail.message}</p>}
+            {errors.customerEmail && <p className="mt-1 text-xs text-red-700">{errors.customerEmail.message}</p>}
           </div>
 
           <div>
@@ -168,7 +168,7 @@ export function OrderFormModal({ open, onClose, order }: Props) {
         </div>
 
         {mutation.isError && (
-          <p className="text-sm text-red-600">
+          <p className="alerta-erro">
             Erro ao salvar pedido. Verifique os dados e tente novamente.
           </p>
         )}
