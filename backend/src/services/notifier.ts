@@ -6,7 +6,7 @@ import { sendEmail } from './emailer'
 // porque mercadolivre → routes/bling → notifier fecha um ciclo de importação
 import type { MlCompany } from './mercadolivre'
 
-const PORTAL_URL = process.env.PORTAL_URL ?? 'https://order-tracker-production-4189.up.railway.app/portal/'
+const PORTAL_URL = process.env.PORTAL_URL || 'https://order-tracker-production-4189.up.railway.app/portal/'
 
 // Mensagem pós-venda do ML: o próprio ML corta em 350 caracteres
 // (`seller_max_message_length`) e devolve 400 acima disso.
@@ -14,6 +14,10 @@ const PORTAL_URL = process.env.PORTAL_URL ?? 'https://order-tracker-production-4
 // propósito: importar o VALOR de lá fecharia o ciclo de importação descrito acima — o
 // tipo é importado sem carregar o módulo, uma constante não.
 const ML_LIMITE_TEXTO = 350
+
+// Fecho das mensagens de despacho no chat do ML, com o link do nosso portal de rastreio.
+// Decisão do José (23/11/2026): o link é do nosso próprio rastreio e vai na mensagem.
+const RASTREIO_ML = ` Para rastrear, acesse ${PORTAL_URL} e informe seu CPF ou CNPJ.`
 
 // Atraso só vira aviso a partir daqui — atrasos curtos costumam se resolver sozinhos
 export const ATRASO_MIN_DIAS = 3
@@ -252,8 +256,7 @@ function buildEmailHtml(order: {
 
 // ─── Helpers de envio ───────────────────────────────────────────────────────
 
-// Texto curto para a mensagem pós-venda do ML: sem link (a moderação do ML barra
-// link externo) e dentro do limite de caracteres.
+// Texto da mensagem pós-venda do ML: junta os espaços e respeita o limite de caracteres.
 function textoMl(texto: string): string {
   const t = texto.replace(/\s+/g, ' ').trim()
   return t.length <= ML_LIMITE_TEXTO ? t : t.slice(0, ML_LIMITE_TEXTO - 1).trimEnd() + '…'
@@ -442,14 +445,11 @@ export async function notifyOrderUpdate(order: {
   // Venda do ML: só o despacho agrega (a entrega o próprio ML informa ao comprador)
   const primeiroNome = order.customerName.split(' ')[0]
   const previsao = order.estimatedDelivery ? formatDate(order.estimatedDelivery) : null
-  // Sem URL de propósito: o link do rastreio já vai ao ML como `tracking_url` no
-  // "shipped" do ME1 (ver mlEnvios.ts) e aparece no pedido do comprador. Repetir aqui
-  // só acrescentaria risco de moderação.
   const mlMessage = delivered
     ? undefined
     : `Olá, ${primeiroNome}! Seu pedido foi despachado e já está a caminho. 📦`
       + (previsao ? ` Previsão de entrega: ${previsao}.` : '')
-      + ` Para rastrear, use o link de rastreamento aqui no seu pedido e informe seu CPF ou CNPJ.`
+      + RASTREIO_ML
 
   await dispatch(order.id, eventHash, subject, wppMessage, emailHtml,
     { phone: order.customerPhone, email: order.customerEmail, senderCnpj: order.senderCnpj },
@@ -567,7 +567,7 @@ export async function notifyBatchEnviado(order: {
 
   const mlMessage = `Olá, ${primeiroNome}! ${dataEnvio ? `Seu pedido foi enviado no dia ${dataEnvio}.` : 'Seu pedido já está a caminho.'} 📦`
     + (previsao ? ` Previsão de entrega: ${previsao}.` : '')
-    + ` Para rastrear, use o link de rastreamento aqui no seu pedido e informe seu CPF ou CNPJ.`
+    + RASTREIO_ML
 
   await dispatch(
     order.id, eventHash, subject, wppMessage, emailHtml,
