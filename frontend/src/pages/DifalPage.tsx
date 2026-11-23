@@ -73,8 +73,8 @@ function ComDica({ conteudo, largura = 640, children }: { conteudo: React.ReactN
   useLayoutEffect(() => {
     if (!ancora || !dica.current) return
     const { width, height } = dica.current.getBoundingClientRect()
-    const telaL = window.innerWidth
-    const telaA = window.innerHeight
+    const telaL = document.documentElement.clientWidth // sem a barra de rolagem
+    const telaA = document.documentElement.clientHeight
     const x = Math.max(MARGEM_DICA, Math.min(ancora.left, telaL - width - MARGEM_DICA))
     const embaixo = ancora.bottom + MARGEM_DICA
     const emCima = ancora.top - height - MARGEM_DICA
