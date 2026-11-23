@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { difalApi } from '../lib/api'
@@ -60,22 +60,41 @@ function ItensDaNota({ itens }: { itens: DifalItemNota[] | null | undefined }) {
   )
 }
 
-// Tooltip com os itens: flutua em posição fixa na tela (as listas ficam em caixas que cortariam um tooltip comum)
-function ComDica({ conteudo, largura = 640, altura = 260, children }: { conteudo: React.ReactNode; largura?: number; altura?: number; children: React.ReactNode }) {
+// distância mínima entre a dica e a borda da tela
+const MARGEM_DICA = 8
+
+// Dica flutuante em posição fixa na tela (as listas ficam em caixas que cortariam uma dica comum).
+// A posição sai do tamanho REAL da dica, medido depois de aberta: abre embaixo se couber, senão em cima,
+// senão encosta na borda de baixo; nunca passa das bordas.
+function ComDica({ conteudo, largura = 640, children }: { conteudo: React.ReactNode; largura?: number; children: React.ReactNode }) {
+  const [ancora, setAncora] = useState<DOMRect | null>(null)
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
-  function abrir(e: React.MouseEvent<HTMLSpanElement>) {
-    const r = e.currentTarget.getBoundingClientRect()
-    // abre embaixo; se não couber embaixo, abre em cima; e não passa da borda direita
-    const embaixo = r.bottom + 8
-    setPos({ x: Math.min(r.left, window.innerWidth - largura - 20), y: embaixo + altura > window.innerHeight ? Math.max(8, r.top - altura - 8) : embaixo })
+  const dica = useRef<HTMLSpanElement>(null)
+  useLayoutEffect(() => {
+    if (!ancora || !dica.current) return
+    const { width, height } = dica.current.getBoundingClientRect()
+    const telaL = window.innerWidth
+    const telaA = window.innerHeight
+    const x = Math.max(MARGEM_DICA, Math.min(ancora.left, telaL - width - MARGEM_DICA))
+    const embaixo = ancora.bottom + MARGEM_DICA
+    const emCima = ancora.top - height - MARGEM_DICA
+    const y = embaixo + height <= telaA - MARGEM_DICA ? embaixo
+      : emCima >= MARGEM_DICA ? emCima
+      : Math.max(MARGEM_DICA, telaA - height - MARGEM_DICA)
+    setPos({ x, y })
+  }, [ancora])
+  function fechar() {
+    setAncora(null)
+    setPos(null)
   }
   return (
-    <span onMouseEnter={abrir} onMouseLeave={() => setPos(null)}>
+    <span onMouseEnter={(e) => setAncora(e.currentTarget.getBoundingClientRect())} onMouseLeave={fechar}>
       {children}
-      {pos && (
+      {ancora && (
         <span
-          style={{ left: Math.max(8, pos.x), top: pos.y, width: largura, maxHeight: altura }}
-          className="pointer-events-none fixed z-50 block max-w-[90vw] overflow-hidden rounded-lg border border-slate-200 bg-white p-3 text-left font-normal shadow-janela"
+          ref={dica}
+          style={{ left: pos?.x ?? 0, top: pos?.y ?? 0, width: largura, maxHeight: `calc(100vh - ${2 * MARGEM_DICA}px)`, visibility: pos ? 'visible' : 'hidden' }}
+          className="pointer-events-none fixed z-50 block max-w-[calc(100vw-16px)] overflow-hidden rounded-lg border border-slate-200 bg-white p-3 text-left font-normal shadow-janela"
         >
           {conteudo}
         </span>
@@ -605,7 +624,7 @@ function GuiasPendentes({ lugarCards, acaoExtra }: { lugarCards: HTMLElement | n
                 <CelulasEnvio envio={g.envio} envioMl={g.envioMl} />
                 <td className="px-2 py-2.5 text-right tabular-nums text-slate-600">{brl(g.valorNota)}</td>
                 <td className="px-2 py-2.5 text-right font-semibold tabular-nums text-primaria-700">
-                  <ComDica largura={460} altura={340} conteudo={<CalculoDaNota d={g.calculoDetalhe} total={g.difalCalculado} />}>
+                  <ComDica largura={460} conteudo={<CalculoDaNota d={g.calculoDetalhe} total={g.difalCalculado} />}>
                     <span className="cursor-help underline decoration-dotted decoration-slate-300 underline-offset-4">{brl(g.difalCalculado)}</span>
                   </ComDica>
                 </td>
@@ -1500,7 +1519,7 @@ function GuiasEmitidas() {
                   </td>
                   <td className="px-2 py-2.5 text-right tabular-nums text-slate-600">{brl(g.valorNota)}</td>
                   <td className="px-2 py-2.5 text-right font-semibold tabular-nums text-primaria-700">
-                    <ComDica largura={460} altura={340} conteudo={<CalculoDaNota d={g.calculoDetalhe} total={g.difalCalculado} />}>
+                    <ComDica largura={460} conteudo={<CalculoDaNota d={g.calculoDetalhe} total={g.difalCalculado} />}>
                       <span className="cursor-help underline decoration-dotted decoration-slate-300 underline-offset-4">{brl(g.difalCalculado)}</span>
                     </ComDica>
                   </td>
