@@ -195,10 +195,10 @@ export async function marcarComprovanteMlEnviado(prisma: PrismaClient, id: strin
 
 /**
  * Estados em que já tivemos cobrança de DIFAL: os 7 do histórico auditado (AL, AM, CE, PB, PI, RN, TO) mais o AC,
- * que aparece nos ZIPs de comprovantes do ML (dez/2025–nov/2026). Os demais o José confere com a contabilidade
- * (decisão de 20/11/2026): a tela esconde esses por padrão.
+ * que aparece nos ZIPs de comprovantes do ML (dez/2025–nov/2026), e BA, MS, MT e SE, incluídos pelo José em 23/11/2026.
+ * Os demais o José confere com a contabilidade (decisão de 20/11/2026): a tela esconde esses por padrão.
  */
-export const UFS_COM_COBRANCA = ['AC', 'AL', 'AM', 'CE', 'PB', 'PI', 'RN', 'TO']
+export const UFS_COM_COBRANCA = ['AC', 'AL', 'AM', 'BA', 'CE', 'MS', 'MT', 'PB', 'PI', 'RN', 'SE', 'TO']
 
 /**
  * Notas emitidas antes de o monitor começar a importar (a 1ª importação trouxe de 24/08/2026 em diante) ficam com a
