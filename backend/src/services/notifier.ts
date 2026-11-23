@@ -6,7 +6,7 @@ import { sendEmail } from './emailer'
 // porque mercadolivre → routes/bling → notifier fecha um ciclo de importação
 import type { MlCompany } from './mercadolivre'
 
-const PORTAL_URL = process.env.PORTAL_URL ?? 'https://order-tracker-production-4189.up.railway.app/portal/'
+const PORTAL_URL = process.env.PORTAL_URL || 'https://order-tracker-production-4189.up.railway.app/portal/'
 
 // Mensagem pós-venda do ML: o próprio ML corta em 350 caracteres
 // (`seller_max_message_length`) e devolve 400 acima disso.
