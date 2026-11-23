@@ -112,8 +112,10 @@
 }
 
 @layer utilities {
-  /* entrada de janela: aparece em 150 ms, sem exagero */
-  .animar-entrada { animation: animar-entrada 150ms ease both; }
+  /* entrada de janela: aparece em 150 ms, sem exagero.
+     'backwards' (e não 'both'): terminada a animação, o bloco fica sem transform. Um transform preso faria
+     as dicas flutuantes (position: fixed) de dentro dele se posicionarem pelo bloco, e não pela tela. */
+  .animar-entrada { animation: animar-entrada 150ms ease backwards; }
 }
 
 @keyframes animar-entrada {
