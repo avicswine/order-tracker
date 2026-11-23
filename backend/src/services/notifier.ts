@@ -256,8 +256,7 @@ function buildEmailHtml(order: {
 
 // ─── Helpers de envio ───────────────────────────────────────────────────────
 
-// Texto curto para a mensagem pós-venda do ML: sem link (a moderação do ML barra
-// link externo) e dentro do limite de caracteres.
+// Texto da mensagem pós-venda do ML: junta os espaços e respeita o limite de caracteres.
 function textoMl(texto: string): string {
   const t = texto.replace(/\s+/g, ' ').trim()
   return t.length <= ML_LIMITE_TEXTO ? t : t.slice(0, ML_LIMITE_TEXTO - 1).trimEnd() + '…'
