@@ -3,10 +3,10 @@ import jwt from 'jsonwebtoken'
 
 const WRITE_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE']
 
-// Financeiro (pagamento das guias): só o DIFAL e o "quem sou eu" do login.
-// Fica de fora a configuração dos estados (alíquotas, campos da GNRE no portal, rotina diária).
+// Financeiro (pagamento das guias): só o DIFAL e o "quem sou eu" do login. Caminho escrito de outro jeito
+// (maiúsculas etc.) cai no 403, que é o lado seguro. A configuração dos estados, dentro do DIFAL, é barrada
+// rota a rota com negarAoFinanceiro.
 const ROTAS_DO_FINANCEIRO = /^\/api\/(difal\/|auth\/me$)/
-const CONFIG_DO_DIFAL = /^\/api\/difal\/(aliquotas\/|portal\/config\/|rotina\/)/
 
 export interface AuthPayload {
   id: string
@@ -14,10 +14,13 @@ export interface AuthPayload {
 }
 
 function financeiroPode(req: Request): boolean {
-  const caminho = req.originalUrl.split('?')[0]
-  if (!ROTAS_DO_FINANCEIRO.test(caminho)) return false
-  // a lista de alíquotas pode ser lida (a tela usa); mudar a configuração, não
-  return !CONFIG_DO_DIFAL.test(caminho) || (req.method === 'GET' && caminho.startsWith('/api/difal/aliquotas'))
+  return ROTAS_DO_FINANCEIRO.test(req.originalUrl.split('?')[0])
+}
+
+/** Na própria rota (vale qualquer que seja a grafia do caminho): o Financeiro não mexe na configuração. */
+export function negarAoFinanceiro(req: Request, res: Response, next: NextFunction) {
+  if (req.user?.role === 'FINANCEIRO') return res.status(403).json({ error: 'Acesso negado: permissão insuficiente' })
+  next()
 }
 
 declare global {

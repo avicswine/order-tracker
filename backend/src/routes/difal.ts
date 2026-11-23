@@ -8,6 +8,7 @@
 import { Router, Request, Response } from 'express'
 import { query, body, validationResult } from 'express-validator'
 import { prisma } from '../lib/prisma'
+import { negarAoFinanceiro } from '../middleware/auth'
 import { Prisma } from '@prisma/client'
 import { importarNotas, type ResultadoImportacao } from '../services/difal/importar'
 import { preencherLogisticaMl } from '../services/difal/logisticaMl'
@@ -90,6 +91,7 @@ router.get('/aliquotas', async (_req: Request, res: Response) => {
 // PUT /difal/aliquotas/:uf — corrigir a alíquota de um estado
 router.put(
   '/aliquotas/:uf',
+  negarAoFinanceiro,
   [
     body('aliquotaInterna').optional().isFloat({ min: 0, max: 40 }),
     body('fcp').optional().isFloat({ min: 0, max: 10 }),
@@ -310,6 +312,7 @@ router.get('/portal/status', (_req: Request, res: Response) => res.json(statusPo
 // GET /difal/portal/config/:uf?empresa= — receitas e exigências da UF (GnreConfigUF)
 router.get(
   '/portal/config/:uf',
+  negarAoFinanceiro,
   [query('empresa').isIn(['AVIC', 'AGRO'])],
   async (req: Request, res: Response) => {
     const erros = validationResult(req)
@@ -467,7 +470,7 @@ router.post('/lotes/:id/consultar', async (req: Request, res: Response) => {
 
 // POST /difal/rotina/simular — monta a mensagem da rotina diária com os dados de agora, sem gerar lote,
 // sem enviar ao portal e sem mandar WhatsApp (botão na Configuração)
-router.post('/rotina/simular', async (_req: Request, res: Response) => {
+router.post('/rotina/simular', negarAoFinanceiro, async (_req: Request, res: Response) => {
   try {
     const r = await rodarRotinaDifal(prisma, { simulacao: true, agendada: false })
     res.json({
