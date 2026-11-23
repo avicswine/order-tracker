@@ -5,11 +5,11 @@ import { UserRole } from '@prisma/client'
 const [, , name, email, password, role] = process.argv
 
 if (!name || !email || !password) {
-  console.error('Uso: npx tsx src/scripts/create-user.ts "Nome" "email@exemplo.com" "senha123" [ADMIN|VIEWER]')
+  console.error('Uso: npx tsx src/scripts/create-user.ts "Nome" "email@exemplo.com" "senha123" [ADMIN|VIEWER|FINANCEIRO]')
   process.exit(1)
 }
 
-const userRole = role === 'ADMIN' ? UserRole.ADMIN : UserRole.VIEWER
+const userRole = role === 'ADMIN' || role === 'FINANCEIRO' ? UserRole[role] : UserRole.VIEWER
 
 async function main() {
   const existing = await prisma.user.findUnique({ where: { email } })
