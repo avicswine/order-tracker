@@ -379,6 +379,7 @@ enum PendenciaStatus {
 enum UserRole {
   ADMIN
   VIEWER
+  FINANCEIRO // só a aba DIFAL, sem a configuração dos estados
 }
 
 enum OrderStatus {

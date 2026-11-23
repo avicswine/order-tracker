@@ -1,5 +1,5 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import { AuthProvider } from './contexts/AuthContext'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { PrivateRoute } from './components/PrivateRoute'
 import { Layout } from './components/layout/Layout'
 import { LoginPage } from './pages/LoginPage'
@@ -23,6 +23,29 @@ export default function App() {
             element={
               <PrivateRoute>
                 <Layout>
+                  <Telas />
+                </Layout>
+              </PrivateRoute>
+            }
+          />
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
+  )
+}
+
+function Telas() {
+  const { user } = useAuth()
+  // Financeiro só vê o DIFAL: qualquer outro endereço volta para lá
+  if (user?.role === 'FINANCEIRO') {
+    return (
+      <Routes>
+        <Route path="/difal" element={<DifalPage />} />
+        <Route path="*" element={<Navigate to="/difal" replace />} />
+      </Routes>
+    )
+  }
+  return (
                   <Routes>
                     <Route path="/" element={<OrdersPage />} />
                     <Route path="/pendencias" element={<PendenciasPage />} />
@@ -33,12 +56,5 @@ export default function App() {
                     <Route path="/whatsapp" element={<WhatsAppPage />} />
                     <Route path="/logs" element={<LogsPage />} />
                   </Routes>
-                </Layout>
-              </PrivateRoute>
-            }
-          />
-        </Routes>
-      </AuthProvider>
-    </BrowserRouter>
   )
 }

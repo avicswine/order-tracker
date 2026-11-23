@@ -1,5 +1,8 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
+import type { UserRole } from '../../types'
+
+const NOME_DO_PAPEL: Record<UserRole, string> = { ADMIN: 'Administrador', VIEWER: 'Visualizador', FINANCEIRO: 'Financeiro' }
 
 const navItems = [
   {
@@ -94,6 +97,7 @@ interface SidebarProps {
 
 export function Sidebar({ minimizado = false, onToggle, abertoNoCelular = false, onNavegar }: SidebarProps) {
   const { user, logout } = useAuth()
+  const financeiro = user?.role === 'FINANCEIRO'
   const navigate = useNavigate()
 
   function handleLogout() {
@@ -140,7 +144,7 @@ export function Sidebar({ minimizado = false, onToggle, abertoNoCelular = false,
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-1">
-        {navItems.map((item) => (
+        {navItems.filter((item) => !financeiro || item.to === '/difal').map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
@@ -159,6 +163,7 @@ export function Sidebar({ minimizado = false, onToggle, abertoNoCelular = false,
             {!minimizado && item.label}
           </NavLink>
         ))}
+        {!financeiro && (<>
         <a
           href="/portal"
           target="_blank"
@@ -188,13 +193,14 @@ export function Sidebar({ minimizado = false, onToggle, abertoNoCelular = false,
           </svg>
           {!minimizado && 'Power BI'}
         </a>
+        </>)}
       </nav>
 
       <div className={`py-4 border-t border-white/10 space-y-3 ${minimizado ? 'px-2' : 'px-4'}`}>
         {user && !minimizado && (
           <div className="px-2">
             <p className="text-xs font-medium text-white truncate">{user.name}</p>
-            <p className="text-xs text-slate-500">{user.role === 'ADMIN' ? 'Administrador' : 'Visualizador'}</p>
+            <p className="text-xs text-slate-500">{NOME_DO_PAPEL[user.role]}</p>
           </div>
         )}
         <button

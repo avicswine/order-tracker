@@ -12,6 +12,7 @@ import { ordersApi } from '../lib/api'
 import { formatBRL as brl, formatDate, formatDateTime, SENDER_COMPANIES } from '../lib/utils'
 import { seloTom, type Tom } from '../lib/estilo'
 import type { Order } from '../types'
+import { useAuth } from '../contexts/AuthContext'
 
 // Ícones simples desenhados aqui mesmo (sem biblioteca nova)
 const ICONES = {
@@ -761,7 +762,8 @@ const STATUS_ENVIO_ML: Record<string, [string, Tom]> = {
 }
 
 function CelulasEnvio({ envio, envioMl }: { envio: DifalGuiaPendente['envio']; envioMl: DifalGuiaPendente['envioMl'] }) {
-  // clicar no status abre a mesma janela 'Detalhes do Pedido' da tela de Pedidos
+  // clicar no status abre a mesma janela 'Detalhes do Pedido' da tela de Pedidos (o Financeiro não vê Pedidos)
+  const financeiro = useAuth().user?.role === 'FINANCEIRO'
   const [pedido, setPedido] = useState<Order | null>(null)
   const [abrindo, setAbrindo] = useState(false)
   async function abrir(id: string) {
@@ -799,6 +801,11 @@ function CelulasEnvio({ envio, envioMl }: { envio: DifalGuiaPendente['envio']; e
     <>
       <td className="max-w-[180px] truncate px-2 py-2.5 text-xs text-slate-600" title={envio.transportadora ?? undefined}>{envio.transportadora ?? '—'}</td>
       <td className="px-2 py-2.5">
+        {financeiro ? (
+          <span title={envio.ultimoRastreio ?? undefined}>
+            <StatusBadge status={envio.situacao} hasOccurrence={envio.temOcorrencia} lastTracking={envio.ultimoRastreio} />
+          </span>
+        ) : (<>
         <button
           onClick={() => abrir(envio.pedidoId)}
           disabled={abrindo}
@@ -808,6 +815,7 @@ function CelulasEnvio({ envio, envioMl }: { envio: DifalGuiaPendente['envio']; e
           <StatusBadge status={envio.situacao} hasOccurrence={envio.temOcorrencia} lastTracking={envio.ultimoRastreio} />
         </button>
         {pedido && <OrderDetailModal order={pedido} onClose={() => setPedido(null)} />}
+        </>)}
       </td>
       <td className="px-2 py-2.5 text-xs text-slate-600">{envio.enviadoEm ? dataBr(envio.enviadoEm) : '—'}</td>
       <td className="px-2 py-2.5 text-xs text-slate-600">
@@ -1723,6 +1731,8 @@ function Historico() {
 
 export function DifalPage() {
   const [aba, setAba] = useState<NomeAba>('vendas')
+  // a configuração dos estados (engrenagem) não aparece para o Financeiro
+  const podeConfigurar = useAuth().user?.role !== 'FINANCEIRO'
   // lugar dos cards da aba Vendas: acima das abas (a aba Vendas desenha neles com createPortal)
   const [lugarCards, setLugarCards] = useState<HTMLDivElement | null>(null)
 
@@ -1735,14 +1745,14 @@ export function DifalPage() {
         <p className="order-last min-w-0 basis-full text-sm text-slate-500 sm:order-none sm:basis-0 sm:flex-1" title="Convênio ICMS 52/91: carga total de 5,6% para o NCM 8436; a origem (RS) já recolhe 4,1%">
           NCM 8436: carga de 5,6% − 4,1% na origem = <b className="text-primaria-700">1,5%</b> para o destino. Pagar no dia da emissão da NF.
         </p>
-        <button
+        {podeConfigurar && <button
           onClick={() => setAba(aba === 'config' ? 'vendas' : 'config')}
           title={aba === 'config' ? 'Voltar para Vendas' : 'Configuração (portal GNRE, receitas por estado e rotina diária)'}
           aria-label="Configuração"
           className={`${aba === 'config' ? 'btn-primary' : 'btn-secondary'} ml-auto h-9 w-9 shrink-0 px-0 sm:ml-0`}
         >
           <Icone nome="engrenagem" className="h-5 w-5" />
-        </button>
+        </button>}
       </div>
 
       <div ref={setLugarCards} className={aba === 'vendas' ? '' : 'hidden'} />
