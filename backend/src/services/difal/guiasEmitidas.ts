@@ -35,6 +35,14 @@ export interface GuiaEmitida {
   /** situação da guia no portal: 0 processada, 1/2 invalidada, 3 erro de comunicação, 4 pendente; null = sem resultado */
   situacaoPortal: string | null
   linhaDigitavel: string | null
+  /** código de barras de 44 dígitos (vai no arquivo de pagamento do Sicredi) */
+  codigoBarras: string | null
+  /** valor da guia como o portal emitiu (é o que está no código de barras) */
+  valorGuia: number | null
+  /** último dia para pagar a guia (AAAA-MM-DD), como o portal devolveu */
+  dataLimitePagamento: string | null
+  /** arquivo de pagamento do Sicredi em que a guia já entrou */
+  arquivoPagamento: { nome: string; criadoEm: Date } | null
   /** gerada depois do prazo legal: saiu só com o imposto, sem multa e juros */
   atrasada: boolean
   pagaEm: string | null
@@ -48,10 +56,12 @@ export interface AlertaGuias {
 }
 
 export async function listarGuiasEmitidas(prisma: PrismaClient): Promise<{ guias: GuiaEmitida[]; alertas: AlertaGuias[] }> {
-  const [notas, lotes] = await Promise.all([
+  const [notas, lotes, arquivos] = await Promise.all([
     prisma.difalNota.findMany({ where: { guiaLoteId: { not: null } }, orderBy: { guiaGeradaEm: 'desc' } }),
     prisma.difalLoteGnre.findMany({ select: { id: true, empresa: true, ambiente: true, enviadoEm: true, resultadoXml: true } }),
+    prisma.difalArquivoPagamento.findMany({ select: { id: true, nome: true, criadoEm: true } }),
   ])
+  const arquivoPorId = new Map(arquivos.map((a) => [a.id, { nome: a.nome, criadoEm: a.criadoEm }]))
   const resultado = new Map(lotes.map((l) => [l.id, { ...l, guias: l.resultadoXml ? lerResultadoLote(l.resultadoXml).guias : [] }]))
 
   const guias: GuiaEmitida[] = notas.map((n) => {
@@ -66,6 +76,8 @@ export async function listarGuiasEmitidas(prisma: PrismaClient): Promise<{ guias
       mlOrderId: n.mlOrderId, valorNota: n.valorNota, difalCalculado: n.difalCalculado, calculoDetalhe: n.calculoDetalhe, itens: n.itens,
       emitidaEm: n.emitidaEm, loteId: n.guiaLoteId!, ambiente: lote?.ambiente ?? null, geradaEm,
       enviadaEm: lote?.enviadoEm ?? null, situacaoPortal: g?.situacaoGuia ?? null, linhaDigitavel: g?.linhaDigitavel ?? null,
+      codigoBarras: g?.codigoBarras ?? null, valorGuia: g?.valorGNRE ? Number(g.valorGNRE) : null, dataLimitePagamento: g?.dataLimitePagamento ?? null,
+      arquivoPagamento: n.arquivoPagamentoId ? arquivoPorId.get(n.arquivoPagamentoId) ?? null : null,
       atrasada: prazoDoDifal(n.emitidaEm) < geradaEm,
       pagaEm: n.guiaPagaEm ? dataBR(n.guiaPagaEm) : null, valorPago: n.difalPagoGuia,
       comprovanteMlEnviadoEm: n.comprovanteMlEnviadoEm,

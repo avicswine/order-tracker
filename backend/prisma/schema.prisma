@@ -501,6 +501,8 @@ model DifalNota {
   guiaLoteId      String?   // identificador do lote GNRE em que a guia saiu
   // venda do ML em que nós pagamos a guia e o José anexou o comprovante na venda do ML
   comprovanteMlEnviadoEm DateTime?
+  // arquivo de pagamento do Sicredi (CNAB 240) em que a guia entrou: não entra em outro
+  arquivoPagamentoId String?
 
   criadoEm        DateTime @default(now())
   atualizadoEm    DateTime @updatedAt
@@ -548,6 +550,22 @@ model DifalAliquota {
   atualizadoEm    DateTime @updatedAt
 
   @@map("difal_aliquotas")
+}
+
+// Arquivo de remessa CNAB 240 do Sicredi com guias GNRE para pagar (o José sobe no Internet Banking e aprova).
+// O sequencial é por empresa: o banco pede que suba a cada arquivo (manual Sicredi v1.5, nota G006/G007).
+model DifalArquivoPagamento {
+  id         String   @id @default(cuid())
+  empresa    String
+  sequencial Int
+  nome       String
+  guias      Int
+  total      Float
+  conteudo   String
+  criadoEm   DateTime @default(now())
+
+  @@unique([empresa, sequencial])
+  @@map("difal_arquivos_pagamento")
 }
 
 // Dados do emitente que entram na GNRE, por empresa. Vêm do bloco <emit> do XML

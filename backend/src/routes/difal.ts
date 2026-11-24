@@ -13,6 +13,7 @@ import { Prisma } from '@prisma/client'
 import { importarNotas, type ResultadoImportacao } from '../services/difal/importar'
 import { preencherLogisticaMl } from '../services/difal/logisticaMl'
 import { listarGuiasEmitidas, marcarGuiasPagas } from '../services/difal/guiasEmitidas'
+import { gerarArquivoPagamento } from '../services/difal/arquivoPagamento'
 import { semearAliquotas } from '../services/difal/aliquotas'
 import { listarGuiasPendentes, gerarLoteDasNotas, classificarCamposExtras, marcarComprovanteMlEnviado, filtroVendasMl, INICIO_LISTA_NOTAS } from '../services/difal/guias'
 import { ErroMontagemGnre } from '../services/difal/gnre'
@@ -221,6 +222,21 @@ router.get('/guias-emitidas', async (_req: Request, res: Response) => {
     res.status(500).json({ erro: (e as Error).message })
   }
 })
+
+// POST /difal/arquivo-pagamento — monta o arquivo CNAB 240 do Sicredi com as guias escolhidas (não paga nada)
+router.post(
+  '/arquivo-pagamento',
+  [body('empresa').isIn(['AVIC', 'AGRO']), body('ids').isArray({ min: 1, max: 200 }), body('ids.*').isString().notEmpty()],
+  async (req: Request, res: Response) => {
+    const erros = validationResult(req)
+    if (!erros.isEmpty()) return res.status(400).json({ errors: erros.array() })
+    try {
+      res.json(await gerarArquivoPagamento(prisma, req.body.empresa, req.body.ids))
+    } catch (e) {
+      res.status(400).json({ erro: (e as Error).message })
+    }
+  },
+)
 
 // POST /difal/guias-emitidas/pagas — marca (data AAAA-MM-DD) ou desmarca (data null) guias como pagas
 router.post(
