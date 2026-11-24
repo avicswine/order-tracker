@@ -7,7 +7,7 @@
  */
 import type { PrismaClient } from '@prisma/client'
 import { listarGuiasEmitidas } from './guiasEmitidas'
-import { montarRemessaTributos, nomeArquivoRemessa, type ContaSicredi, type PagamentoTributo } from './cnabSicredi'
+import { montarRemessaTributos, nomeArquivoRemessa, valorDoCodigoDeBarras, type ContaSicredi, type PagamentoTributo } from './cnabSicredi'
 import { dataBR } from '../separacao/datas'
 
 const CONVENIO_SICREDI: Record<string, string> = { AVIC: '7SR1', AGRO: '7SR3' }
@@ -21,6 +21,9 @@ function contaDaEmpresa(empresa: string, cnpj: string, razaoSocial: string): Con
   const contaDv = v('CONTA_DV')
   const faltando = [!agencia && 'AGENCIA', !conta && 'CONTA', !contaDv && 'CONTA_DV'].filter(Boolean)
   if (faltando.length) throw new Error(`faltam no Railway as variáveis ${faltando.map((f) => `SICREDI_${empresa}_${f}`).join(', ')}`)
+  // só dígitos: "45981-3" na CONTA viraria a conta 459813 sem aviso (o valor não aparece na mensagem)
+  const comLetraOuTraco = (['AGENCIA', 'AGENCIA_DV', 'CONTA', 'CONTA_DV'] as const).filter((c) => v(c) && !/^\d+$/.test(v(c)))
+  if (comLetraOuTraco.length) throw new Error(`as variáveis ${comLetraOuTraco.map((c) => `SICREDI_${empresa}_${c}`).join(', ')} devem ter só números (o dígito vai na variável _DV)`)
   return { cnpj, razaoSocial, convenio, agencia, agenciaDv: v('AGENCIA_DV'), conta, contaDv }
 }
 
@@ -41,6 +44,8 @@ export async function gerarArquivoPagamento(prisma: PrismaClient, empresa: strin
 
   const escolhidas = (await listarGuiasEmitidas(prisma)).guias.filter((g) => ids.includes(g.id))
   const foraDoArquivo: ResultadoArquivo['foraDoArquivo'] = []
+  const naoAchadas = ids.length - escolhidas.length
+  if (naoAchadas > 0) foraDoArquivo.push({ nfNumero: '?', motivo: `${naoAchadas} guia(s) escolhida(s) não encontrada(s)` })
   const entram: { id: string; pagamento: PagamentoTributo }[] = []
   for (const g of escolhidas) {
     const motivo = g.empresa !== empresa ? `é da ${g.empresa} (um arquivo por empresa)`
@@ -52,6 +57,8 @@ export async function gerarArquivoPagamento(prisma: PrismaClient, empresa: strin
       : !g.dataLimitePagamento ? 'sem data limite de pagamento'
       : !(g.valorGuia && g.valorGuia > 0) ? 'sem o valor da guia devolvido pelo portal'
       : g.dataLimitePagamento < hoje ? `venceu em ${g.dataLimitePagamento.split('-').reverse().join('/')} (gere uma guia nova)`
+      : valorDoCodigoDeBarras(g.codigoBarras) !== null && valorDoCodigoDeBarras(g.codigoBarras) !== Math.round(g.valorGuia! * 100)
+        ? 'o valor no código de barras não bate com o da guia'
       : null
     if (motivo) { foraDoArquivo.push({ nfNumero: g.nfNumero, motivo }); continue }
     entram.push({
@@ -75,8 +82,11 @@ export async function gerarArquivoPagamento(prisma: PrismaClient, empresa: strin
     const conteudo = montarRemessaTributos(conta, sequencial, new Date(), entram.map((e) => e.pagamento))
     const total = Math.round(entram.reduce((s, e) => s + e.pagamento.valor, 0) * 100) / 100
     const arquivo = await tx.difalArquivoPagamento.create({ data: { empresa, sequencial, nome, guias: entram.length, total, conteudo } })
-    const marcadas = await tx.difalNota.updateMany({ where: { id: { in: entram.map((e) => e.id) }, arquivoPagamentoId: null }, data: { arquivoPagamentoId: arquivo.id } })
-    if (marcadas.count !== entram.length) throw new Error('alguma guia entrou em outro arquivo ao mesmo tempo: gere de novo')
+    const marcadas = await tx.difalNota.updateMany({
+      where: { id: { in: entram.map((e) => e.id) }, arquivoPagamentoId: null, guiaPagaEm: null },
+      data: { arquivoPagamentoId: arquivo.id },
+    })
+    if (marcadas.count !== entram.length) throw new Error('alguma guia foi paga ou entrou em outro arquivo agora há pouco: gere de novo')
     return { nome, conteudo, guias: entram.length, total, foraDoArquivo }
   })
 }

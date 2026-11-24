@@ -3,7 +3,7 @@
  * Exemplo de cabeça: duas guias, R$ 10,00 e R$ 2,50 → total do lote R$ 12,50 (1250 centavos).
  *   npx tsx src/services/difal/verificarCnabSicredi.ts
  */
-import { montarRemessaTributos, nomeArquivoRemessa } from './cnabSicredi'
+import { montarRemessaTributos, nomeArquivoRemessa, valorDoCodigoDeBarras } from './cnabSicredi'
 
 let falhas = 0
 function caso(nome: string, ok: boolean) {
@@ -45,6 +45,12 @@ caso('segmento O: número do documento NF 6464', campo(o1, 123, 142).trim() === 
 caso('trailer lote: tipo 5, 4 registros (1 + 2 + 5), total 1250 centavos', campo(tl, 8, 8) === '5' && campo(tl, 18, 23) === '000004' && campo(tl, 24, 41) === '000000000000001250')
 caso('trailer arquivo: lote 9999, tipo 9, 1 lote, 6 registros', campo(tz, 4, 7) === '9999' && campo(tz, 8, 8) === '9' && campo(tz, 18, 23) === '000001' && campo(tz, 24, 29) === '000006')
 caso('nome do arquivo: 7SR3 + dia 24 + 1º do dia', nomeArquivoRemessa('7SR3', 24, 0) === '7SR32400.REM')
+
+caso('valor no código de barras 8 6 …: posições 5-15 = 00000001234 → 1234 centavos', valorDoCodigoDeBarras('8460' + '00000001234' + '5'.repeat(29)) === 1234)
+caso('código de barras sem valor (3º dígito 8) → não confere', valorDoCodigoDeBarras('8480' + '9'.repeat(40)) === null)
+let recusouValor = false
+try { montarRemessaTributos(conta, 1, new Date(), [{ codigoBarras: '8460' + '00000001234' + '5'.repeat(29), orgao: 'X', vencimento: '2026-11-25', dataPagamento: '2026-11-24', valor: 12.35, seuNumero: 'NF 1' }]) } catch { recusouValor = true }
+caso('recusa guia cujo valor (R$ 12,35) não bate com o do código de barras (R$ 12,34)', recusouValor)
 
 let recusou = false
 try { montarRemessaTributos(conta, 1, new Date(), [{ codigoBarras: '123', orgao: 'X', vencimento: '2026-11-25', dataPagamento: '2026-11-24', valor: 1, seuNumero: 'NF 1' }]) } catch { recusou = true }

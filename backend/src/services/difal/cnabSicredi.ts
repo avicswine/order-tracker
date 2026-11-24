@@ -46,7 +46,7 @@ export interface PagamentoTributo {
 /** número: à direita, zeros à esquerda (manual, "Alinhamento dos campos") */
 function num(valor: string | number, tamanho: number): string {
   const s = String(valor).replace(/\D/g, '')
-  if (s.length > tamanho) throw new Error(`número "${s}" não cabe em ${tamanho} posições`)
+  if (s.length > tamanho) throw new Error(`campo numérico maior que ${tamanho} posições`)
   return s.padStart(tamanho, '0')
 }
 
@@ -63,6 +63,15 @@ function ddmmaaaa(iso: string): string {
   const [a, m, d] = iso.split('-')
   if (!a || !m || !d) throw new Error(`data inválida: "${iso}"`)
   return `${d}${m}${a}`
+}
+
+/**
+ * Valor gravado no código de barras de arrecadação (começa com 8): quando o 3º dígito é 6 ou 7,
+ * as posições 5 a 15 são o valor em centavos (padrão Febraban de arrecadação). Senão, null.
+ */
+export function valorDoCodigoDeBarras(codigo: string): number | null {
+  if (codigo[0] !== '8' || !['6', '7'].includes(codigo[2])) return null
+  return Number(codigo.slice(4, 15))
 }
 
 /** valor em reais → centavos, sem vírgula (formato 9(n)V2) */
@@ -107,7 +116,11 @@ export function montarRemessaTributos(conta: ContaSicredi, sequencial: number, g
     brancos(40), brancos(30), num(0, 5), brancos(15), brancos(20), num(0, 5), num(0, 3), brancos(2), brancos(8), brancos(10),
   ])
   const detalhes = pagamentos.map((g, i) => {
-    if (!/^\d{44}$/.test(g.codigoBarras)) throw new Error(`NF ${g.seuNumero}: código de barras deve ter 44 dígitos`)
+    if (!/^\d{44}$/.test(g.codigoBarras)) throw new Error(`${g.seuNumero}: código de barras deve ter 44 dígitos`)
+    const valorNoCodigo = valorDoCodigoDeBarras(g.codigoBarras)
+    if (valorNoCodigo !== null && valorNoCodigo !== centavos(g.valor)) {
+      throw new Error(`${g.seuNumero}: o valor no código de barras não bate com o valor da guia`)
+    }
     if (!(g.valor > 0)) throw new Error(`NF ${g.seuNumero}: valor inválido`)
     return registro([
       CODIGO_SICREDI, lote, '3', num(i + 1, 5), 'O', '0', '00', g.codigoBarras, alfa(g.orgao, 30),
