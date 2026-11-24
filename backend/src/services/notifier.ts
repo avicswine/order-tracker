@@ -302,7 +302,6 @@ async function dispatchMl(
     await mlConversaResponder(venda.mlCompany as MlCompany, venda.mlOrderId, textoMl(mlMessage))
     await saveNotification(orderId, eventHash, 'ML_MENSAGEM', true, venda.mlOrderId, eventText)
     console.log(`[Notifier] 💬 ML → ${venda.orderNumber}`)
-
   } catch (err) {
     // Conversa fechada pelo ML (venda cancelada, reembolso, reclamação) ou moderação:
     // registra e segue — não é motivo para quebrar o ciclo de rastreio.

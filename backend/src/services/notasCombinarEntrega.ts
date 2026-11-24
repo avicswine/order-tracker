@@ -92,7 +92,20 @@ export async function notasParaAtualizar(): Promise<{ id: string; orderNumber: s
  * Atualiza no ML as notas que mudaram, até o limite da rodada. Chamada no fim de cada
  * rodada de rastreio. Erro numa venda fica no log e não para as outras nem o rastreio.
  */
+let rodadaEmAndamento = false
+
 export async function sincronizarNotasCombinar(): Promise<void> {
+  // duas rodadas de rastreio juntas (agendador + botão) não podem gravar a mesma nota duas vezes
+  if (rodadaEmAndamento) return
+  rodadaEmAndamento = true
+  try {
+    await gravarNotasQueMudaram()
+  } finally {
+    rodadaEmAndamento = false
+  }
+}
+
+async function gravarNotasQueMudaram(): Promise<void> {
   const pendentes = await notasParaAtualizar()
   if (!pendentes.length) return
   const lote = pendentes.slice(0, limitePorRodada())

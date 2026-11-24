@@ -31,7 +31,10 @@ export async function runTrackingSync(onProgress?: ProgressCallback, systems?: T
     ],
   })
 
-  if (orders.length === 0) return { atualizados: 0, erros: 0, total: 0 }
+  if (orders.length === 0) {
+    sincronizarNotasCombinar().catch((err) => console.error('[NotasML] Erro na rodada de notas:', err))
+    return { atualizados: 0, erros: 0, total: 0 }
+  }
 
   let atualizados = 0
   let erros = 0
