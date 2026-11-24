@@ -7,6 +7,10 @@
  *   npx tsx src/scripts/notasCombinarEntrega.ts              # SIMULA (padrão)
  *   npx tsx src/scripts/notasCombinarEntrega.ts --limite 1 --aplicar
  *   npx tsx src/scripts/notasCombinarEntrega.ts --aplicar
+ *   ... --todas   inclui as já entregues (por padrão só as que ainda não chegaram: cada venda
+ *                 custa 2 chamadas ao ML, e a conta do ML já foi bloqueada)
+ *
+ * Nota escrita à mão que não seja a previsão de entrega é mantida, nunca apagada.
  *
  * ATENÇÃO: escreve no Mercado Livre. Rode a simulação, confira a lista, e faça a
  * primeira execução real com --limite 1.
@@ -16,8 +20,13 @@ import { mlGravarNota, ML_COMPANIES, type MlCompany } from '../services/mercadol
 import { notaDaVenda } from '../services/notifier'
 
 const aplicar = process.argv.includes('--aplicar')
+const todas = process.argv.includes('--todas')
 const iLimite = process.argv.indexOf('--limite')
 const limite = iLimite >= 0 ? Number(process.argv[iLimite + 1]) : undefined
+if (limite !== undefined && !(Number.isInteger(limite) && limite > 0)) {
+  console.error('--limite precisa de um número inteiro maior que zero (ex.: --limite 1)')
+  process.exit(1)
+}
 
 async function main(): Promise<void> {
   const vendas = await prisma.order.findMany({
@@ -25,7 +34,8 @@ async function main(): Promise<void> {
       mlSemEnvio: true,
       mlOrderId: { not: null },
       mlCompany: { not: null },
-      status: { not: 'CANCELLED' },
+      status: todas ? { not: 'CANCELLED' } : { in: ['PENDING', 'IN_TRANSIT'] },
+      nfNumber: { not: null },
     },
     select: {
       orderNumber: true, mlOrderId: true, mlCompany: true, nfNumber: true,
@@ -58,7 +68,7 @@ async function main(): Promise<void> {
     const r = await mlGravarNota(v.mlCompany as MlCompany, v.mlOrderId!, nota)
     console.log(`${v.orderNumber}: ${r} — "${nota}"`)
     if (r === 'falhou') falhas++
-    else gravadas++
+    else if (r !== 'mantida') gravadas++
     await new Promise((r2) => setTimeout(r2, 400))   // a conta do ML já foi bloqueada
   }
 
