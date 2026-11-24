@@ -798,14 +798,14 @@ function GuiasPendentes({ lugarCards, acaoExtra }: { lugarCards: HTMLElement | n
                     <span className="cursor-help underline decoration-dotted decoration-slate-300 underline-offset-4">{brl(g.difalCalculado)}</span>
                   </ComDica>
                 </td>
-                <td className="px-4 text-xs">
+                <td className="min-w-[180px] max-w-[280px] px-4 text-xs">
                   <span className="flex flex-wrap items-center gap-1.5">
                     {g.situacao === 'DIVERGENTE' ? (
-                      <span title={g.observacao ?? undefined} className={seloTom('vermelho')}>● nota divergente (cancelada?) — conferir</span>
+                      <span title={g.observacao ?? undefined} className={`whitespace-normal ${seloTom('vermelho')}`}>● nota divergente (cancelada?) — conferir</span>
                     ) : g.guiaGeradaEm && ['1', '2'].includes(g.situacaoGuia ?? '') ? (
-                      <span className={seloTom('vermelho')}>guia recusada · em Lotes GNRE, &ldquo;Devolver à fila&rdquo;</span>
+                      <span className={`whitespace-normal ${seloTom('vermelho')}`}>guia recusada · em Lotes GNRE, &ldquo;Devolver à fila&rdquo;</span>
                     ) : g.guiaGeradaEm && g.situacaoGuia === '3' ? (
-                      <span className={seloTom('ambar')}>erro de comunicação com o estado · consulte o lote de novo; sem código de barras, &ldquo;Devolver à fila&rdquo;</span>
+                      <span className={`whitespace-normal ${seloTom('ambar')}`}>erro de comunicação com o estado · consulte o lote de novo; sem código de barras, &ldquo;Devolver à fila&rdquo;</span>
                     ) : g.guiaGeradaEm && !g.guiaAceita ? (
                       <span className={seloTom('primaria')}>guia gerada · envie ao portal e consulte</span>
                     ) : g.guiaGeradaEm ? (
@@ -826,7 +826,7 @@ function GuiasPendentes({ lugarCards, acaoExtra }: { lugarCards: HTMLElement | n
                     ) : g.pronta ? (
                       <span className={seloTom('verde')}>● pronta</span>
                     ) : (
-                      <span className={seloTom('ambar')}>● falta: {g.faltando.join('; ')}</span>
+                      <span className={`whitespace-normal ${seloTom('ambar')}`}>● falta: {g.faltando.join('; ')}</span>
                     )}
                     {g.mlRecolhe && g.guiaGeradaEm && g.mlOrderId && <LinkComprovanteMl mlOrderId={g.mlOrderId} />}
                   </span>
@@ -931,8 +931,9 @@ function tomCanal(canal: string | null): Tom {
 function CelulaCanal({ g }: { g: DifalGuiaPendente }) {
   return (
     <td className="text-xs">
-      <span className="flex flex-wrap items-center gap-1">
-        <span className={`w-fit max-w-[150px] truncate ${seloTom(tomCanal(g.canal))}`} title={g.canal ?? undefined}>{g.canal ?? 'Balcão'}</span>
+      <span className="flex items-center gap-1">
+        {/* sem o nome da empresa na frente ('Avicswine Mercado Livre' → 'Mercado Livre'): o selo AVIC/AGRO já está na nota */}
+        <span className={`w-fit max-w-[150px] truncate ${seloTom(tomCanal(g.canal))}`} title={g.canal ?? undefined}>{(g.canal ?? 'Balcão').replace(/^(avicswine|agrogranja)\s+/i, '')}</span>
         {g.ml && (
           <span title={g.mlLogistica ? undefined : 'Buscado na API do Mercado Livre no "Atualizar do Bling" em produção (o PC não tem acesso à conta do ML)'}
             className={`w-fit ${seloTom(TOM_LOGISTICA[g.mlLogistica ?? ''] ?? 'cinza')}`}>
@@ -995,7 +996,7 @@ function CelulasEnvio({ envio, envioMl }: { envio: DifalGuiaPendente['envio']; e
   }
   return (
     <>
-      <td className="max-w-[180px] truncate text-xs text-slate-600" title={envio.transportadora ?? undefined}>{envio.transportadora ?? '—'}</td>
+      <td className="max-w-[140px] truncate text-xs text-slate-600" title={envio.transportadora ?? undefined}>{envio.transportadora ?? '—'}</td>
       <td className="whitespace-nowrap">
         {financeiro ? (
           <span title={envio.ultimoRastreio ?? undefined}>
@@ -1015,7 +1016,7 @@ function CelulasEnvio({ envio, envioMl }: { envio: DifalGuiaPendente['envio']; e
       </td>
       <td className="whitespace-nowrap text-xs text-slate-600">{envio.enviadoEm ? dataBr(envio.enviadoEm) : '—'}</td>
       <td className="whitespace-nowrap text-xs text-slate-600">
-        {envio.entregueEm ? <span className="text-emerald-700">entregue {dataBr(envio.entregueEm)}</span> : envio.previsao ? dataBr(envio.previsao) : '—'}
+        {envio.entregueEm ? <span className="text-emerald-700" title="entregue">✓ {dataBr(envio.entregueEm)}</span> : envio.previsao ? dataBr(envio.previsao) : '—'}
       </td>
     </>
   )
