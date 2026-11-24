@@ -1609,6 +1609,37 @@ function GuiasEmitidas() {
   const [de, setDe] = useState('')
   const [ate, setAte] = useState('')
   const [erro, setErro] = useState<string | null>(null)
+  const [avisoArquivo, setAvisoArquivo] = useState<string | null>(null)
+  // arquivo de pagamento do Sicredi (CNAB 240): só baixa o arquivo; o pagamento é aprovado no Internet Banking
+  const arquivo = useMutation({
+    mutationFn: ({ empresa, ids }: { empresa: string; ids: string[] }) => difalApi.arquivoPagamento(empresa, ids),
+    onSuccess: (r) => {
+      baixarArquivo(new Blob([r.conteudo], { type: 'text/plain' }), r.nome)
+      setEscolhidas(new Set())
+      setAvisoArquivo(`Arquivo ${r.nome} baixado: ${r.guias} guia(s), ${brl(r.total)}. Suba no Internet Banking do Sicredi (pagamento a fornecedores) e aprove lá.`
+        + (r.foraDoArquivo.length ? ` Ficaram de fora: ${r.foraDoArquivo.map((f) => `NF ${f.nfNumero} (${f.motivo})`).join('; ')}.` : ''))
+      qc.invalidateQueries({ queryKey: ['difal-guias-emitidas'] })
+    },
+    onError: (e) => setErro(`Arquivo do Sicredi: ${mensagemErro(e)}`),
+  })
+  // banco recusou, arquivo perdido ou não enviado no dia: a guia sai do arquivo e pode entrar num novo
+  const tirar = useMutation({
+    mutationFn: (ids: string[]) => difalApi.tirarDoArquivo(ids),
+    onSuccess: (r) => {
+      setEscolhidas(new Set())
+      setAvisoArquivo(`${r.tiradas} guia(s) tirada(s) do arquivo: podem entrar num arquivo novo.`)
+      qc.invalidateQueries({ queryKey: ['difal-guias-emitidas'] })
+    },
+    onError: (e) => setErro(`Tirar do arquivo: ${mensagemErro(e)}`),
+  })
+  async function baixarDeNovo(id: string) {
+    try {
+      const a = await difalApi.baixarArquivoPagamento(id)
+      baixarArquivo(new Blob([a.conteudo], { type: 'text/plain' }), a.nome)
+    } catch (e) {
+      setErro(`Baixar o arquivo: ${mensagemErro(e)}`)
+    }
+  }
   const marcar = useMutation({
     mutationFn: ({ ids, data: d }: { ids: string[]; data: string | null }) => difalApi.marcarPagas(ids, d),
     onSuccess: (r) => {
@@ -1631,6 +1662,18 @@ function GuiasEmitidas() {
   const totalPago = visiveis.reduce((s, g) => s + (g.valorPago ?? 0), 0)
   // só as marcadas que estão na tela: trocar o filtro não pode deixar escondida uma guia marcada
   const marcadas = visiveis.filter((g) => escolhidas.has(g.id)).map((g) => g.id)
+  const empresasMarcadas = [...new Set(visiveis.filter((g) => escolhidas.has(g.id)).map((g) => g.empresa))]
+  function gerarArquivo() {
+    setErro(null); setAvisoArquivo(null)
+    const [empresa] = empresasMarcadas
+    if (window.confirm(`Gerar o arquivo de pagamento do Sicredi da ${empresa} com ${marcadas.length} guia(s)?
+
+O arquivo não paga nada: você sobe no Internet Banking e aprova lá, HOJE (a data de pagamento é a de hoje). As guias ficam marcadas como "no arquivo" para não entrarem em outro.
+
+Atenção: se alguma já foi paga pela linha digitável e não foi marcada como paga, tire da seleção, senão paga em dobro.`)) {
+      arquivo.mutate({ empresa, ids: marcadas })
+    }
+  }
   const totalAPagar = visiveis.filter((g) => !g.pagaEm && g.situacaoPortal === '0').reduce((s, g) => s + g.difalCalculado, 0)
   function alternar(id: string) {
     setEscolhidas((a) => { const n = new Set(a); if (n.has(id)) n.delete(id); else n.add(id); return n })
@@ -1656,6 +1699,7 @@ function GuiasEmitidas() {
         </div>
       ))}
       {erro && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-800">{erro}</div>}
+      {avisoArquivo && <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-900">{avisoArquivo}</div>}
       <div className="flex flex-wrap items-center gap-3">
         <input type="search" value={busca} onChange={(e) => setBusca(e.target.value)} placeholder={DICA_BUSCA} className={CAMPO_BUSCA} />
         <FiltroEmpresa valor={empresa} onTrocar={setEmpresa} />
@@ -1698,6 +1742,17 @@ function GuiasEmitidas() {
                 </button>
                 <button onClick={() => { setErro(null); if (window.confirm(`Desmarcar ${marcadas.length} guia(s) como paga(s)?`)) marcar.mutate({ ids: marcadas, data: null }) }}
                   className="btn-secondary">Desmarcar</button>
+                <button onClick={gerarArquivo} disabled={arquivo.isPending || empresasMarcadas.length !== 1 || !['AVIC', 'AGRO'].includes(empresasMarcadas[0])}
+                  title={empresasMarcadas.length !== 1 ? 'Um arquivo por empresa: marque só guias da AVIC ou só da AGRO'
+                    : !['AVIC', 'AGRO'].includes(empresasMarcadas[0]) ? 'Só AVIC e AGRO têm convênio no Sicredi' : 'Baixa o arquivo CNAB 240 para pagar no Sicredi'}
+                  className="btn-outline">
+                  {arquivo.isPending ? 'Gerando…' : `Arquivo Sicredi (${marcadas.length})`}
+                </button>
+                <button
+                  onClick={() => { setErro(null); setAvisoArquivo(null); if (window.confirm(`Tirar ${marcadas.length} guia(s) do arquivo de pagamento?\n\nUse se o banco recusou o arquivo, se ele se perdeu ou se não foi enviado no dia. Guia já paga não é tirada.`)) tirar.mutate(marcadas) }}
+                  disabled={tirar.isPending} className="btn-ghost">
+                  Tirar do arquivo
+                </button>
               </>
             )}
             <button onClick={baixar} className="btn-outline">Baixar planilha</button>
@@ -1743,6 +1798,12 @@ function GuiasEmitidas() {
                       {g.pagaEm
                         ? <span className={`w-fit ${seloTom('verde')}`}>paga em {dataBr(g.pagaEm)}</span>
                         : <span className={`w-fit ${seloTom('cinza')}`}>não paga</span>}
+                      {g.arquivoPagamento && !g.pagaEm && (
+                        <button onClick={() => baixarDeNovo(g.arquivoPagamento!.id)} className={`w-fit ${seloTom('azul')} hover:underline`}
+                          title="arquivo de pagamento do Sicredi — clique para baixar de novo">
+                          no arquivo {g.arquivoPagamento.nome} · {formatDate(g.arquivoPagamento.criadoEm)}
+                        </button>
+                      )}
                       {g.atrasada && <span className={`w-fit ${seloTom('vermelho')}`} title="guia gerada depois do dia em que o DIFAL vencia (regra do mesmo dia); saiu só com o imposto">gerada depois do prazo</span>}
                       {g.ml && <span className={`w-fit ${seloTom('ambar')}`}>{g.comprovanteMlEnviadoEm ? `comprovante no ML ${dataBr(g.comprovanteMlEnviadoEm)}` : 'comprovante no ML: falta'}</span>}
                       {g.ml && !g.comprovanteMlEnviadoEm && g.mlOrderId && <LinkComprovanteMl mlOrderId={g.mlOrderId} />}
