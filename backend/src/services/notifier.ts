@@ -290,12 +290,15 @@ export function notaDaVenda(v: {
   if (v.carrier?.name) partes.push(v.carrier.name)
   // entregue de verdade vale mais que previsão: junta status e data num só pedaço,
   // senão sai "Entregue · Entregue em 19/11"
+  // fuso fixo: o texto sai igual no Railway (UTC) e num script rodado no PC (-03).
+  // deliveredAt é o instante real da entrega (dia de Brasília); estimatedDelivery é um dia
+  // gravado à meia-noite UTC pelo rastreio, então se lê em UTC para não cair no dia anterior
   if (v.deliveredAt) {
-    partes.push(`Entregue em ${v.deliveredAt.toLocaleDateString('pt-BR')}`)
+    partes.push(`Entregue em ${v.deliveredAt.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`)
   } else {
     if (v.status) partes.push(STATUS_EM_PORTUGUES[v.status] ?? v.status)
     if (v.estimatedDelivery) {
-      partes.push(`Entrega ${v.estimatedDelivery.toLocaleDateString('pt-BR')}`)
+      partes.push(`Entrega ${v.estimatedDelivery.toLocaleDateString('pt-BR', { timeZone: 'UTC' })}`)
     }
   }
   return partes.join(' · ')
