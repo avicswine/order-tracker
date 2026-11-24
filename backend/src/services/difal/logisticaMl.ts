@@ -15,7 +15,7 @@ import axios from 'axios'
 import type { PrismaClient } from '@prisma/client'
 import { mlAuth, type MlCompany } from '../mercadolivre'
 import { dataBR, somarDias } from '../separacao/datas'
-import { JANELA_ML_DIAS, filtroVendasMl } from './guias'
+import { JANELA_ML_DIAS, LOGISTICAS_ML_RECOLHE, filtroVendasMl } from './guias'
 
 const ML_API = 'https://api.mercadolibre.com'
 /** pausa entre chamadas, para não pressionar o limite do ML */
@@ -26,8 +26,8 @@ const LIMITE_POR_RODADA = 100
 const LIMITE_CHAMADAS = 150
 /** envio em andamento só é relido depois deste intervalo (vários cliques seguidos não gastam chamadas) */
 const RELER_APOS_HORAS = 6
-/** envios do ML (a mercadoria vai pela logística do ML): só neles o rastreio vem do ML */
-export const LOGISTICAS_MERCADO_ENVIOS = ['FULL', 'Coleta', 'Agência', 'Flex']
+/** envios do ML (a mercadoria vai pela logística do ML): só neles o rastreio vem do ML — a mesma lista de quem recolhe o DIFAL */
+const LOGISTICAS_MERCADO_ENVIOS = LOGISTICAS_ML_RECOLHE
 /** status em que o envio não muda mais: não se consulta de novo */
 const STATUS_FINAIS = ['delivered', 'not_delivered', 'cancelled']
 

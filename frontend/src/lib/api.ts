@@ -200,6 +200,7 @@ export interface DifalGuiaEmitida {
   clienteUf: string
   estadoComCobranca: boolean
   canal: string | null
+  /** envio pelo próprio ML (o ML recolhe): mostra o passo do comprovante no ML */
   ml: boolean
   mlLogistica: string | null
   mlOrderId: string | null
@@ -276,6 +277,9 @@ export interface DifalGuiaPendente {
   } | null
   /** venda do ML: depois de pagar, anexar o comprovante na venda do ML */
   ml: boolean
+  /** envio pelo próprio ML: o ML recolhe o DIFAL; guia nossa já paga precisa do comprovante anexado no ML */
+  mlRecolhe: boolean
+  guiaPagaEm: string | null
   mlOrderId: string | null
   guiaGeradaEm: string | null
   /** guia processada pelo portal: libera 'Comprovante enviado' */

@@ -5,7 +5,7 @@
  */
 import type { PrismaClient } from '@prisma/client'
 import { lerResultadoLote } from './portalGnre'
-import { prazoDoDifal, UFS_COM_COBRANCA } from './guias'
+import { prazoDoDifal, mlRecolheDifal, UFS_COM_COBRANCA } from './guias'
 import { dataBR, somarDias } from '../separacao/datas'
 
 /** guia aceita há mais que isso e não marcada como paga entra no alerta */
@@ -59,7 +59,7 @@ export async function listarGuiasEmitidas(prisma: PrismaClient): Promise<{ guias
     const id = n.nfNumero.replace(/\D/g, '').slice(-10) // mesmo identificadorGuia da montagem do lote
     const g = lote?.guias.find((x) => x.identificadorGuia === id)
     const geradaEm = dataBR(n.guiaGeradaEm ?? new Date())
-    const ml = n.responsavel === 'ML_PAGA'
+    const ml = mlRecolheDifal(n)
     return {
       id: n.id, empresa: n.empresa, nfNumero: n.nfNumero, clienteNome: n.clienteNome, clienteUf: n.clienteUf,
       estadoComCobranca: UFS_COM_COBRANCA.includes(n.clienteUf), canal: n.canalNome, ml, mlLogistica: n.mlLogistica,

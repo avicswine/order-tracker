@@ -216,6 +216,87 @@ function FiltroCanal({ canais, valor, onTrocar }: { canais: (string | null)[]; v
   )
 }
 
+/** escolha de empresa: '' = todas */
+function FiltroEmpresa({ valor, onTrocar }: { valor: string; onTrocar: (e: string) => void }) {
+  return (
+    <span className="segmentos">
+      {([['', 'Todas'], ['AVIC', 'AVIC'], ['AGRO', 'AGRO']] as const).map(([v, r]) => (
+        <button key={v} onClick={() => onTrocar(v)} className={`segmento ${valor === v ? 'segmento-ativo' : ''}`}>{r}</button>
+      ))}
+    </span>
+  )
+}
+
+/** colunas da tabela de Vendas com filtro no cabeçalho, e o texto de cada nota em cada uma */
+type ColunaFiltro = 'canal' | 'uf' | 'transportadora' | 'status' | 'situacao'
+const VALOR_DA_COLUNA: Record<ColunaFiltro, (g: DifalGuiaPendente) => string> = {
+  canal: (g) => nomeCanal(g.canal),
+  uf: (g) => g.clienteUf,
+  transportadora: (g) => g.envio?.transportadora ?? (g.envioMl?.status ? 'Mercado Envios' : 'sem rastreio'),
+  status: (g) => g.envio ? envioTexto(g.envio) : g.envioMl?.status ? textoEnvioMl(g.envioMl)[0] : 'sem rastreio',
+  situacao: (g) => textoSituacao(g),
+}
+/** valores escondidos por coluna (como o filtro do Excel: desmarcar = esconder) */
+type FiltrosColuna = Partial<Record<ColunaFiltro, Set<string>>>
+const passaFiltrosColuna = (g: DifalGuiaPendente, f: FiltrosColuna) =>
+  (Object.keys(f) as ColunaFiltro[]).every((c) => !f[c]?.has(VALOR_DA_COLUNA[c](g)))
+
+/**
+ * Cabeçalho com filtro, como no Excel: clicar abre a lista dos valores da coluna com caixinhas.
+ * A lista abre em posição fixa na tela (a tabela rola para o lado e cortaria uma lista comum).
+ */
+function FiltroColuna({ titulo, valores, escondidos, onTrocar }: {
+  titulo: string; valores: string[]; escondidos: Set<string> | undefined; onTrocar: (escondidos: Set<string>) => void
+}) {
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
+  const caixa = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!pos) return
+    const fecharFora = (e: MouseEvent) => { if (!caixa.current?.contains(e.target as Node)) setPos(null) }
+    const fecharEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') setPos(null) }
+    document.addEventListener('mousedown', fecharFora)
+    document.addEventListener('keydown', fecharEsc)
+    return () => { document.removeEventListener('mousedown', fecharFora); document.removeEventListener('keydown', fecharEsc) }
+  }, [pos])
+  const ativo = !!escondidos?.size
+  function alternar(v: string) {
+    const novo = new Set(escondidos)
+    if (novo.has(v)) novo.delete(v)
+    else novo.add(v)
+    onTrocar(novo)
+  }
+  return (
+    <>
+      <button
+        onClick={(e) => {
+          const r = e.currentTarget.getBoundingClientRect()
+          setPos(pos ? null : { x: Math.min(r.left, document.documentElement.clientWidth - 260), y: r.bottom + 4 })
+        }}
+        title={ativo ? `${escondidos!.size} valor(es) escondido(s)` : 'Filtrar esta coluna'}
+        className={`inline-flex items-center gap-1 uppercase tracking-wide hover:text-slate-900 ${ativo ? 'text-primaria-700' : ''}`}
+      >
+        {titulo}
+        <span aria-hidden className="text-[10px]">{ativo ? '▼●' : '▼'}</span>
+      </button>
+      {pos && (
+        <div ref={caixa} style={{ left: Math.max(8, pos.x), top: pos.y }}
+          className="fixed z-50 max-h-80 w-60 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2 text-sm normal-case tracking-normal text-slate-700 shadow-janela">
+          <div className="mb-1 flex justify-between gap-2 border-b border-slate-100 pb-1 text-xs">
+            <button onClick={() => onTrocar(new Set())} className="text-primaria-700 hover:underline">Marcar todos</button>
+            <button onClick={() => onTrocar(new Set(valores))} className="text-slate-500 hover:underline">Desmarcar todos</button>
+          </div>
+          {valores.map((v) => (
+            <label key={v} className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 font-normal hover:bg-slate-50">
+              <input type="checkbox" checked={!escondidos?.has(v)} onChange={() => alternar(v)} className="h-4 w-4 accent-primaria-600" />
+              <span className="truncate" title={v}>{v}</span>
+            </label>
+          ))}
+        </div>
+      )}
+    </>
+  )
+}
+
 const CAMPO_BUSCA = 'input w-36'
 const DICA_BUSCA = 'Buscar NF, cliente, empresa, UF, canal, produto…'
 
@@ -398,12 +479,18 @@ function GuiasPendentes({ lugarCards, acaoExtra }: { lugarCards: HTMLElement | n
   const [de, setDe] = useState('')
   const [ate, setAte] = useState('')
   const [busca, setBusca] = useState('')
-  const [canal, setCanal] = useState('')
+  const [empresa, setEmpresa] = useState('')
+  // venda do ML com envio pelo ML: o ML recolhe o DIFAL (23/11/2026) — escondida, só aparece com 'Ver Mercado Livre'
+  const [verMl, setVerMl] = useState(false)
+  const [filtrosColuna, setFiltrosColuna] = useState<FiltrosColuna>({})
+  const [dataPagamento, setDataPagamento] = useState(isoDia(new Date()))
   // a data da nota é o dia de calendário gravado (Brasília como UTC): os 10 primeiros caracteres
   const noPeriodo = (g: DifalGuiaPendente) => (!de || g.emitidaEm.slice(0, 10) >= de) && (!ate || g.emitidaEm.slice(0, 10) <= ate)
   const semFiltroDeEstado = guias.filter(noPeriodo)
     .filter((g) => bateBusca(busca, g, [g.envio?.transportadora]))
-    .filter((g) => !canal || nomeCanal(g.canal) === canal)
+    .filter((g) => !empresa || g.empresa === empresa)
+    .filter((g) => verMl || !g.mlRecolhe)
+    .filter((g) => passaFiltrosColuna(g, filtrosColuna))
   const filtradas = soComCobranca ? semFiltroDeEstado.filter((g) => g.estadoComCobranca) : semFiltroDeEstado
   // nota marcada continua na tela mesmo que a busca/filtros não a mostrassem: dá para buscar uma por uma e ir
   // marcando, e o lote (que leva só as marcadas visíveis) nunca leva nota escondida
@@ -411,31 +498,45 @@ function GuiasPendentes({ lugarCards, acaoExtra }: { lugarCards: HTMLElement | n
   // só as escondidas pelo filtro de estado (o aviso diz "de outros estados")
   const escondidas = semFiltroDeEstado.length - filtradas.length
   const ufsComCobranca = [...new Set(guias.filter((g) => g.estadoComCobranca).map((g) => g.clienteUf))].sort().join(', ')
-  // no prazo: entram em lote GNRE; atrasadas: vão para a contabilidade (sairiam sem multa e juros)
-  const noPrazo = visiveis.filter((g) => !g.atrasada)
+  // três listas: sem guia no prazo (vão para o lote), com guia (pagar e anexar no ML) e atrasadas (sem guia, passou o prazo)
+  const paraEmitir = visiveis.filter((g) => !g.guiaGeradaEm && !g.atrasada)
+  const emitidas = visiveis.filter((g) => !!g.guiaGeradaEm)
+  const atrasadas = visiveis.filter((g) => g.atrasada)
   // cards do topo: o que ainda não tem guia na lista filtrada (no prazo e atrasadas)
-  const aEmitir = visiveis.filter((g) => !g.guiaGeradaEm)
+  const aEmitir = visiveis.filter((g) => !g.guiaGeradaEm && !g.mlRecolhe)
   const difalAEmitir = aEmitir.reduce((s, g) => s + g.difalCalculado, 0)
   const valorNotasAEmitir = aEmitir.reduce((s, g) => s + g.valorNota, 0)
-  const atrasadas = visiveis.filter((g) => g.atrasada)
-  // seletor no topo: a mesma tabela mostra as do prazo ou as atrasadas
-  const [lista, setLista] = useState<'prazo' | 'atrasadas'>('prazo')
+  const [lista, setLista] = useState<'emitir' | 'emitidas' | 'atrasadas'>('emitir')
   const verAtrasadas = lista === 'atrasadas'
-  const mostradas = verAtrasadas ? atrasadas : noPrazo
+  const verEmitidas = lista === 'emitidas'
+  const mostradas = verAtrasadas ? atrasadas : verEmitidas ? emitidas : paraEmitir
   const prontas = mostradas.filter((g) => g.pronta)
   // o lote leva só as marcadas que estão na tela: busca, datas ou estado não podem esconder uma nota que vai para a guia
   const marcadas = mostradas.filter((g) => escolhidas.has(g.id)).map((g) => g.id)
   // quanto vai sair nas guias marcadas (aparece no botão do lote)
   const totalMarcado = mostradas.filter((g) => escolhidas.has(g.id)).reduce((s, g) => s + g.difalCalculado, 0)
-  function trocarLista(nova: 'prazo' | 'atrasadas') {
+  // emitidas: só a guia aceita pelo portal pode ser marcada como paga; o comprovante é só de venda do ML
+  const marcadasPagaveis = mostradas.filter((g) => escolhidas.has(g.id) && g.guiaAceita && !g.guiaPagaEm).map((g) => g.id)
+  const marcadasComprovante = mostradas.filter((g) => escolhidas.has(g.id) && g.guiaAceita && g.mlRecolhe).map((g) => g.id)
+  // valores de cada coluna filtrável, na lista que está na tela (sem os filtros de coluna, para dar para remarcar)
+  const valoresDaColuna = (c: ColunaFiltro) => {
+    const base = verAtrasadas ? guias.filter((g) => g.atrasada) : verEmitidas ? guias.filter((g) => !!g.guiaGeradaEm) : guias.filter((g) => !g.guiaGeradaEm && !g.atrasada)
+    return [...new Set([...base.map(VALOR_DA_COLUNA[c]), ...(filtrosColuna[c] ?? [])])].sort()
+  }
+  const temFiltroColuna = Object.values(filtrosColuna).some((s) => s?.size)
+  function filtroDe(c: ColunaFiltro, titulo: string) {
+    return <FiltroColuna titulo={titulo} valores={valoresDaColuna(c)} escondidos={filtrosColuna[c]}
+      onTrocar={(s) => { setFiltrosColuna((f) => ({ ...f, [c]: s })); setEscolhidas(new Set()) }} />
+  }
+  function trocarLista(nova: 'emitir' | 'emitidas' | 'atrasadas') {
     setLista(nova)
     setEscolhidas(new Set()) // não mistura no lote o que foi marcado na outra lista
   }
   // marcar em lote: todas as prontas visíveis de UMA empresa (o portal aceita lote de uma empresa só), até o limite
-  function marcarEmpresa(empresa: string) {
-    setEscolhidas(new Set(prontas.filter((g) => g.empresa === empresa).slice(0, LIMITE_GUIAS_LOTE).map((g) => g.id)))
+  function marcarEmpresa(emp: string) {
+    setEscolhidas(new Set(prontas.filter((g) => g.empresa === emp).slice(0, LIMITE_GUIAS_LOTE).map((g) => g.id)))
   }
-  const prontasPorEmpresa = (empresa: string) => prontas.filter((g) => g.empresa === empresa).length
+  const prontasPorEmpresa = (emp: string) => prontas.filter((g) => g.empresa === emp).length
   // atrasada sai só com o imposto: o José confirma antes de gerar (decisão de 20/11/2026)
   function gerarComAviso() {
     const atrasadasEscolhidas = mostradas.filter((g) => marcadas.includes(g.id) && g.atrasada).length
@@ -446,7 +547,7 @@ function GuiasPendentes({ lugarCards, acaoExtra }: { lugarCards: HTMLElement | n
     setErroTexto(null)
     gerar.mutate()
   }
-  const empresaEscolhida = guias.find((g) => escolhidas.has(g.id))?.empresa
+  const empresaEscolhida = verEmitidas ? undefined : guias.find((g) => escolhidas.has(g.id))?.empresa
 
   const gerar = useMutation({
     mutationFn: () => difalApi.gerarLote(marcadas),
@@ -461,11 +562,34 @@ function GuiasPendentes({ lugarCards, acaoExtra }: { lugarCards: HTMLElement | n
     onError: async (e) => setErroTexto(`Não deu para montar o lote: ${await erroDoLote(e)}`),
   })
 
+  // comprovante enviado: uma nota ou várias (uma chamada por nota, em sequência)
   const marcar = useMutation({
-    mutationFn: difalApi.marcarComprovanteMl,
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['difal-guias-pendentes'] }); qc.invalidateQueries({ queryKey: ['difal-fechamento'] }) },
-    onError: (e) => setErroTexto(`Comprovante: ${mensagemErro(e)}`),
+    mutationFn: async (ids: string[]) => { for (const id of ids) await difalApi.marcarComprovanteMl(id) },
+    onSuccess: () => {
+      setEscolhidas(new Set())
+      qc.invalidateQueries({ queryKey: ['difal-guias-pendentes'] })
+      qc.invalidateQueries({ queryKey: ['difal-fechamento'] })
+    },
+    onError: (e) => { setErroTexto(`Comprovante: ${mensagemErro(e)}`); qc.invalidateQueries({ queryKey: ['difal-guias-pendentes'] }) },
   })
+  // guia paga: a mesma marcação da aba "O que já pagamos"
+  const pagar = useMutation({
+    mutationFn: (ids: string[]) => difalApi.marcarPagas(ids, dataPagamento),
+    onSuccess: (r) => {
+      setEscolhidas(new Set())
+      setAviso(`${r.notas} guia(s) marcada(s) como paga(s) em ${dataBr(dataPagamento)}.`)
+      if (r.recusadas > 0) setErroTexto(`${r.recusadas} guia(s) não foram marcadas: só guia aceita pelo portal em produção pode ser paga.`)
+      qc.invalidateQueries({ queryKey: ['difal-guias-pendentes'] })
+      qc.invalidateQueries({ queryKey: ['difal-guias-emitidas'] })
+      qc.invalidateQueries({ queryKey: ['difal-resumo'] })
+    },
+    onError: (e) => setErroTexto(`Pagamento: ${mensagemErro(e)}`),
+  })
+  function comprovantes(ids: string[], rotulo: string) {
+    setErroTexto(null)
+    setAviso(null)
+    if (window.confirm(`Confirma que o comprovante ${rotulo} foi anexado na venda do ML?`)) marcar.mutate(ids)
+  }
 
   function alternar(g: DifalGuiaPendente) {
     setEscolhidas((atual) => {
@@ -503,23 +627,28 @@ function GuiasPendentes({ lugarCards, acaoExtra }: { lugarCards: HTMLElement | n
         />
       </div>
   )
+  const contador = (n: number) => <span className="ml-1 rounded-full bg-slate-200/70 px-1.5 py-0.5 text-xs tabular-nums">{n}</span>
 
   return (
     <>
     {lugarCards && createPortal(cards, lugarCards)}
     <div className="flex flex-wrap items-center gap-2">
     <div className="segmentos">
-        <button onClick={() => trocarLista('prazo')}
-          className={`segmento ${lista === 'prazo' ? 'segmento-ativo' : ''}`}>
-          No prazo <span className="ml-1 rounded-full bg-slate-200/70 px-1.5 py-0.5 text-xs tabular-nums">{noPrazo.length}</span>
+        <button onClick={() => trocarLista('emitir')} className={`segmento ${lista === 'emitir' ? 'segmento-ativo' : ''}`}
+          title="notas sem guia, dentro do prazo: entram no lote GNRE">
+          Para emitir {contador(paraEmitir.length)}
+        </button>
+        <button onClick={() => trocarLista('emitidas')} className={`segmento ${lista === 'emitidas' ? 'segmento-ativo' : ''}`}
+          title="guia já gerada: falta pagar e, na venda do ML, anexar o comprovante">
+          Emitidas: pagar e anexar {contador(emitidas.length)}
         </button>
         <button onClick={() => trocarLista('atrasadas')}
           className={`segmento ${lista === 'atrasadas' ? 'segmento-ativo !text-red-700' : ''}`}>
-          Atrasadas <span className="ml-1 rounded-full bg-slate-200/70 px-1.5 py-0.5 text-xs tabular-nums">{atrasadas.length}</span>
+          Atrasadas {contador(atrasadas.length)}
         </button>
     </div>
+    <FiltroEmpresa valor={empresa} onTrocar={(e) => { setEmpresa(e); setEscolhidas(new Set()) }} />
     <input type="search" value={busca} onChange={(e) => setBusca(e.target.value)} placeholder={DICA_BUSCA} className={CAMPO_BUSCA} />
-    <FiltroCanal canais={guias.map((g) => g.canal)} valor={canal} onTrocar={(c) => { setCanal(c); setEscolhidas(new Set()) }} />
     <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1 text-sm text-slate-700">
       <span title="data de emissão da NF">De</span>
       <input type="date" value={de} onChange={(e) => setDe(e.target.value)} className="input input-sm w-[8.5rem] py-0.5" />
@@ -541,16 +670,20 @@ function GuiasPendentes({ lugarCards, acaoExtra }: { lugarCards: HTMLElement | n
         Estados c/ cobrança
       </span>
     </label>
+    <label title="Vendas do Mercado Livre com envio pelo ML (Coleta, FULL, Flex, Agência): o ML recolhe o DIFAL e nós não geramos guia. Aparecem só para consulta."
+      className="flex w-fit cursor-pointer select-none items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+      <input type="checkbox" checked={verMl} onChange={(e) => { setVerMl(e.target.checked); setEscolhidas(new Set()) }} className="h-4 w-4 accent-primaria-600" />
+      <span>Ver Mercado Livre</span>
+    </label>
+    {temFiltroColuna && (
+      <button onClick={() => setFiltrosColuna({})} className="btn-ghost text-primaria-700" title="mostrar de novo tudo o que os filtros das colunas esconderam">
+        Limpar filtros das colunas
+      </button>
+    )}
     {acaoExtra}
     </div>
     {aviso && <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-5 py-2.5 text-sm text-emerald-900">{aviso}</div>}
     {erroTexto && <div className="rounded-lg border border-red-200 bg-red-50 px-5 py-2.5 text-sm text-red-800">{erroTexto}</div>}
-    {mostradas.length === 0 ? (
-      <div className="flex items-center gap-3 rounded-lg border border-emerald-200 bg-white p-4 text-sm text-emerald-900">
-        <span className="grid h-8 w-8 place-items-center rounded-lg bg-emerald-50 text-emerald-600"><Icone nome="ok" className="h-4 w-4" /></span>
-        {verAtrasadas ? 'Nenhuma nota atrasada neste filtro.' : 'Nenhuma guia no prazo para emitir agora.'}
-      </div>
-    ) : (
     <div className={`card overflow-hidden ${verAtrasadas ? 'border-red-200' : ''}`}>
       <div className={`card-cabecalho flex-wrap ${verAtrasadas ? 'bg-red-50' : ''}`}>
         <div>
@@ -562,51 +695,87 @@ function GuiasPendentes({ lugarCards, acaoExtra }: { lugarCards: HTMLElement | n
                 <b className="text-red-700">sem multa e juros</b>. A planilha vai para a contabilidade.
               </p>
             </>
+          ) : verEmitidas ? (
+            <>
+              <p className="secao-titulo">Emitidas: pagar e anexar</p>
+              <p className="text-xs text-slate-500">
+                {emitidas.length} nota(s) com guia · {emitidas.filter((g) => g.guiaAceita && !g.guiaPagaEm).length} aceita(s) sem pagamento marcado.
+                Depois de pagar, marque como paga; na venda do Mercado Livre, anexe o comprovante e clique em &ldquo;Comprovante enviado&rdquo;.
+              </p>
+            </>
           ) : (
             <>
-              <p className="secao-titulo">Guias para emitir agora (no prazo)</p>
+              <p className="secao-titulo">Para emitir (no prazo)</p>
               <p className="text-xs text-slate-500">
-                {noPrazo.length} nota(s) no prazo · {prontas.length} prontas para a guia (GNRE). Um lote por empresa, até {LIMITE_GUIAS_LOTE} guias.
-                Vendas do Mercado Livre: depois de pagar, anexe o comprovante na venda do ML e clique em "Comprovante enviado".
+                {paraEmitir.length} nota(s) sem guia · {prontas.length} prontas para a guia (GNRE). Um lote por empresa, até {LIMITE_GUIAS_LOTE} guias.
               </p>
             </>
           )}
         </div>
         <span className="flex flex-wrap items-center gap-2">
-        {['AVIC', 'AGRO'].map((emp) => prontasPorEmpresa(emp) > 0 && (
-          <button key={emp} onClick={() => marcarEmpresa(emp)}
-            className="btn-secondary">
-            Marcar {emp} ({Math.min(prontasPorEmpresa(emp), LIMITE_GUIAS_LOTE)})
+        {verEmitidas ? (
+          <>
+            {marcadas.length > 0 && <button onClick={() => setEscolhidas(new Set())} className="btn-ghost">Limpar</button>}
+            <input type="date" value={dataPagamento} onChange={(e) => setDataPagamento(e.target.value)} className="input input-sm w-auto" title="data do pagamento" />
+            <button onClick={() => { setErroTexto(null); setAviso(null); if (window.confirm(`Marcar ${marcadasPagaveis.length} guia(s) como paga(s) em ${dataBr(dataPagamento)}?`)) pagar.mutate(marcadasPagaveis) }}
+              disabled={marcadasPagaveis.length === 0 || pagar.isPending} className="btn-primary">
+              Marcar como paga ({marcadasPagaveis.length})
+            </button>
+            <button onClick={() => comprovantes(marcadasComprovante, `de ${marcadasComprovante.length} nota(s)`)}
+              disabled={marcadasComprovante.length === 0 || marcar.isPending} className="btn-secondary">
+              Comprovante enviado ({marcadasComprovante.length})
+            </button>
+          </>
+        ) : (
+          <>
+          {['AVIC', 'AGRO'].map((emp) => prontasPorEmpresa(emp) > 0 && (
+            <button key={emp} onClick={() => marcarEmpresa(emp)}
+              className="btn-secondary">
+              Marcar {emp} ({Math.min(prontasPorEmpresa(emp), LIMITE_GUIAS_LOTE)})
+            </button>
+          ))}
+          {marcadas.length > 0 && (
+            <button onClick={() => setEscolhidas(new Set())} className="btn-ghost">Limpar</button>
+          )}
+          {verAtrasadas && (
+            <button onClick={() => baixarListaAtrasadas(atrasadas)} className="btn-secondary border-red-200 text-red-700 hover:bg-red-50">
+              Baixar lista
+            </button>
+          )}
+          <button
+            onClick={gerarComAviso}
+            disabled={marcadas.length === 0 || gerar.isPending}
+            className={verAtrasadas ? 'btn-danger' : 'btn-primary'}
+          >
+            {gerar.isPending ? 'Montando lote…' : marcadas.length ? `Baixar lote GNRE (${marcadas.length} · ${brl(totalMarcado)})` : 'Baixar lote GNRE (0)'}
           </button>
-        ))}
-        {marcadas.length > 0 && (
-          <button onClick={() => setEscolhidas(new Set())} className="btn-ghost">Limpar</button>
+          </>
         )}
-        {verAtrasadas && (
-          <button onClick={() => baixarListaAtrasadas(atrasadas)} className="btn-secondary border-red-200 text-red-700 hover:bg-red-50">
-            Baixar lista
-          </button>
-        )}
-        <button
-          onClick={gerarComAviso}
-          disabled={marcadas.length === 0 || gerar.isPending}
-          className={verAtrasadas ? 'btn-danger' : 'btn-primary'}
-        >
-          {gerar.isPending ? 'Montando lote…' : marcadas.length ? `Baixar lote GNRE (${marcadas.length} · ${brl(totalMarcado)})` : 'Baixar lote GNRE (0)'}
-        </button>
         </span>
       </div>
-      <table className="tabela min-w-full">
+      <div className="tabela-caixa">
+      <table className="tabela tabela-compacta min-w-full">
         <thead>
-          <tr><th className="w-10 px-5 py-2"></th><th className="px-2 py-2">Nota / cliente</th><th className="px-2 py-2">Emissão</th><th className="px-2 py-2">{verAtrasadas ? 'Venceu em' : 'Prazo'}</th><th className="px-2 py-2">UF</th><th className="px-2 py-2">Canal</th><th className="px-2 py-2">Transportadora</th><th className="px-2 py-2">Status</th><th className="px-2 py-2">Envio</th><th className="px-2 py-2">Previsão</th><th className="px-2 py-2 text-right">Valor da NF</th><th className="px-2 py-2 text-right">DIFAL</th><th className="px-5 py-2">Situação</th></tr>
+          <tr>
+            <th className="w-10 px-4"></th><th>Nota / cliente</th><th>Emissão</th><th>{verAtrasadas ? 'Venceu em' : 'Prazo'}</th>
+            <th>{filtroDe('uf', 'UF')}</th><th>{filtroDe('canal', 'Canal')}</th><th>{filtroDe('transportadora', 'Transportadora')}</th>
+            <th>{filtroDe('status', 'Status')}</th><th>Envio</th><th>Previsão</th><th className="text-right">Valor da NF</th><th className="text-right">DIFAL</th>
+            <th className="px-4">{filtroDe('situacao', 'Situação')}</th>
+          </tr>
         </thead>
         <tbody>
+          {mostradas.length === 0 && (
+            <tr><td colSpan={13} className="px-4 py-6 text-center text-sm text-slate-500">
+              {verAtrasadas ? 'Nenhuma nota atrasada neste filtro.' : verEmitidas ? 'Nenhuma guia esperando pagamento ou comprovante neste filtro.' : 'Nenhuma guia no prazo para emitir agora.'}
+            </td></tr>
+          )}
           {mostradas.map((g) => {
-            const bloqueada = !g.pronta || (empresaEscolhida !== undefined && g.empresa !== empresaEscolhida && !escolhidas.has(g.id))
+            const marcavel = verEmitidas ? g.guiaAceita : !g.guiaGeradaEm
+            const bloqueada = verEmitidas ? false : !g.pronta || (empresaEscolhida !== undefined && g.empresa !== empresaEscolhida && !escolhidas.has(g.id))
             return (
               <tr key={g.id} className={g.pronta || g.guiaGeradaEm ? '' : 'opacity-75'}>
-                <td className="px-5 py-2.5">
-                  {!g.guiaGeradaEm && <input
+                <td className="px-4">
+                  {marcavel && <input
                     type="checkbox"
                     checked={escolhidas.has(g.id)}
                     disabled={bloqueada}
@@ -615,52 +784,51 @@ function GuiasPendentes({ lugarCards, acaoExtra }: { lugarCards: HTMLElement | n
                     className="h-4 w-4 accent-primaria-600"
                   />}
                 </td>
-                <td className="px-2 py-2.5">
+                <td>
                   <NotaCliente nf={g.nfNumero} empresa={g.empresa} cliente={g.clienteNome} itens={g.itens} />
                 </td>
-                <td className="px-2 py-2.5 text-slate-500">{dataBr(g.emitidaEm)}</td>
-                <td className={`px-2 py-2.5 text-xs ${g.atrasada ? 'font-medium text-red-700' : 'text-slate-500'}`}>{g.atrasada ? `venceu ${dataBr(g.prazo)}` : g.prazo === isoDia(new Date()) ? 'pagar hoje' : `vence ${dataBr(g.prazo)}`}</td>
-                <td className="px-2 py-2.5"><span className="rounded-lg bg-primaria-50 px-1.5 py-0.5 text-xs font-semibold text-primaria-700 ring-1 ring-primaria-100">{g.clienteUf}</span></td>
+                <td className="whitespace-nowrap text-slate-500">{dataBr(g.emitidaEm)}</td>
+                <td className={`whitespace-nowrap text-xs ${g.atrasada ? 'font-medium text-red-700' : 'text-slate-500'}`}>{g.atrasada ? `venceu ${dataBr(g.prazo)}` : g.prazo === isoDia(new Date()) ? 'pagar hoje' : `vence ${dataBr(g.prazo)}`}</td>
+                <td><span className="rounded-lg bg-primaria-50 px-1.5 py-0.5 text-xs font-semibold text-primaria-700 ring-1 ring-primaria-100">{g.clienteUf}</span></td>
                 <CelulaCanal g={g} />
                 <CelulasEnvio envio={g.envio} envioMl={g.envioMl} />
-                <td className="px-2 py-2.5 text-right tabular-nums text-slate-600">{brl(g.valorNota)}</td>
-                <td className="px-2 py-2.5 text-right font-semibold tabular-nums text-primaria-700">
+                <td className="whitespace-nowrap text-right tabular-nums text-slate-600">{brl(g.valorNota)}</td>
+                <td className="whitespace-nowrap text-right font-semibold tabular-nums text-primaria-700">
                   <ComDica largura={460} conteudo={<CalculoDaNota d={g.calculoDetalhe} total={g.difalCalculado} />}>
                     <span className="cursor-help underline decoration-dotted decoration-slate-300 underline-offset-4">{brl(g.difalCalculado)}</span>
                   </ComDica>
                 </td>
-                <td className="px-5 py-2.5 text-xs">
-                  <span className="flex flex-wrap items-center gap-2">
+                <td className="min-w-[180px] max-w-[280px] px-4 text-xs">
+                  <span className="flex flex-wrap items-center gap-1.5">
                     {g.situacao === 'DIVERGENTE' ? (
-                      <span title={g.observacao ?? undefined} className={seloTom('vermelho')}>● nota divergente (cancelada?) — conferir</span>
+                      <span title={g.observacao ?? undefined} className={`whitespace-normal ${seloTom('vermelho')}`}>● nota divergente (cancelada?) — conferir</span>
                     ) : g.guiaGeradaEm && ['1', '2'].includes(g.situacaoGuia ?? '') ? (
-                      <span className={seloTom('vermelho')}>guia recusada · em Lotes GNRE, &ldquo;Devolver à fila&rdquo;</span>
+                      <span className={`whitespace-normal ${seloTom('vermelho')}`}>guia recusada · em Lotes GNRE, &ldquo;Devolver à fila&rdquo;</span>
                     ) : g.guiaGeradaEm && g.situacaoGuia === '3' ? (
-                      <span className={seloTom('ambar')}>erro de comunicação com o estado · consulte o lote de novo; sem código de barras, &ldquo;Devolver à fila&rdquo;</span>
+                      <span className={`whitespace-normal ${seloTom('ambar')}`}>erro de comunicação com o estado · consulte o lote de novo; sem código de barras, &ldquo;Devolver à fila&rdquo;</span>
                     ) : g.guiaGeradaEm && !g.guiaAceita ? (
                       <span className={seloTom('primaria')}>guia gerada · envie ao portal e consulte</span>
                     ) : g.guiaGeradaEm ? (
                       <>
-                        <span className={seloTom('verde')}>guia aceita · pagar e anexar</span>
-                        <button
-                          onClick={() => { setErroTexto(null); if (window.confirm(`Confirma que o comprovante da NF ${g.nfNumero} foi anexado na venda do ML?`)) marcar.mutate(g.id) }}
-                          disabled={marcar.isPending}
-                          className="btn-primary btn-sm"
-                        >
-                          Comprovante enviado
-                        </button>
+                        {g.guiaPagaEm
+                          ? <span className={`whitespace-nowrap ${seloTom('verde')}`}>paga em {dataBr(g.guiaPagaEm)}</span>
+                          : <span className={`whitespace-nowrap ${seloTom('ambar')}`}>aceita · falta pagar</span>}
+                        {g.mlRecolhe && (
+                          <button
+                            onClick={() => comprovantes([g.id], `da NF ${g.nfNumero}`)}
+                            disabled={marcar.isPending}
+                            className="btn-primary btn-sm whitespace-nowrap"
+                          >
+                            Comprovante enviado
+                          </button>
+                        )}
                       </>
                     ) : g.pronta ? (
                       <span className={seloTom('verde')}>● pronta</span>
                     ) : (
-                      <span className={seloTom('ambar')}>● falta: {g.faltando.join('; ')}</span>
+                      <span className={`whitespace-normal ${seloTom('ambar')}`}>● falta: {g.faltando.join('; ')}</span>
                     )}
-                    {g.ml && g.mlOrderId && (
-                      <a href={linkComprovanteMl(g.mlOrderId)} target="_blank" rel="noreferrer" title={`venda ML ${g.mlOrderId}`}
-                        className="btn btn-sm border border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100">
-                        Comprovante no ML ↗
-                      </a>
-                    )}
+                    {g.mlRecolhe && g.guiaGeradaEm && g.mlOrderId && <LinkComprovanteMl mlOrderId={g.mlOrderId} />}
                   </span>
                 </td>
               </tr>
@@ -668,15 +836,42 @@ function GuiasPendentes({ lugarCards, acaoExtra }: { lugarCards: HTMLElement | n
           })}
         </tbody>
       </table>
+      </div>
     </div>
-    )}
     </>
   )
+}
+
+/** texto da situação da nota (o mesmo do selo), para o filtro da coluna */
+function textoSituacao(g: DifalGuiaPendente): string {
+  if (g.situacao === 'DIVERGENTE') return 'nota divergente'
+  if (g.guiaGeradaEm && ['1', '2'].includes(g.situacaoGuia ?? '')) return 'guia recusada'
+  if (g.guiaGeradaEm && g.situacaoGuia === '3') return 'erro de comunicação'
+  if (g.guiaGeradaEm && !g.guiaAceita) return 'guia gerada'
+  if (g.guiaGeradaEm) return g.guiaPagaEm ? 'paga' : 'aceita · falta pagar'
+  return g.pronta ? 'pronta' : 'falta dado'
 }
 
 // Tela "Envie o comprovante de pagamento do DIFAL" da venda no ML (endereço enviado pelo José em 20/11/2026)
 function linkComprovanteMl(mlOrderId: string): string {
   return `https://vendedores.mercadolivre.com.br/emissor/informar-documento?orders_ids=${encodeURIComponent(mlOrderId)}`
+}
+
+/**
+ * Abrir a tela do comprovante (neste navegador) ou copiar o endereço para colar no navegador em que está logada
+ * a conta do ML da empresa da nota (AVIC e AGRO são contas diferentes).
+ */
+function LinkComprovanteMl({ mlOrderId }: { mlOrderId: string }) {
+  const link = linkComprovanteMl(mlOrderId)
+  return (
+    <span className="inline-flex items-center gap-1">
+      <a href={link} target="_blank" rel="noreferrer" title={`Anexar o comprovante na venda ML ${mlOrderId}`}
+        className="btn btn-sm whitespace-nowrap border border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100">
+        ML ↗
+      </a>
+      <BotaoCopiar texto={link} rotulo="Copiar link do ML" />
+    </span>
+  )
 }
 
 function isoDia(d: Date): string {
@@ -735,9 +930,10 @@ function tomCanal(canal: string | null): Tom {
 // plataforma da venda e, no Mercado Livre, o tipo de envio
 function CelulaCanal({ g }: { g: DifalGuiaPendente }) {
   return (
-    <td className="px-2 py-2.5 text-xs">
-      <span className="flex flex-col gap-1">
-        <span className={`w-fit max-w-[150px] truncate ${seloTom(tomCanal(g.canal))}`} title={g.canal ?? undefined}>{g.canal ?? 'Balcão'}</span>
+    <td className="text-xs">
+      <span className="flex items-center gap-1">
+        {/* sem o nome da empresa na frente ('Avicswine Mercado Livre' → 'Mercado Livre'): o selo AVIC/AGRO já está na nota */}
+        <span className={`w-fit max-w-[150px] truncate ${seloTom(tomCanal(g.canal))}`} title={g.canal ?? undefined}>{(g.canal ?? 'Balcão').replace(/^(avicswine|agrogranja)\s+/i, '')}</span>
         {g.ml && (
           <span title={g.mlLogistica ? undefined : 'Buscado na API do Mercado Livre no "Atualizar do Bling" em produção (o PC não tem acesso à conta do ML)'}
             className={`w-fit ${seloTom(TOM_LOGISTICA[g.mlLogistica ?? ''] ?? 'cinza')}`}>
@@ -761,6 +957,12 @@ const STATUS_ENVIO_ML: Record<string, [string, Tom]> = {
   cancelled: ['Cancelado', 'cinza'],
 }
 
+/** texto e cor do status do Mercado Envios (substatus 'saiu para entrega' tem prioridade) */
+function textoEnvioMl(envioMl: NonNullable<DifalGuiaPendente['envioMl']>): [string, Tom] {
+  if (envioMl.substatus === 'out_for_delivery') return ['Saiu para entrega', 'azul']
+  return STATUS_ENVIO_ML[envioMl.status ?? ''] ?? [envioMl.status ?? 'sem status', 'cinza']
+}
+
 function CelulasEnvio({ envio, envioMl }: { envio: DifalGuiaPendente['envio']; envioMl: DifalGuiaPendente['envioMl'] }) {
   // clicar no status abre a mesma janela 'Detalhes do Pedido' da tela de Pedidos (o Financeiro não vê Pedidos)
   const financeiro = useAuth().user?.role === 'FINANCEIRO'
@@ -776,31 +978,26 @@ function CelulasEnvio({ envio, envioMl }: { envio: DifalGuiaPendente['envio']; e
   }
   if (!envio && envioMl?.status) {
     // venda pelo Mercado Envios: rastreio do próprio ML (status atual, sem o histórico de cada movimentação)
-    const [texto, tom]: [string, Tom] = envioMl.substatus === 'out_for_delivery'
-      ? ['Saiu para entrega', 'azul']
-      : STATUS_ENVIO_ML[envioMl.status] ?? [envioMl.status, 'cinza']
+    const [texto, tom] = textoEnvioMl(envioMl)
     const lido = envioMl.lidoEm ? `rastreio do ML · lido em ${formatDateTime(envioMl.lidoEm)}` : 'rastreio do ML'
     return (
       <>
-        <td className="px-2 py-2.5 text-xs text-slate-600">
-          Mercado Envios
-          <span className="block text-xs text-slate-400">{lido}</span>
-        </td>
-        <td className="px-2 py-2.5"><span className={seloTom(tom)}>{texto}</span></td>
-        <td className="px-2 py-2.5 text-xs text-slate-400">—</td>
-        <td className="px-2 py-2.5 text-xs text-slate-600">{formatDate(envioMl.previsao)}</td>
+        <td className="whitespace-nowrap text-xs text-slate-600" title={lido}>Mercado Envios</td>
+        <td><span className={`whitespace-nowrap ${seloTom(tom)}`} title={lido}>{texto}</span></td>
+        <td className="text-xs text-slate-400">—</td>
+        <td className="whitespace-nowrap text-xs text-slate-600">{formatDate(envioMl.previsao)}</td>
       </>
     )
   }
   if (!envio) {
     return (
-      <td colSpan={4} className="px-2 py-2.5 text-xs text-slate-400" title="Nota não está no order-tracker nem tem envio do ML lido (retirada, Shopee, venda do ML ainda não consultada…)">sem rastreio</td>
+      <td colSpan={4} className="text-xs text-slate-400" title="Nota não está no order-tracker nem tem envio do ML lido (retirada, Shopee, venda do ML ainda não consultada…)">sem rastreio</td>
     )
   }
   return (
     <>
-      <td className="max-w-[180px] truncate px-2 py-2.5 text-xs text-slate-600" title={envio.transportadora ?? undefined}>{envio.transportadora ?? '—'}</td>
-      <td className="px-2 py-2.5">
+      <td className="max-w-[140px] truncate text-xs text-slate-600" title={envio.transportadora ?? undefined}>{envio.transportadora ?? '—'}</td>
+      <td className="whitespace-nowrap">
         {financeiro ? (
           <span title={envio.ultimoRastreio ?? undefined}>
             <StatusBadge status={envio.situacao} hasOccurrence={envio.temOcorrencia} lastTracking={envio.ultimoRastreio} />
@@ -817,9 +1014,9 @@ function CelulasEnvio({ envio, envioMl }: { envio: DifalGuiaPendente['envio']; e
         {pedido && <OrderDetailModal order={pedido} onClose={() => setPedido(null)} />}
         </>)}
       </td>
-      <td className="px-2 py-2.5 text-xs text-slate-600">{envio.enviadoEm ? dataBr(envio.enviadoEm) : '—'}</td>
-      <td className="px-2 py-2.5 text-xs text-slate-600">
-        {envio.entregueEm ? <span className="text-emerald-700">entregue {dataBr(envio.entregueEm)}</span> : envio.previsao ? dataBr(envio.previsao) : '—'}
+      <td className="whitespace-nowrap text-xs text-slate-600">{envio.enviadoEm ? dataBr(envio.enviadoEm) : '—'}</td>
+      <td className="whitespace-nowrap text-xs text-slate-600">
+        {envio.entregueEm ? <span className="text-emerald-700" title="entregue">✓ {dataBr(envio.entregueEm)}</span> : envio.previsao ? dataBr(envio.previsao) : '—'}
       </td>
     </>
   )
@@ -1407,6 +1604,7 @@ function GuiasEmitidas() {
   const [filtro, setFiltro] = useState<'todas' | 'nao_pagas' | 'pagas'>('todas')
   const [busca, setBusca] = useState('')
   const [canal, setCanal] = useState('')
+  const [empresa, setEmpresa] = useState('')
   const [soComCobranca, setSoComCobranca] = useState(true)
   const [de, setDe] = useState('')
   const [ate, setAte] = useState('')
@@ -1429,6 +1627,7 @@ function GuiasEmitidas() {
     .filter((g) => filtro === 'todas' || (filtro === 'pagas' ? !!g.pagaEm : !g.pagaEm))
     .filter((g) => bateBusca(busca, g, [g.loteId, g.linhaDigitavel]))
     .filter((g) => !canal || nomeCanal(g.canal) === canal)
+    .filter((g) => !empresa || g.empresa === empresa)
   const totalPago = visiveis.reduce((s, g) => s + (g.valorPago ?? 0), 0)
   // só as marcadas que estão na tela: trocar o filtro não pode deixar escondida uma guia marcada
   const marcadas = visiveis.filter((g) => escolhidas.has(g.id)).map((g) => g.id)
@@ -1459,6 +1658,7 @@ function GuiasEmitidas() {
       {erro && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-800">{erro}</div>}
       <div className="flex flex-wrap items-center gap-3">
         <input type="search" value={busca} onChange={(e) => setBusca(e.target.value)} placeholder={DICA_BUSCA} className={CAMPO_BUSCA} />
+        <FiltroEmpresa valor={empresa} onTrocar={setEmpresa} />
         <FiltroCanal canais={data.guias.map((g) => g.canal)} valor={canal} onTrocar={setCanal} />
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700">
           <span>Geradas de</span>
@@ -1522,7 +1722,7 @@ function GuiasEmitidas() {
                   <td className="px-2 py-2.5 text-xs">
                     <span className="flex flex-col gap-1">
                       <span className={`w-fit max-w-[150px] truncate ${seloTom(tomCanal(g.canal))}`}>{g.canal ?? 'Balcão'}</span>
-                      {g.ml && g.mlLogistica && <span className={`w-fit ${seloTom(TOM_LOGISTICA[g.mlLogistica] ?? 'cinza')}`}>{g.mlLogistica}</span>}
+                      {g.mlLogistica && <span className={`w-fit ${seloTom(TOM_LOGISTICA[g.mlLogistica] ?? 'cinza')}`}>{g.mlLogistica}</span>}
                     </span>
                   </td>
                   <td className="px-2 py-2.5 text-right tabular-nums text-slate-600">{brl(g.valorNota)}</td>
@@ -1545,6 +1745,7 @@ function GuiasEmitidas() {
                         : <span className={`w-fit ${seloTom('cinza')}`}>não paga</span>}
                       {g.atrasada && <span className={`w-fit ${seloTom('vermelho')}`} title="guia gerada depois do dia em que o DIFAL vencia (regra do mesmo dia); saiu só com o imposto">gerada depois do prazo</span>}
                       {g.ml && <span className={`w-fit ${seloTom('ambar')}`}>{g.comprovanteMlEnviadoEm ? `comprovante no ML ${dataBr(g.comprovanteMlEnviadoEm)}` : 'comprovante no ML: falta'}</span>}
+                      {g.ml && !g.comprovanteMlEnviadoEm && g.mlOrderId && <LinkComprovanteMl mlOrderId={g.mlOrderId} />}
                     </span>
                   </td>
                   <td className="px-5 py-2.5 text-xs">{g.linhaDigitavel ? <BotaoCopiar texto={g.linhaDigitavel} rotulo="Copiar código" /> : <span className="text-slate-400">—</span>}</td>

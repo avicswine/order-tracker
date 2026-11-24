@@ -38,8 +38,12 @@ export interface GuiaPendente {
   envio: EnvioDaNota | null
   /** rastreio do Mercado Envios (venda do ML que não passa pelo order-tracker); null se não houver */
   envioMl: { status: string | null; substatus: string | null; previsao: Date | null; lidoEm: Date | null } | null
-  /** venda do Mercado Livre: depois de pagar, anexar o comprovante na venda do ML */
+  /** venda do Mercado Livre (qualquer tipo de envio) */
   ml: boolean
+  /** venda do ML com envio pelo próprio ML: o ML recolhe o DIFAL; se já pagamos a guia, anexar o comprovante lá */
+  mlRecolhe: boolean
+  /** dia em que a guia foi marcada como paga; null = falta pagar */
+  guiaPagaEm: Date | null
   mlOrderId: string | null
   /** venda do ML com guia já gerada, esperando pagamento e comprovante */
   guiaGeradaEm: Date | null
@@ -207,17 +211,50 @@ export const UFS_COM_COBRANCA = ['AC', 'AL', 'AM', 'BA', 'CE', 'MS', 'MT', 'PB',
  */
 export const INICIO_LISTA_NOTAS = new Date('2026-08-24T00:00:00Z')
 
-/** Vendas do ML que pagamos nós: sem guia e com nota de até 30 dias, ou com guia gerada e comprovante ainda não enviado */
+/**
+ * Tipos de envio em que o próprio Mercado Livre leva a mercadoria e recolhe o DIFAL (decisão do José, 23/11/2026,
+ * desfazendo a de 20/11): nessas vendas nós não pagamos guia, só conferimos o que o ML cobrou (Fechamento ML).
+ * 'A combinar' (nossa transportadora) e ME1 ficam com a gente, e também a venda com o tipo ainda não lido.
+ */
+export const LOGISTICAS_ML_RECOLHE = ['FULL', 'Coleta', 'Agência', 'Flex']
+/** só estes tipos de envio do ML são guia nossa; qualquer outro ('não identificado', 'outro (...)', sem tipo) se confirma antes */
+export const LOGISTICAS_ML_NOSSAS = ['A combinar', 'ME1']
+/** venda do ML cujo tipo de envio não diz quem recolhe: não entra em lote até confirmar */
+export function mlTipoIncerto(n: { responsavel: string; mlLogistica: string | null }): boolean {
+  return n.responsavel === 'ML_PAGA' && !LOGISTICAS_ML_NOSSAS.includes(n.mlLogistica ?? '') && !LOGISTICAS_ML_RECOLHE.includes(n.mlLogistica ?? '')
+}
+export function mlRecolheDifal(n: { responsavel: string; mlLogistica: string | null }): boolean {
+  return n.responsavel === 'ML_PAGA' && LOGISTICAS_ML_RECOLHE.includes(n.mlLogistica ?? '')
+}
+
+/**
+ * Vendas do ML que pagamos nós: sem guia, nota de até 30 dias e envio que o ML não recolhe; ou com guia gerada,
+ * até ser marcada como paga e, se o ML recolhe (guias de antes de 23/11), até o comprovante ser anexado no ML.
+ */
 export function filtroVendasMl(): Prisma.DifalNotaWhereInput {
   const limite = new Date(`${somarDias(dataBR(), -JANELA_ML_DIAS)}T00:00:00Z`) // emitidaEm guarda Brasília como UTC
   return {
     responsavel: 'ML_PAGA',
-    comprovanteMlEnviadoEm: null,
     OR: [
       // sem guia: só aberta (divergente = erro de cálculo ou nota cancelada: não gerar guia) e com DIFAL
-      { emitidaEm: { gte: limite }, guiaGeradaEm: null, situacao: { in: [...SITUACOES_ABERTAS] }, difalCalculado: { gt: 0 } },
-      { guiaGeradaEm: { not: null } },
+      {
+        emitidaEm: { gte: limite }, guiaGeradaEm: null, situacao: { in: [...SITUACOES_ABERTAS] }, difalCalculado: { gt: 0 },
+        OR: [{ mlLogistica: null }, { mlLogistica: { notIn: LOGISTICAS_ML_RECOLHE } }],
+      },
+      {
+        guiaGeradaEm: { not: null },
+        OR: [{ guiaPagaEm: null }, { comprovanteMlEnviadoEm: null, mlLogistica: { in: LOGISTICAS_ML_RECOLHE } }],
+      },
     ],
+  }
+}
+
+/** Vendas do ML em que o próprio ML recolhe, sem guia, até 30 dias: só para consulta na tela ('Ver Mercado Livre') */
+function filtroVendasMlRecolhe(): Prisma.DifalNotaWhereInput {
+  const limite = new Date(`${somarDias(dataBR(), -JANELA_ML_DIAS)}T00:00:00Z`) // emitidaEm guarda Brasília como UTC
+  return {
+    responsavel: 'ML_PAGA', mlLogistica: { in: LOGISTICAS_ML_RECOLHE },
+    emitidaEm: { gte: limite }, guiaGeradaEm: null, situacao: { in: [...SITUACOES_ABERTAS] }, difalCalculado: { gt: 0 },
   }
 }
 
@@ -234,6 +271,7 @@ export async function listarGuiasPendentes(prisma: PrismaClient, empresa?: strin
           // nota nossa desde o início do monitor (a importação histórica não enche a lista), ou já em lote
           { responsavel: 'NOSSO', situacao: { in: [...SITUACOES_ABERTAS] }, OR: [{ emitidaEm: { gte: INICIO_LISTA_NOTAS } }, { guiaLoteId: { not: null } }] },
           filtroVendasMl(),
+          filtroVendasMlRecolhe(),
         ],
       },
       orderBy: { emitidaEm: 'desc' }, // mais recentes primeiro (pedido do José, 20/11/2026)
@@ -272,8 +310,13 @@ export async function listarGuiasPendentes(prisma: PrismaClient, empresa?: strin
   return notas.map((n) => {
     const ml = n.responsavel === 'ML_PAGA'
     const faltando = n.guiaGeradaEm ? [] : oQueFalta(n, porUf.get(n.clienteUf), porEmpresa.get(n.empresa))
-    // sem o número da venda não há onde anexar o comprovante: pagaríamos nós e o ML também
-    if (ml && !n.guiaGeradaEm && !n.mlOrderId) faltando.push('número da venda no ML (para anexar o comprovante)')
+    // sem o tipo de envio não dá para saber se o ML recolhe: gerar a guia arriscaria pagar em dobro
+    if (!n.guiaGeradaEm && mlTipoIncerto(n)) {
+      faltando.push(n.mlLogistica ? `confirmar o tipo de envio no ML (lido: ${n.mlLogistica})` : 'confirmar o tipo de envio no ML (clique em Atualizar do Bling)')
+    }
+    // envio pelo ML: o ML recolhe; a nota aparece só para consulta e nunca entra em lote
+    const soConsulta = mlRecolheDifal(n) && !n.guiaGeradaEm
+    if (soConsulta) faltando.push('o ML recolhe o DIFAL (envio pelo ML): não gerar guia')
     // regra do José (20/11/2026): todo DIFAL é pago no dia da emissão da NF, de qualquer canal
     const prazo = prazoDoDifal(n.emitidaEm)
     return {
@@ -290,8 +333,10 @@ export async function listarGuiasPendentes(prisma: PrismaClient, empresa?: strin
       faltando,
       prazo,
       // com guia gerada não é atrasada: a guia já existe (venda do ML esperando o comprovante)
-      atrasada: !n.guiaGeradaEm && prazo < hoje,
+      atrasada: !n.guiaGeradaEm && !soConsulta && prazo < hoje,
       ml,
+      mlRecolhe: mlRecolheDifal(n),
+      guiaPagaEm: n.guiaPagaEm,
       mlOrderId: n.mlOrderId,
       guiaGeradaEm: n.guiaGeradaEm,
       guiaAceita: situacaoDaGuia(n, n.guiaLoteId ? resultadoPorLote.get(n.guiaLoteId) : null) === '0',
@@ -306,8 +351,6 @@ export async function listarGuiasPendentes(prisma: PrismaClient, empresa?: strin
       envioMl: n.mlEnvioId ? { status: n.mlEnvioStatus, substatus: n.mlEnvioSubstatus, previsao: n.mlPrevisao, lidoEm: n.mlEnvioLidoEm } : null,
     }
   })
-    // a nossa com guia aceita sai de Vendas (está em 'O que já pagamos'); a do ML fica até o comprovante ser enviado
-    .filter((g) => g.ml || !g.guiaAceita)
 }
 
 function aaaaMmDd(d: Date): string {
@@ -413,8 +456,11 @@ export async function gerarLoteDasNotas(prisma: PrismaClient, ids: string[], hoj
   const hojeBr = dataBR(hoje) // dia de hoje em Brasília (o servidor roda em UTC)
   const naoNossa = notas.find((n) => !(n.difalCalculado > 0) || !(n.responsavel === 'NOSSO' || vendaMlNaJanela(n, hojeBr)))
   if (naoNossa) throw new ErroMontagemGnre(`a nota ${naoNossa.nfNumero} não é uma guia nossa (venda do ML só com até ${JANELA_ML_DIAS} dias)`)
-  const semVenda = notas.find((n) => n.responsavel === 'ML_PAGA' && !n.mlOrderId)
-  if (semVenda) throw new ErroMontagemGnre(`a nota ${semVenda.nfNumero} não tem o número da venda no ML: não haveria onde anexar o comprovante`)
+  // envio pelo ML: o ML recolhe o DIFAL (23/11/2026); sem o tipo de envio, não dá para saber — nos dois casos, sem guia
+  const mlRecolhe = notas.find((n) => mlRecolheDifal(n))
+  if (mlRecolhe) throw new ErroMontagemGnre(`a nota ${mlRecolhe.nfNumero} é venda do ML com envio pelo ML: o ML recolhe o DIFAL`)
+  const semTipo = notas.find((n) => mlTipoIncerto(n))
+  if (semTipo) throw new ErroMontagemGnre(`a nota ${semTipo.nfNumero} é venda do ML sem tipo de envio confirmado (${semTipo.mlLogistica ?? 'não lido'}): confirme antes de gerar a guia`)
 
   const [aliquotas, emitente] = await Promise.all([
     prisma.difalAliquota.findMany({ where: { uf: { in: [...new Set(notas.map((n) => n.clienteUf))] } } }),
