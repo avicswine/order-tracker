@@ -289,8 +289,6 @@ export async function mlSubirAnexo(
   return String(data.id)
 }
 
-// Responde uma conversa PÓS-VENDA (mensagens do pack) direto do painel.
-// `anexos` são ids devolvidos pelo upload (ver mlSubirAnexo).
 /**
  * Limite da nota de order, pela documentação do ML (notas-de-ordens).
  * O campo da tela mostra 120, mas a API aceita 300.
@@ -309,35 +307,70 @@ export const ML_NOTA_MAX_CHARS = 300
  */
 export async function mlGravarNota(
   company: MlCompany, orderId: string, texto: string,
-): Promise<'criada' | 'alterada' | 'falhou'> {
+): Promise<'criada' | 'alterada' | 'mantida' | 'falhou'> {
   const nota = texto.trim().slice(0, ML_NOTA_MAX_CHARS)
   if (!nota) return 'falhou'
   const auth = await mlAuth(company)
   if (!auth) return 'falhou'
   const base = `https://api.mercadolibre.com/orders/${orderId}/notes`
+  const motivo = (err: unknown) => err instanceof Error ? err.message : String(err)
+
+  // 1) lê as notas. Só segue para criar se a leitura deu certo (ou 404 = sem nota): em qualquer
+  //    outro erro (429, rede…) criar empilharia uma segunda nota por cima da que já existe
+  let notas: NotaMl[] = []
   try {
-    // a resposta vem como [{ order_id, results: [{ id, note }] }]
     const { data } = await axios.get(base, auth.H)
-    const existente = (data ?? [])
-      .flatMap((d: { results?: Array<{ id?: string }> }) => d?.results ?? [])
-      .find((n: { id?: string }) => n?.id)
-    if (existente?.id) {
-      await axios.put(`${base}/${existente.id}`, { note: nota }, auth.H)
-      return 'alterada'
-    }
+    notas = lerNotasMl(data)
   } catch (err) {
-    // sem nota ainda, ou a leitura falhou: registra e tenta criar (se for falta de permissão, a criação mostra)
-    console.warn(`[ml] leitura das notas da venda ${orderId} falhou:`, err instanceof Error ? err.message : err)
+    if (!axios.isAxiosError(err) || err.response?.status !== 404) {
+      console.warn(`[ml] leitura das notas da venda ${orderId} falhou:`, motivo(err))
+      return 'falhou'
+    }
   }
+
+  // 2) nota nossa (começa com "NF ") ou a previsão que o José escrevia à mão: altera
+  const nossa = notas.find((n) => /^\s*NF\s/i.test(n.note) || /previs[aã]o de entrega/i.test(n.note))
+  if (nossa) {
+    if (nossa.note.trim() === nota) return 'mantida'
+    try {
+      await axios.put(`${base}/${nossa.id}`, { note: nota }, auth.H)
+      return 'alterada'
+    } catch (err) {
+      console.warn(`[ml] nota da venda ${orderId} não alterou:`, motivo(err))
+      return 'falhou'
+    }
+  }
+  // 3) outra nota escrita à mão: não apaga o que a pessoa escreveu nem empilha
+  if (notas.length) {
+    console.log(`[ml] venda ${orderId} já tem nota escrita à mão — mantida`)
+    return 'mantida'
+  }
+  // 4) sem nota: cria
   try {
     await axios.post(base, { note: nota }, auth.H)
     return 'criada'
   } catch (err) {
-    console.warn(`[ml] nota da venda ${orderId} não gravou:`,
-      err instanceof Error ? err.message : err)
+    console.warn(`[ml] nota da venda ${orderId} não gravou:`, motivo(err))
     return 'falhou'
   }
 }
+
+type NotaMl = { id: string; note: string }
+/**
+ * A documentação (notas-de-ordens, 29/12/2025) não mostra o formato da resposta do GET.
+ * Aceita lista de notas, objeto com `results` e lista de objetos com `results`.
+ */
+function lerNotasMl(data: unknown): NotaMl[] {
+  const itens: unknown[] = Array.isArray(data) ? data : data ? [data] : []
+  return itens
+    .flatMap((d) => (d && typeof d === 'object' && Array.isArray((d as { results?: unknown[] }).results)) ? (d as { results: unknown[] }).results : [d])
+    .filter((n): n is { id: string | number; note: string } =>
+      !!n && typeof n === 'object' && 'id' in n && typeof (n as { note?: unknown }).note === 'string')
+    .map((n) => ({ id: String(n.id), note: n.note }))
+}
+
+// Responde uma conversa PÓS-VENDA (mensagens do pack) direto do painel.
+// `anexos` são ids devolvidos pelo upload (ver mlSubirAnexo).
 
 /**
  * Ids das orders que compõem um pack do ML (carrinho = várias orders, um pack).
