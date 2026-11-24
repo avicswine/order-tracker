@@ -1609,6 +1609,19 @@ function GuiasEmitidas() {
   const [de, setDe] = useState('')
   const [ate, setAte] = useState('')
   const [erro, setErro] = useState<string | null>(null)
+  const [avisoArquivo, setAvisoArquivo] = useState<string | null>(null)
+  // arquivo de pagamento do Sicredi (CNAB 240): só baixa o arquivo; o pagamento é aprovado no Internet Banking
+  const arquivo = useMutation({
+    mutationFn: ({ empresa, ids }: { empresa: string; ids: string[] }) => difalApi.arquivoPagamento(empresa, ids),
+    onSuccess: (r) => {
+      baixarArquivo(new Blob([r.conteudo], { type: 'text/plain' }), r.nome)
+      setEscolhidas(new Set())
+      setAvisoArquivo(`Arquivo ${r.nome} baixado: ${r.guias} guia(s), ${brl(r.total)}. Suba no Internet Banking do Sicredi (pagamento a fornecedores) e aprove lá.`
+        + (r.foraDoArquivo.length ? ` Ficaram de fora: ${r.foraDoArquivo.map((f) => `NF ${f.nfNumero} (${f.motivo})`).join('; ')}.` : ''))
+      qc.invalidateQueries({ queryKey: ['difal-guias-emitidas'] })
+    },
+    onError: (e) => setErro(`Arquivo do Sicredi: ${mensagemErro(e)}`),
+  })
   const marcar = useMutation({
     mutationFn: ({ ids, data: d }: { ids: string[]; data: string | null }) => difalApi.marcarPagas(ids, d),
     onSuccess: (r) => {
@@ -1631,6 +1644,16 @@ function GuiasEmitidas() {
   const totalPago = visiveis.reduce((s, g) => s + (g.valorPago ?? 0), 0)
   // só as marcadas que estão na tela: trocar o filtro não pode deixar escondida uma guia marcada
   const marcadas = visiveis.filter((g) => escolhidas.has(g.id)).map((g) => g.id)
+  const empresasMarcadas = [...new Set(visiveis.filter((g) => escolhidas.has(g.id)).map((g) => g.empresa))]
+  function gerarArquivo() {
+    setErro(null); setAvisoArquivo(null)
+    const [empresa] = empresasMarcadas
+    if (window.confirm(`Gerar o arquivo de pagamento do Sicredi da ${empresa} com ${marcadas.length} guia(s)?
+
+O arquivo não paga nada: você sobe no Internet Banking e aprova lá. As guias ficam marcadas como "no arquivo" para não entrarem em outro.`)) {
+      arquivo.mutate({ empresa, ids: marcadas })
+    }
+  }
   const totalAPagar = visiveis.filter((g) => !g.pagaEm && g.situacaoPortal === '0').reduce((s, g) => s + g.difalCalculado, 0)
   function alternar(id: string) {
     setEscolhidas((a) => { const n = new Set(a); if (n.has(id)) n.delete(id); else n.add(id); return n })
@@ -1656,6 +1679,7 @@ function GuiasEmitidas() {
         </div>
       ))}
       {erro && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-800">{erro}</div>}
+      {avisoArquivo && <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-900">{avisoArquivo}</div>}
       <div className="flex flex-wrap items-center gap-3">
         <input type="search" value={busca} onChange={(e) => setBusca(e.target.value)} placeholder={DICA_BUSCA} className={CAMPO_BUSCA} />
         <FiltroEmpresa valor={empresa} onTrocar={setEmpresa} />
@@ -1698,6 +1722,11 @@ function GuiasEmitidas() {
                 </button>
                 <button onClick={() => { setErro(null); if (window.confirm(`Desmarcar ${marcadas.length} guia(s) como paga(s)?`)) marcar.mutate({ ids: marcadas, data: null }) }}
                   className="btn-secondary">Desmarcar</button>
+                <button onClick={gerarArquivo} disabled={arquivo.isPending || empresasMarcadas.length !== 1}
+                  title={empresasMarcadas.length !== 1 ? 'Um arquivo por empresa: marque só guias da AVIC ou só da AGRO' : 'Baixa o arquivo CNAB 240 para pagar no Sicredi'}
+                  className="btn-outline">
+                  {arquivo.isPending ? 'Gerando…' : `Arquivo Sicredi (${marcadas.length})`}
+                </button>
               </>
             )}
             <button onClick={baixar} className="btn-outline">Baixar planilha</button>
@@ -1743,6 +1772,9 @@ function GuiasEmitidas() {
                       {g.pagaEm
                         ? <span className={`w-fit ${seloTom('verde')}`}>paga em {dataBr(g.pagaEm)}</span>
                         : <span className={`w-fit ${seloTom('cinza')}`}>não paga</span>}
+                      {g.arquivoPagamento && !g.pagaEm && (
+                        <span className={`w-fit ${seloTom('azul')}`} title="arquivo de pagamento do Sicredi">no arquivo {g.arquivoPagamento.nome} · {formatDate(g.arquivoPagamento.criadoEm)}</span>
+                      )}
                       {g.atrasada && <span className={`w-fit ${seloTom('vermelho')}`} title="guia gerada depois do dia em que o DIFAL vencia (regra do mesmo dia); saiu só com o imposto">gerada depois do prazo</span>}
                       {g.ml && <span className={`w-fit ${seloTom('ambar')}`}>{g.comprovanteMlEnviadoEm ? `comprovante no ML ${dataBr(g.comprovanteMlEnviadoEm)}` : 'comprovante no ML: falta'}</span>}
                       {g.ml && !g.comprovanteMlEnviadoEm && g.mlOrderId && <LinkComprovanteMl mlOrderId={g.mlOrderId} />}
