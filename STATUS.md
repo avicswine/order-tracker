@@ -1,6 +1,6 @@
 # STATUS — Order Tracker
 
-Última atualização: 2026-11-22 (padronização visual do painel e do Portal Cliente, PR #33, em produção)
+Última atualização: 2026-11-24 (DIFAL: ML volta a pagar envio pelo ML, arquivo de pagamento Sicredi, usuário Financeiro; nota nas vendas ML "combinar entrega"; link do rastreio na mensagem do ML — PRs #35 a #43, em produção)
 
 ## Regra de trabalho (definida por José em 2026-11-07)
 
@@ -9,6 +9,35 @@
 que é inferência, nunca apresentar como fato. O motivo: na sessão de 07/11 três
 afirmações minhas sobre políticas do ML caíram quando a fonte foi cobrada, gerando
 retrabalho e custo.
+
+## Sessão 23–24/11/2026 (PRs #35 a #43, tudo em produção)
+
+- **#35 Link do rastreio na mensagem de despacho do ML** (decisão do José: é o nosso próprio rastreio). Texto em
+  `RASTREIO_ML` (`backend/src/services/notifier.ts`), mesmo endereço do WhatsApp/e-mail (`PORTAL_URL`).
+- **#36/#38 Dica do cálculo do DIFAL fora da tela:** causa era a animação de entrada com `both` deixando `transform`
+  preso (vira bloco de referência para `position: fixed`); agora `backwards` (`componentes.css`).
+- **#37 Estados com cobrança:** + BA, MS, MT, SE (`UFS_COM_COBRANCA` em `guias.ts`).
+- **#39 Usuário Financeiro** (papel `FINANCEIRO`): só a aba DIFAL, sem a engrenagem; o servidor barra o resto
+  (`middleware/auth.ts`) e a configuração rota a rota (`negarAoFinanceiro`). Victoria: `ricacapitalgrupo@gmail.com`
+  (senha entregue por arquivo local `.env.acesso-victoria`, a apagar). O `financeiro@avicswine.com.br` já existia como
+  Administrador e foi mantido.
+- **#40 DIFAL do ML — decisão do José (23/11), desfaz a de 20/11:** venda do ML com **envio pelo ML** (Coleta, FULL,
+  Flex, Agência) **o ML paga**; nós só conferimos no Fechamento ML. **"A combinar" e ME1 a guia é nossa.** Tipo de
+  envio não lido/estranho = "confirmar antes de gerar" (lista positiva `LOGISTICAS_ML_NOSSAS`). As do ML aparecem só
+  com "Ver Mercado Livre". Vendas: listas **Para emitir / Emitidas: pagar e anexar / Atrasadas**, filtro AVIC/AGRO,
+  filtro no cabeçalho (estilo Excel), linhas mais baixas, "Copiar link do ML".
+- **#41/#42 Nota na venda ML "combinar entrega"** (`NF · transportadora · status · entrega`): atualizada no fim de
+  cada rodada de rastreio só quando o texto muda (`services/notasCombinarEntrega.ts`, campo `orders.mlNotaTexto`).
+  Não apaga nota escrita à mão (só troca a nossa ou a "Previsão de entrega"); falha espera 24h fora da fila.
+  `ML_NOTAS_POR_RODADA=20` no Railway. 24/11: 12 notas gravadas (11 criadas/alteradas, 1 mantida — AGRO 6390).
+- **#43 Arquivo de pagamento Sicredi (CNAB 240)**, botão "Arquivo Sicredi" em DIFAL → O que já pagamos.
+  Manual Sicredi "Pagamento a Fornecedor" v1.5 (07/2026); tributo com código de barras = serviço 22, forma 11,
+  segmento O. Convênio **AVIC 7SR1 / AGRO 7SR3**; conta nas variáveis `SICREDI_<EMP>_AGENCIA/_CONTA/_CONTA_DV` do
+  Railway (não estão no código). Valor = o da guia emitida pelo portal. "Tirar do arquivo" e baixar de novo.
+  Conferência: `npx tsx src/services/difal/verificarCnabSicredi.ts` (25 casos).
+- **Rodadas de rastreio:** o cron `0 */2 * * *` roda em UTC → **horas ímpares de Brasília** (9h, 11h…). O botão
+  "Atualizar rastreamento" dispara duas rodadas (geral + São Miguel); duas rodadas juntas estouram o login da
+  Atual Cargas (429).
 
 ## Padronização visual (22/11/2026, PR #33, em produção)
 
@@ -89,10 +118,14 @@ Fechamento ML com todos os meses, histórico da AGRO). cmvsync: PR #3 (DIFAL pag
 
 ### O que falta (em ordem)
 
-1. **23/11:** pagar a guia da NF 6541 (R$ 8,29) e marcar como paga em "O que já pagamos"; conferir que aparece no cmvsync.
+1. **Arquivo Sicredi:** José dá o ok no sininho do app Sicredi (cada conta) e faz o **primeiro teste com 1 guia**
+   (subir o `.REM`, conferir valor/vencimento/beneficiário, aprovar). Depois: ler o retorno `.RET` para marcar "paga".
 2. **Fim de nov/2026:** José baixa os ZIPs restantes de novembro (AVIC e AGRO, nomes separados) → conferir se as guias
    de NFs emitidas **depois de 16/11** (regras fiscais dos anúncios corrigidas) saíram com o devido (1,5%; CE 3,64%)
-   e se o ML pagou alguma nota que nós já pagamos (dobro).
+   e **duplicidade**: 13 guias de vendas ML (AGRO, R$ 630,38) foram geradas e pagas em 23/11 antes da volta ao
+   "ML paga". Suspeita de dobro (ML também recolheu): 6464, 6467, 6471, 6473, 6474, 6475, 6477, 6478, 6496, 6534
+   (R$ 370,83); 6492 depende do comprovante; 6474 com envio **cancelado** no ML; 6512 é Shopee (ver se a Shopee
+   recolhe); 6360 e 6515 são "A combinar" (guia nossa, sem dobro).
 3. **Contabilidade:** pedidos de restituição por estado (planilha); atrasadas (multa/juros); regra "dia 15" só vale
    com inscrição estadual no destino (Convênio ICMS 236/21, cláusula sexta); cálculo "por dentro" (LC 87/96, art. 13,
    § 1º, I) no DIFAL com redução; categoria de "produto" do MA.
@@ -101,6 +134,27 @@ Fechamento ML com todos os meses, histórico da AGRO). cmvsync: PR #3 (DIFAL pag
    quando ela voltar para a `main`.
 6. Venda de balcão no cmvsync (sem número de pedido na loja): ligar ao DIFAL numa segunda etapa.
 7. Certificados A1: **AVIC vence 15/01/2027**, AGRO 09/06/2027.
+8. Lote GNRE: a tela mostra "gerado em" no horário UTC (um dia a mais à noite) — só exibição.
+
+## Rastreio da Frenet (J&T e Correios) — EM ANDAMENTO (24/11/2026)
+
+- A conta Frenet (`FRENET_TOKEN` no `.env` do PC; Chave/Senha/Token em Chaves de acesso do painel) **rastreia pelo
+  código**: `POST api.frenet.com.br/tracking/trackinginfo` com `ShippingServiceCode` (J&T Standard = `JTE_INT`,
+  PAC = `03298`, Sedex = `03220`). Testado com 888031064908419: histórico completo.
+- **Falta o código de cada NF:** não volta para o Bling; a lista de envios (`GET whitelabel…/v1/shipments`) exige
+  `x-partner-token`. A Frenet pediu nome da empresa, e-mail da conta e motivo; o José vai responder. Quando vier,
+  cadastrar `FRENET_PARTNER_TOKEN` no Railway.
+- Especificação aprovada: J&T ("J&T EXPRESS BRAZIL LTDA.", hoje NONE, 106 NFs ignoradas) e Correios pela Frenet
+  (provável "LITHIUM SOFTWARE LTDA" = Frenet, 18 NFs ignoradas — confirmar); campo de código de rastreio no pedido;
+  os 30 envios colados pelo José (lista no scratch da sessão) entram **sem aviso retroativo** ao cliente.
+  Worktree `../order-tracker-frenet` criada, sem código ainda.
+
+## Pendências fora do DIFAL (24/11/2026)
+
+- **Rastreio com erro na rodada de 24/11:** TRD Dalfan/Senior (15 NFs, 403/timeout do portal), Atual Cargas Cajamar
+  (2 NFs, CNPJ sem login configurado), Braspress (5, site não respondeu).
+- **Endereços `rastreio.avicswine` / `rastreio.agrogranja`** para o link do portal: falta saber se a Agrogranja tem
+  domínio e acesso ao DNS.
 
 ### Regras aprendidas na planilha fiscal do ML (16–17/11/2026)
 
