@@ -262,48 +262,6 @@ function textoMl(texto: string): string {
   return t.length <= ML_LIMITE_TEXTO ? t : t.slice(0, ML_LIMITE_TEXTO - 1).trimEnd() + '…'
 }
 
-/** O status do pedido em português — a nota é lida por gente, não por máquina. */
-const STATUS_EM_PORTUGUES: Record<string, string> = {
-  PENDING: 'Não enviada',       // termo escolhido pelo José (24/11/2026)
-  IN_TRANSIT: 'Em trânsito',
-  DELIVERED: 'Entregue',
-  CANCELLED: 'Cancelado',
-}
-
-/**
- * O texto da nota que vai na venda "combinar entrega".
- *
- * Ordem pedida pelo José (24/11/2026): NF, transportadora, status e data de entrega.
- * Ele enxerga tudo pela lista do ML, sem abrir outra tela.
- * Ex.: "NF 014373 · EXPRESSO SAO MIGUEL S/A · Em trânsito · Entrega 03/12/2026"
- *
- * Cada parte só entra se existir: pedido sem transportadora definida ainda não deve
- * gerar nota com buraco no meio.
- */
-export function notaDaVenda(v: {
-  status?: string | null; estimatedDelivery?: Date | null
-  deliveredAt?: Date | null; nfNumber?: string | null
-  carrier?: { name: string } | null
-}): string {
-  const partes: string[] = []
-  if (v.nfNumber) partes.push(`NF ${v.nfNumber}`)
-  if (v.carrier?.name) partes.push(v.carrier.name)
-  // entregue de verdade vale mais que previsão: junta status e data num só pedaço,
-  // senão sai "Entregue · Entregue em 19/11"
-  // fuso fixo: o texto sai igual no Railway (UTC) e num script rodado no PC (-03).
-  // deliveredAt é o instante real da entrega (dia de Brasília); estimatedDelivery é um dia
-  // gravado à meia-noite UTC pelo rastreio, então se lê em UTC para não cair no dia anterior
-  if (v.deliveredAt) {
-    partes.push(`Entregue em ${v.deliveredAt.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`)
-  } else {
-    if (v.status) partes.push(STATUS_EM_PORTUGUES[v.status] ?? v.status)
-    if (v.estimatedDelivery) {
-      partes.push(`Entrega ${v.estimatedDelivery.toLocaleDateString('pt-BR', { timeZone: 'UTC' })}`)
-    }
-  }
-  return partes.join(' · ')
-}
-
 /**
  * Venda do Mercado Livre: o anexo Marketplace dos Termos do ML (cl. 3.b) proíbe
  * comunicação com o comprador por qualquer meio que não seja o serviço de mensagens
@@ -324,11 +282,7 @@ async function dispatchMl(
 ): Promise<boolean> {
   const venda = await prisma.order.findUnique({
     where: { id: orderId },
-    select: {
-      orderNumber: true, mlOrderId: true, mlCompany: true, mlSemEnvio: true,
-      nfNumber: true, status: true, estimatedDelivery: true, deliveredAt: true,
-      carrier: { select: { name: true } },
-    },
+    select: { orderNumber: true, mlOrderId: true, mlCompany: true },
   })
   if (!venda?.mlOrderId) return false
 
@@ -344,21 +298,11 @@ async function dispatchMl(
   }
 
   try {
-    const { mlConversaResponder, mlGravarNota } = await import('./mercadolivre')
+    const { mlConversaResponder } = await import('./mercadolivre')
     await mlConversaResponder(venda.mlCompany as MlCompany, venda.mlOrderId, textoMl(mlMessage))
     await saveNotification(orderId, eventHash, 'ML_MENSAGEM', true, venda.mlOrderId, eventText)
     console.log(`[Notifier] 💬 ML → ${venda.orderNumber}`)
 
-    // "COMBINAR ENTREGA": grava a nota na venda, que é como o José enxerga na lista do ML
-    // quais já foram combinados. Só nessas vendas — nas com envio, o próprio ML mostra o
-    // rastreio e a nota seria ruído. Falhar aqui NÃO desfaz o aviso já enviado.
-    if (venda.mlSemEnvio) {
-      const nota = notaDaVenda(venda)
-      if (nota) {
-        const r = await mlGravarNota(venda.mlCompany as MlCompany, venda.mlOrderId, nota)
-        console.log(`[Notifier] 📝 nota ${r} em ${venda.orderNumber}: ${nota}`)
-      }
-    }
   } catch (err) {
     // Conversa fechada pelo ML (venda cancelada, reembolso, reclamação) ou moderação:
     // registra e segue — não é motivo para quebrar o ciclo de rastreio.

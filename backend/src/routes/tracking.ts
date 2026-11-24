@@ -4,6 +4,7 @@ import { trackSSW, trackSenior, trackWithPuppeteer, trackSaoMiguel, trackAtualCa
 import { OrderStatus, TrackingSystem, Prisma } from '@prisma/client'
 import { notifyOrderUpdate, notifyCarrier, ATRASO_MIN_DIAS, CARRIER_NOTIFY_MAX_AGE_DAYS } from '../services/notifier'
 import { criarPendenciaAuto, resolverPendenciasAutoSeEntregue } from '../services/pendencias'
+import { sincronizarNotasCombinar } from '../services/notasCombinarEntrega'
 
 const router = Router()
 
@@ -234,6 +235,9 @@ export async function runTrackingSync(onProgress?: ProgressCallback, systems?: T
     const chunk = orders.slice(i, i + TRACKING_CONCURRENCY)
     await Promise.all(chunk.map(processOne))
   }
+
+  // nota da venda do ML "combinar entrega": atualiza as que mudaram com este rastreio (não trava a rodada)
+  sincronizarNotasCombinar().catch((err) => console.error('[NotasML] Erro na rodada de notas:', err))
 
   return { atualizados, erros, total: orders.length }
 }

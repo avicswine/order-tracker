@@ -60,6 +60,7 @@ model Order {
   mlDeliveredNotifiedAt DateTime?  // quando avisamos "entregue" (irreversível no ML)
   mlEnvioErro           String?    // último erro de notificação, p/ diagnóstico
   mlVinculoTentadoAt    DateTime?  // última tentativa de casar com uma venda ML
+  mlNotaTexto           String?    // último texto gravado na nota da venda ML "combinar entrega" (evita regravar)
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
   statusHistory     StatusHistory[]
