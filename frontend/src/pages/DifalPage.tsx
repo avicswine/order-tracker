@@ -717,7 +717,7 @@ function GuiasPendentes({ lugarCards, acaoExtra }: { lugarCards: HTMLElement | n
           <>
             {marcadas.length > 0 && <button onClick={() => setEscolhidas(new Set())} className="btn-ghost">Limpar</button>}
             <input type="date" value={dataPagamento} onChange={(e) => setDataPagamento(e.target.value)} className="input input-sm w-auto" title="data do pagamento" />
-            <button onClick={() => { setErroTexto(null); setAviso(null); pagar.mutate(marcadasPagaveis) }}
+            <button onClick={() => { setErroTexto(null); setAviso(null); if (window.confirm(`Marcar ${marcadasPagaveis.length} guia(s) como paga(s) em ${dataBr(dataPagamento)}?`)) pagar.mutate(marcadasPagaveis) }}
               disabled={marcadasPagaveis.length === 0 || pagar.isPending} className="btn-primary">
               Marcar como paga ({marcadasPagaveis.length})
             </button>
@@ -1722,7 +1722,7 @@ function GuiasEmitidas() {
                   <td className="px-2 py-2.5 text-xs">
                     <span className="flex flex-col gap-1">
                       <span className={`w-fit max-w-[150px] truncate ${seloTom(tomCanal(g.canal))}`}>{g.canal ?? 'Balcão'}</span>
-                      {g.ml && g.mlLogistica && <span className={`w-fit ${seloTom(TOM_LOGISTICA[g.mlLogistica] ?? 'cinza')}`}>{g.mlLogistica}</span>}
+                      {g.mlLogistica && <span className={`w-fit ${seloTom(TOM_LOGISTICA[g.mlLogistica] ?? 'cinza')}`}>{g.mlLogistica}</span>}
                     </span>
                   </td>
                   <td className="px-2 py-2.5 text-right tabular-nums text-slate-600">{brl(g.valorNota)}</td>
