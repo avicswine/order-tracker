@@ -292,6 +292,54 @@ export async function mlSubirAnexo(
 // Responde uma conversa PÓS-VENDA (mensagens do pack) direto do painel.
 // `anexos` são ids devolvidos pelo upload (ver mlSubirAnexo).
 /**
+ * Limite da nota de order, pela documentação do ML (notas-de-ordens).
+ * O campo da tela mostra 120, mas a API aceita 300.
+ */
+export const ML_NOTA_MAX_CHARS = 300
+
+/**
+ * Escreve a NOTA da venda — a anotação que só o vendedor vê na tela do ML.
+ *
+ * Em venda "combinar entrega" o José escrevia à mão "Previsão de entrega: 03/12/2026"
+ * para saber, olhando a lista do ML, quais já tinham sido combinados (23/11/2026). Aqui
+ * isso passa a ser gravado junto com o aviso ao comprador.
+ *
+ * Se já existe nota, ALTERA em vez de empilhar: duas notas na mesma venda confundem mais
+ * do que ajudam. Nunca derruba o fluxo de aviso — a nota é conveniência, não obrigação.
+ */
+export async function mlGravarNota(
+  company: MlCompany, orderId: string, texto: string,
+): Promise<'criada' | 'alterada' | 'falhou'> {
+  const nota = texto.trim().slice(0, ML_NOTA_MAX_CHARS)
+  if (!nota) return 'falhou'
+  const auth = await mlAuth(company)
+  if (!auth) return 'falhou'
+  const base = `https://api.mercadolibre.com/orders/${orderId}/notes`
+  try {
+    // a resposta vem como [{ order_id, results: [{ id, note }] }]
+    const { data } = await axios.get(base, auth.H)
+    const existente = (data ?? [])
+      .flatMap((d: { results?: Array<{ id?: string }> }) => d?.results ?? [])
+      .find((n: { id?: string }) => n?.id)
+    if (existente?.id) {
+      await axios.put(`${base}/${existente.id}`, { note: nota }, auth.H)
+      return 'alterada'
+    }
+  } catch (err) {
+    // sem nota ainda, ou a leitura falhou: registra e tenta criar (se for falta de permissão, a criação mostra)
+    console.warn(`[ml] leitura das notas da venda ${orderId} falhou:`, err instanceof Error ? err.message : err)
+  }
+  try {
+    await axios.post(base, { note: nota }, auth.H)
+    return 'criada'
+  } catch (err) {
+    console.warn(`[ml] nota da venda ${orderId} não gravou:`,
+      err instanceof Error ? err.message : err)
+    return 'falhou'
+  }
+}
+
+/**
  * Ids das orders que compõem um pack do ML (carrinho = várias orders, um pack).
  *
  * Serve para achar o pedido da conversa: a caixa de mensagens trabalha com o PACK, mas
