@@ -217,6 +217,12 @@ export const INICIO_LISTA_NOTAS = new Date('2026-08-24T00:00:00Z')
  * 'A combinar' (nossa transportadora) e ME1 ficam com a gente, e também a venda com o tipo ainda não lido.
  */
 export const LOGISTICAS_ML_RECOLHE = ['FULL', 'Coleta', 'Agência', 'Flex']
+/** só estes tipos de envio do ML são guia nossa; qualquer outro ('não identificado', 'outro (...)', sem tipo) se confirma antes */
+export const LOGISTICAS_ML_NOSSAS = ['A combinar', 'ME1']
+/** venda do ML cujo tipo de envio não diz quem recolhe: não entra em lote até confirmar */
+export function mlTipoIncerto(n: { responsavel: string; mlLogistica: string | null }): boolean {
+  return n.responsavel === 'ML_PAGA' && !LOGISTICAS_ML_NOSSAS.includes(n.mlLogistica ?? '') && !LOGISTICAS_ML_RECOLHE.includes(n.mlLogistica ?? '')
+}
 export function mlRecolheDifal(n: { responsavel: string; mlLogistica: string | null }): boolean {
   return n.responsavel === 'ML_PAGA' && LOGISTICAS_ML_RECOLHE.includes(n.mlLogistica ?? '')
 }
@@ -305,7 +311,9 @@ export async function listarGuiasPendentes(prisma: PrismaClient, empresa?: strin
     const ml = n.responsavel === 'ML_PAGA'
     const faltando = n.guiaGeradaEm ? [] : oQueFalta(n, porUf.get(n.clienteUf), porEmpresa.get(n.empresa))
     // sem o tipo de envio não dá para saber se o ML recolhe: gerar a guia arriscaria pagar em dobro
-    if (ml && !n.guiaGeradaEm && !n.mlLogistica) faltando.push('confirmar o tipo de envio no ML (clique em Atualizar do Bling)')
+    if (!n.guiaGeradaEm && mlTipoIncerto(n)) {
+      faltando.push(n.mlLogistica ? `confirmar o tipo de envio no ML (lido: ${n.mlLogistica})` : 'confirmar o tipo de envio no ML (clique em Atualizar do Bling)')
+    }
     // envio pelo ML: o ML recolhe; a nota aparece só para consulta e nunca entra em lote
     const soConsulta = mlRecolheDifal(n) && !n.guiaGeradaEm
     if (soConsulta) faltando.push('o ML recolhe o DIFAL (envio pelo ML): não gerar guia')
@@ -451,8 +459,8 @@ export async function gerarLoteDasNotas(prisma: PrismaClient, ids: string[], hoj
   // envio pelo ML: o ML recolhe o DIFAL (23/11/2026); sem o tipo de envio, não dá para saber — nos dois casos, sem guia
   const mlRecolhe = notas.find((n) => mlRecolheDifal(n))
   if (mlRecolhe) throw new ErroMontagemGnre(`a nota ${mlRecolhe.nfNumero} é venda do ML com envio pelo ML: o ML recolhe o DIFAL`)
-  const semTipo = notas.find((n) => n.responsavel === 'ML_PAGA' && !n.mlLogistica)
-  if (semTipo) throw new ErroMontagemGnre(`a nota ${semTipo.nfNumero} é venda do ML sem o tipo de envio lido: confirme antes de gerar a guia`)
+  const semTipo = notas.find((n) => mlTipoIncerto(n))
+  if (semTipo) throw new ErroMontagemGnre(`a nota ${semTipo.nfNumero} é venda do ML sem tipo de envio confirmado (${semTipo.mlLogistica ?? 'não lido'}): confirme antes de gerar a guia`)
 
   const [aliquotas, emitente] = await Promise.all([
     prisma.difalAliquota.findMany({ where: { uf: { in: [...new Set(notas.map((n) => n.clienteUf))] } } }),
