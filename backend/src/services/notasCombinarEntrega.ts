@@ -15,6 +15,8 @@ import { mlGravarNota, ML_COMPANIES, type MlCompany } from './mercadolivre'
 const DIAS_APOS_ENTREGA = 7
 /** pausa entre duas notas seguidas */
 const PAUSA_ENTRE_NOTAS_MS = 400
+/** venda cuja nota falhou (403, venda cancelada no ML…) espera este tempo antes de tentar de novo */
+const ESPERA_APOS_FALHA_MS = 24 * 3600000
 /**
  * Máximo de notas gravadas por rodada (variável ML_NOTAS_POR_RODADA no Railway).
  * Padrão 1: na primeira vez o José confere uma nota no ML antes de liberar o resto.
@@ -62,9 +64,12 @@ export function notaDaVenda(v: {
 /** Vendas "combinar entrega" cuja nota no ML está diferente do texto de agora. Só lê o banco. */
 export async function notasParaAtualizar(): Promise<{ id: string; orderNumber: string; mlOrderId: string; mlCompany: MlCompany; nota: string }[]> {
   const desde = new Date(Date.now() - DIAS_APOS_ENTREGA * 86400000)
+  const falhouHaPouco = new Date(Date.now() - ESPERA_APOS_FALHA_MS)
   const vendas = await prisma.order.findMany({
     where: {
       mlSemEnvio: true,
+      // a que falhou nas últimas 24h não volta para a fila: não gasta chamada nem trava as outras
+      AND: [{ OR: [{ mlNotaFalhouEm: null }, { mlNotaFalhouEm: { lt: falhouHaPouco } }] }],
       mlOrderId: { not: null },
       mlCompany: { in: ML_COMPANIES },
       nfNumber: { not: null },
@@ -93,8 +98,12 @@ export async function sincronizarNotasCombinar(): Promise<void> {
   const lote = pendentes.slice(0, limitePorRodada())
   for (const v of lote) {
     const r = await mlGravarNota(v.mlCompany, v.mlOrderId, v.nota)
-    // 'mantida' (nota escrita à mão ou já igual) também conta como feita: não tenta de novo a cada rodada
-    if (r !== 'falhou') await prisma.order.update({ where: { id: v.id }, data: { mlNotaTexto: v.nota } })
+    // 'mantida' (nota escrita à mão ou já igual) também conta como feita: não tenta de novo a cada rodada;
+    // 'falhou' marca a hora, e a venda espera 24h fora da fila
+    await prisma.order.update({
+      where: { id: v.id },
+      data: r === 'falhou' ? { mlNotaFalhouEm: new Date() } : { mlNotaTexto: v.nota, mlNotaFalhouEm: null },
+    })
     console.log(`[NotasML] ${v.orderNumber}: nota ${r} — "${v.nota}"`)
     await new Promise((ok) => setTimeout(ok, PAUSA_ENTRE_NOTAS_MS))
   }
