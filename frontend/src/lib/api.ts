@@ -216,7 +216,7 @@ export interface DifalGuiaEmitida {
   situacaoPortal: string | null
   linhaDigitavel: string | null
   /** arquivo de pagamento do Sicredi em que a guia já entrou */
-  arquivoPagamento: { nome: string; criadoEm: string } | null
+  arquivoPagamento: { id: string; nome: string; criadoEm: string } | null
   atrasada: boolean
   pagaEm: string | null
   valorPago: number | null
@@ -494,6 +494,10 @@ export const difalApi = {
   arquivoPagamento: (empresa: string, ids: string[]) =>
     api.post<{ nome: string; conteudo: string; guias: number; total: number; foraDoArquivo: { nfNumero: string; motivo: string }[] }>(
       '/difal/arquivo-pagamento', { empresa, ids }).then((r) => r.data),
+  baixarArquivoPagamento: (id: string) =>
+    api.get<{ nome: string; conteudo: string }>(`/difal/arquivo-pagamento/${id}`).then((r) => r.data),
+  tirarDoArquivo: (ids: string[]) =>
+    api.post<{ tiradas: number }>('/difal/arquivo-pagamento/tirar', { ids }).then((r) => r.data),
   marcarPagas: (ids: string[], data: string | null) => api.post<{ ok: boolean; notas: number; recusadas: number }>('/difal/guias-emitidas/pagas', { ids, data }).then((r) => r.data),
   guiasPendentes: () => api.get<DifalGuiaPendente[]>('/difal/guias-pendentes').then((r) => r.data),
   // devolve o XML do lote GNRE como arquivo para baixar

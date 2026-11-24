@@ -13,7 +13,7 @@ import { Prisma } from '@prisma/client'
 import { importarNotas, type ResultadoImportacao } from '../services/difal/importar'
 import { preencherLogisticaMl } from '../services/difal/logisticaMl'
 import { listarGuiasEmitidas, marcarGuiasPagas } from '../services/difal/guiasEmitidas'
-import { gerarArquivoPagamento } from '../services/difal/arquivoPagamento'
+import { gerarArquivoPagamento, tirarDoArquivo } from '../services/difal/arquivoPagamento'
 import { semearAliquotas } from '../services/difal/aliquotas'
 import { listarGuiasPendentes, gerarLoteDasNotas, classificarCamposExtras, marcarComprovanteMlEnviado, filtroVendasMl, INICIO_LISTA_NOTAS } from '../services/difal/guias'
 import { ErroMontagemGnre } from '../services/difal/gnre'
@@ -235,6 +235,24 @@ router.post(
     } catch (e) {
       res.status(400).json({ erro: (e as Error).message })
     }
+  },
+)
+
+// GET /difal/arquivo-pagamento/:id — o mesmo arquivo de novo (o download se perdeu)
+router.get('/arquivo-pagamento/:id', async (req: Request, res: Response) => {
+  const a = await prisma.difalArquivoPagamento.findUnique({ where: { id: req.params.id }, select: { nome: true, conteudo: true } })
+  if (!a) return res.status(404).json({ erro: 'arquivo não encontrado' })
+  res.json(a)
+})
+
+// POST /difal/arquivo-pagamento/tirar — tira guias do arquivo (não pagas) para entrarem num novo
+router.post(
+  '/arquivo-pagamento/tirar',
+  [body('ids').isArray({ min: 1, max: 200 }), body('ids.*').isString().notEmpty()],
+  async (req: Request, res: Response) => {
+    const erros = validationResult(req)
+    if (!erros.isEmpty()) return res.status(400).json({ errors: erros.array() })
+    res.json({ tiradas: await tirarDoArquivo(prisma, req.body.ids) })
   },
 )
 

@@ -36,6 +36,12 @@ export interface ResultadoArquivo {
   foraDoArquivo: { nfNumero: string; motivo: string }[]
 }
 
+/** Tira guias do arquivo de pagamento (o banco recusou, o arquivo se perdeu, passou o dia): voltam a poder entrar num novo. */
+export async function tirarDoArquivo(prisma: PrismaClient, ids: string[]): Promise<number> {
+  const r = await prisma.difalNota.updateMany({ where: { id: { in: ids }, arquivoPagamentoId: { not: null }, guiaPagaEm: null }, data: { arquivoPagamentoId: null } })
+  return r.count
+}
+
 export async function gerarArquivoPagamento(prisma: PrismaClient, empresa: string, ids: string[]): Promise<ResultadoArquivo> {
   const emitente = await prisma.difalEmitente.findUnique({ where: { empresa } })
   if (!emitente) throw new Error(`dados do emitente ${empresa} ainda não foram lidos de nenhuma nota`)

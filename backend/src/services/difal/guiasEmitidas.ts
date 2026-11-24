@@ -42,7 +42,7 @@ export interface GuiaEmitida {
   /** último dia para pagar a guia (AAAA-MM-DD), como o portal devolveu */
   dataLimitePagamento: string | null
   /** arquivo de pagamento do Sicredi em que a guia já entrou */
-  arquivoPagamento: { nome: string; criadoEm: Date } | null
+  arquivoPagamento: { id: string; nome: string; criadoEm: Date } | null
   /** gerada depois do prazo legal: saiu só com o imposto, sem multa e juros */
   atrasada: boolean
   pagaEm: string | null
@@ -61,7 +61,7 @@ export async function listarGuiasEmitidas(prisma: PrismaClient): Promise<{ guias
     prisma.difalLoteGnre.findMany({ select: { id: true, empresa: true, ambiente: true, enviadoEm: true, resultadoXml: true } }),
     prisma.difalArquivoPagamento.findMany({ select: { id: true, nome: true, criadoEm: true } }),
   ])
-  const arquivoPorId = new Map(arquivos.map((a) => [a.id, { nome: a.nome, criadoEm: a.criadoEm }]))
+  const arquivoPorId = new Map(arquivos.map((a) => [a.id, { id: a.id, nome: a.nome, criadoEm: a.criadoEm }]))
   const resultado = new Map(lotes.map((l) => [l.id, { ...l, guias: l.resultadoXml ? lerResultadoLote(l.resultadoXml).guias : [] }]))
 
   const guias: GuiaEmitida[] = notas.map((n) => {

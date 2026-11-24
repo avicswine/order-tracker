@@ -1622,6 +1622,24 @@ function GuiasEmitidas() {
     },
     onError: (e) => setErro(`Arquivo do Sicredi: ${mensagemErro(e)}`),
   })
+  // banco recusou, arquivo perdido ou não enviado no dia: a guia sai do arquivo e pode entrar num novo
+  const tirar = useMutation({
+    mutationFn: (ids: string[]) => difalApi.tirarDoArquivo(ids),
+    onSuccess: (r) => {
+      setEscolhidas(new Set())
+      setAvisoArquivo(`${r.tiradas} guia(s) tirada(s) do arquivo: podem entrar num arquivo novo.`)
+      qc.invalidateQueries({ queryKey: ['difal-guias-emitidas'] })
+    },
+    onError: (e) => setErro(`Tirar do arquivo: ${mensagemErro(e)}`),
+  })
+  async function baixarDeNovo(id: string) {
+    try {
+      const a = await difalApi.baixarArquivoPagamento(id)
+      baixarArquivo(new Blob([a.conteudo], { type: 'text/plain' }), a.nome)
+    } catch (e) {
+      setErro(`Baixar o arquivo: ${mensagemErro(e)}`)
+    }
+  }
   const marcar = useMutation({
     mutationFn: ({ ids, data: d }: { ids: string[]; data: string | null }) => difalApi.marcarPagas(ids, d),
     onSuccess: (r) => {
@@ -1650,7 +1668,9 @@ function GuiasEmitidas() {
     const [empresa] = empresasMarcadas
     if (window.confirm(`Gerar o arquivo de pagamento do Sicredi da ${empresa} com ${marcadas.length} guia(s)?
 
-O arquivo não paga nada: você sobe no Internet Banking e aprova lá. As guias ficam marcadas como "no arquivo" para não entrarem em outro.`)) {
+O arquivo não paga nada: você sobe no Internet Banking e aprova lá, HOJE (a data de pagamento é a de hoje). As guias ficam marcadas como "no arquivo" para não entrarem em outro.
+
+Atenção: se alguma já foi paga pela linha digitável e não foi marcada como paga, tire da seleção, senão paga em dobro.`)) {
       arquivo.mutate({ empresa, ids: marcadas })
     }
   }
@@ -1722,10 +1742,16 @@ O arquivo não paga nada: você sobe no Internet Banking e aprova lá. As guias 
                 </button>
                 <button onClick={() => { setErro(null); if (window.confirm(`Desmarcar ${marcadas.length} guia(s) como paga(s)?`)) marcar.mutate({ ids: marcadas, data: null }) }}
                   className="btn-secondary">Desmarcar</button>
-                <button onClick={gerarArquivo} disabled={arquivo.isPending || empresasMarcadas.length !== 1}
-                  title={empresasMarcadas.length !== 1 ? 'Um arquivo por empresa: marque só guias da AVIC ou só da AGRO' : 'Baixa o arquivo CNAB 240 para pagar no Sicredi'}
+                <button onClick={gerarArquivo} disabled={arquivo.isPending || empresasMarcadas.length !== 1 || !['AVIC', 'AGRO'].includes(empresasMarcadas[0])}
+                  title={empresasMarcadas.length !== 1 ? 'Um arquivo por empresa: marque só guias da AVIC ou só da AGRO'
+                    : !['AVIC', 'AGRO'].includes(empresasMarcadas[0]) ? 'Só AVIC e AGRO têm convênio no Sicredi' : 'Baixa o arquivo CNAB 240 para pagar no Sicredi'}
                   className="btn-outline">
                   {arquivo.isPending ? 'Gerando…' : `Arquivo Sicredi (${marcadas.length})`}
+                </button>
+                <button
+                  onClick={() => { setErro(null); setAvisoArquivo(null); if (window.confirm(`Tirar ${marcadas.length} guia(s) do arquivo de pagamento?\n\nUse se o banco recusou o arquivo, se ele se perdeu ou se não foi enviado no dia. Guia já paga não é tirada.`)) tirar.mutate(marcadas) }}
+                  disabled={tirar.isPending} className="btn-ghost">
+                  Tirar do arquivo
                 </button>
               </>
             )}
@@ -1773,7 +1799,10 @@ O arquivo não paga nada: você sobe no Internet Banking e aprova lá. As guias 
                         ? <span className={`w-fit ${seloTom('verde')}`}>paga em {dataBr(g.pagaEm)}</span>
                         : <span className={`w-fit ${seloTom('cinza')}`}>não paga</span>}
                       {g.arquivoPagamento && !g.pagaEm && (
-                        <span className={`w-fit ${seloTom('azul')}`} title="arquivo de pagamento do Sicredi">no arquivo {g.arquivoPagamento.nome} · {formatDate(g.arquivoPagamento.criadoEm)}</span>
+                        <button onClick={() => baixarDeNovo(g.arquivoPagamento!.id)} className={`w-fit ${seloTom('azul')} hover:underline`}
+                          title="arquivo de pagamento do Sicredi — clique para baixar de novo">
+                          no arquivo {g.arquivoPagamento.nome} · {formatDate(g.arquivoPagamento.criadoEm)}
+                        </button>
                       )}
                       {g.atrasada && <span className={`w-fit ${seloTom('vermelho')}`} title="guia gerada depois do dia em que o DIFAL vencia (regra do mesmo dia); saiu só com o imposto">gerada depois do prazo</span>}
                       {g.ml && <span className={`w-fit ${seloTom('ambar')}`}>{g.comprovanteMlEnviadoEm ? `comprovante no ML ${dataBr(g.comprovanteMlEnviadoEm)}` : 'comprovante no ML: falta'}</span>}
