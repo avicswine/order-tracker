@@ -17,7 +17,15 @@ import { EMPRESAS_FRENET, listarEnviosComCodigo, tokenDaConta, type EmpresaFrene
 const CHAVE_BLING: Record<EmpresaFrenet, string> = { AVIC: 'avic', AGRO: 'agrogranja', EQUI: 'equipage' }
 /** pedidos de venda dos últimos dias que valem a busca (os envios lidos são os mais recentes) */
 const DIAS_PEDIDOS = 45
-const MAX_PAGINAS_PEDIDOS = 15
+const MAX_PAGINAS_PEDIDOS = 5
+/** por rodada e empresa, no máximo estes pedidos detalhados no Bling (2 chamadas cada), com pausa entre eles */
+const MAX_DETALHES_POR_RODADA = 30
+const PAUSA_BLING_MS = 350
+/** envio que não ligou (nota fora do Order Tracker, pedido sem NF…) só é tentado de novo depois disso */
+const ESPERA_NOVA_TENTATIVA_MS = 24 * 3600000
+/** shipmentId → hora da última tentativa sem sucesso (em memória: zera num novo deploy, o que é aceitável) */
+const tentadoEm = new Map<string, number>()
+const pausa = () => new Promise((ok) => setTimeout(ok, PAUSA_BLING_MS))
 /** nota emitida há mais que isso ao ganhar o código: o primeiro rastreio não avisa o cliente (seria aviso atrasado) */
 const DIAS_SEM_AVISO_RETROATIVO = 3
 
@@ -28,6 +36,7 @@ async function idsDosPedidos(chaveBling: string, procurados: Set<string>): Promi
   const inicio = new Date(Date.now() - DIAS_PEDIDOS * 86400000).toISOString().slice(0, 10)
   let semNumero = 0
   for (let pagina = 1; pagina <= MAX_PAGINAS_PEDIDOS && ids.size < procurados.size; pagina++) {
+    if (pagina > 1) await pausa()
     const r = (await blingGet(chaveBling, `/pedidos/vendas?pagina=${pagina}&limite=100&dataInicial=${inicio}`)) as { data?: PedidoLista[] }
     const lista = r?.data ?? []
     for (const p of lista) {
@@ -61,19 +70,33 @@ export async function vincularEnviosFrenet(): Promise<void> {
       const ligados = new Set((await prisma.order.findMany({
         where: { frenetShipmentId: { in: envios.map((e) => e.shipmentId) } }, select: { frenetShipmentId: true },
       })).map((o) => o.frenetShipmentId))
-      // só os de pedido do Bling (número); os criados à mão (UUID) ficam para a ligação manual
-      const pendentes = envios.filter((e) => !ligados.has(e.shipmentId) && /^\d+$/.test(e.pedido))
+      // só os de pedido do Bling (número) e recentes; os criados à mão (UUID) ficam para a ligação manual;
+      // quem já tentou e não ligou espera 24h (cada tentativa custa chamadas ao Bling)
+      const limiteData = Date.now() - DIAS_PEDIDOS * 86400000
+      const pendentes = envios
+        .filter((e) => !ligados.has(e.shipmentId) && /^\d+$/.test(e.pedido))
+        .filter((e) => !e.alteradoEm || e.alteradoEm.getTime() >= limiteData)
+        .filter((e) => Date.now() - (tentadoEm.get(e.shipmentId) ?? 0) >= ESPERA_NOVA_TENTATIVA_MS)
+        .slice(0, MAX_DETALHES_POR_RODADA)
       if (!pendentes.length) continue
 
       const chave = CHAVE_BLING[empresa]
       const idPorNumero = await idsDosPedidos(chave, new Set(pendentes.map((e) => e.pedido)))
       let ligadosAgora = 0
       for (const e of pendentes) {
+        // marca a tentativa já: se não ligar, só volta daqui a 24h; se ligar, sai da lista pelo frenetShipmentId
+        tentadoEm.set(e.shipmentId, Date.now())
         const idPedido = idPorNumero.get(e.pedido)
         if (!idPedido) continue
+        await pausa()
         const nf = await nfDoPedido(chave, idPedido, e.pedido)
         if (!nf) continue
-        const pedido = await prisma.order.findUnique({ where: { orderNumber: `${empresa}-NF-${nf}` }, select: { id: true, nfIssuedAt: true, trackingCode: true } })
+        // o número da NF pode vir com ou sem zeros à esquerda: procura nos dois formatos
+        const semZeros = nf.replace(/^0+/, '')
+        const pedido = await prisma.order.findFirst({
+          where: { orderNumber: { in: [...new Set([`${empresa}-NF-${nf}`, `${empresa}-NF-${semZeros.padStart(6, '0')}`, `${empresa}-NF-${semZeros}`])] } },
+          select: { id: true, orderNumber: true, nfIssuedAt: true, trackingCode: true },
+        })
         if (!pedido) continue // NF fora do Order Tracker (transportador sem rastreio, ou ainda não importada)
         const antiga = !!pedido.nfIssuedAt && Date.now() - pedido.nfIssuedAt.getTime() > DIAS_SEM_AVISO_RETROATIVO * 86400000
         await prisma.order.update({
@@ -84,7 +107,8 @@ export async function vincularEnviosFrenet(): Promise<void> {
           },
         })
         ligadosAgora++
-        console.log(`[Frenet] ${empresa}-NF-${nf}: envio ${e.shipmentId} ligado (código ${e.codigo}, ${e.servico})${antiga ? ' — sem aviso retroativo' : ''}`)
+        tentadoEm.delete(e.shipmentId)
+        console.log(`[Frenet] ${pedido.orderNumber}: envio ${e.shipmentId} ligado (código ${e.codigo}, ${e.servico})${antiga ? ' — sem aviso retroativo' : ''}`)
       }
       console.log(`[Frenet] ${empresa}: ${ligadosAgora} envio(s) ligado(s) agora · ${pendentes.length - ligadosAgora} sem nota encontrada no Order Tracker`)
     } catch (err) {

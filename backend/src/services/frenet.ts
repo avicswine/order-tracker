@@ -38,6 +38,8 @@ export interface EnvioFrenet {
   servico: string
   /** página pública de rastreio da Frenet (ex.: https://rastreio.frenet.com.br/JTE/888…) */
   url: string | null
+  /** última alteração da etiqueta na Frenet (para não procurar no Bling envio velho) */
+  alteradoEm: Date | null
 }
 
 /** Envios com código de rastreio (já pagos/postados) das primeiras páginas da conta. */
@@ -53,13 +55,13 @@ export async function listarEnviosComCodigo(empresa: EmpresaFrenet): Promise<Env
     // fim da lista: a Frenet responde 404 em vez de uma página vazia (visto na conta da EQUI, 2 envios)
     if (r.status === 404 && pagina > 0) break
     if (!r.ok) throw new Error(`Frenet ${empresa}: lista de envios respondeu HTTP ${r.status}`)
-    const d = (await r.json()) as { shipments?: { shipmentId?: number; orderId?: string; trackingUrl?: string; quotation?: { shippingServiceCode?: string }; volumes?: { labelId?: string | null }[] }[] }
+    const d = (await r.json()) as { shipments?: { shipmentId?: number; orderId?: string; trackingUrl?: string; quotation?: { shippingServiceCode?: string }; volumes?: { labelId?: string | null; modifiedOn?: string }[] }[] }
     const lista = d.shipments ?? []
     for (const s of lista) {
       const codigo = (s.volumes ?? []).map((v) => v.labelId).find((c): c is string => !!c)
       const servico = s.quotation?.shippingServiceCode
       if (codigo && servico && s.shipmentId && s.orderId) {
-        envios.push({ shipmentId: String(s.shipmentId), pedido: String(s.orderId), codigo, servico, url: s.trackingUrl || null })
+        envios.push({ shipmentId: String(s.shipmentId), pedido: String(s.orderId), codigo, servico, url: s.trackingUrl || null, alteradoEm: dataFrenet(s.volumes?.[0]?.modifiedOn) })
       }
     }
     if (lista.length < POR_PAGINA) break
