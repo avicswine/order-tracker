@@ -22,6 +22,9 @@ export function getTrackingUrl(order: Order): string | null {
       return `https://platform.senior.com.br/logistica-tck/tms/tck-frontend/#/login/signup?tenant=ZEhKa2RISmhibk53YjNKMFpYTT0%3D`
     case 'ATUAL_CARGAS':
       return 'https://cliente.atualcargas.com.br'
+    case 'FRENET':
+      // página pública da Frenet do envio (vem na lista de envios); sem código ligado ainda, sem link
+      return order.trackingUrl ?? null
     default:
       // Se trackingIdentifier for uma URL, usa como link de rastreio manual
       if (order.carrier?.trackingIdentifier?.startsWith('http')) {
