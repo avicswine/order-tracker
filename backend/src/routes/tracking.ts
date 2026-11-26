@@ -181,8 +181,9 @@ export async function runTrackingSync(onProgress?: ProgressCallback, systems?: T
       // Código ligado a uma nota antiga: o primeiro rastreio não avisa (o cliente receberia "enviado" atrasado).
       // Registra o evento como já tratado, para os próximos seguirem a regra normal (só entrega e saiu para entrega).
       if (order.silenciarProximoAviso && !semDados && lastEvent) {
-        await prisma.order.update({ where: { id: order.id }, data: { silenciarProximoAviso: false } })
+        // grava o "já tratado" antes de tirar a marca: se a gravação falhar, a marca fica e tenta de novo
         await registrarSemAviso(order.id, lastEvent)
+        await prisma.order.update({ where: { id: order.id }, data: { silenciarProximoAviso: false } })
         console.log(`[Tracking] ${order.orderNumber}: primeiro rastreio da Frenet sem aviso ao cliente (nota antiga)`)
       } else
       // Notifica o cliente se lastTracking mudou (fire-and-forget)
