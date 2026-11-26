@@ -155,6 +155,16 @@ async function sentToday(orderId: string): Promise<boolean> {
 
 // Verifica se esse evento já foi notificado COM SUCESSO (deduplicação)
 // Falhas não bloqueiam — permite reenvio quando o WhatsApp voltar a conectar
+/**
+ * Marca um evento de rastreio como já tratado SEM avisar o cliente (canal SEM_AVISO). Usado quando o código de
+ * rastreio chega para uma nota antiga: o próximo evento deixa de ser o "primeiro" e não sai aviso atrasado.
+ */
+export async function registrarSemAviso(orderId: string, eventText: string): Promise<void> {
+  const eventHash = hashEvent(orderId, eventText)
+  if (await alreadyNotified(orderId, eventHash)) return
+  await saveNotification(orderId, eventHash, 'SEM_AVISO', true, undefined, eventText)
+}
+
 async function alreadyNotified(orderId: string, eventHash: string): Promise<boolean> {
   const existing = await prisma.orderNotification.findFirst({
     where: { orderId, eventHash, success: true },
