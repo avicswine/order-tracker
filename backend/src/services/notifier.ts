@@ -36,6 +36,8 @@ export function formatTrackingText(text: string): string {
 // Verifica se o evento é de entrega
 function isDeliveryEvent(text: string): boolean {
   const t = text.toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+  // "OBJETO NAO ENTREGUE", "SERA ENTREGUE": negativa ou futuro não é entrega (senão sai "ENTREGUE" indevido ao cliente)
+  if (/\b(NAO|SERA|AINDA NAO)( FOI)? ENTREGUE/.test(t)) return false
   return t.includes('ENTREGUE') || t.includes('ENTREGA REALIZADA') || t.includes('ENTREGA EFETUADA') || t.includes('MERCADORIA ENTREGUE')
 }
 

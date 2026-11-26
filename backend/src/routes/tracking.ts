@@ -90,7 +90,8 @@ export async function runTrackingSync(onProgress?: ProgressCallback, systems?: T
 
       // Se a API retornou IN_TRANSIT mas há um evento de entrega no histórico,
       // prevalece DELIVERED — evita regressão por eventos pós-entrega da transportadora.
-      if (novoStatus === OrderStatus.IN_TRANSIT && result.events && result.events.length > 0) {
+      // Na Frenet não: o status já vem do TIPO do evento, e o texto ("Objeto não entregue") enganaria.
+      if (carrier.trackingSystem !== TrackingSystem.FRENET && novoStatus === OrderStatus.IN_TRANSIT && result.events && result.events.length > 0) {
         const deliveredEvent = result.events.find((e) => {
           const t = e.description.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
           return (
