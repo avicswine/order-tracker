@@ -2,9 +2,11 @@ import { Router, Request, Response } from 'express'
 import { prisma } from '../lib/prisma'
 import { trackSSW, trackSenior, trackWithPuppeteer, trackSaoMiguel, trackAtualCargas, trackRodonaves, trackBraspress, trackModular } from '../services/tracking'
 import { OrderStatus, TrackingSystem, Prisma } from '@prisma/client'
-import { notifyOrderUpdate, notifyCarrier, ATRASO_MIN_DIAS, CARRIER_NOTIFY_MAX_AGE_DAYS } from '../services/notifier'
+import { notifyOrderUpdate, notifyCarrier, registrarSemAviso, ATRASO_MIN_DIAS, CARRIER_NOTIFY_MAX_AGE_DAYS } from '../services/notifier'
 import { criarPendenciaAuto, resolverPendenciasAutoSeEntregue } from '../services/pendencias'
 import { sincronizarNotasCombinar } from '../services/notasCombinarEntrega'
+import { rastrearFrenet, type EmpresaFrenet } from '../services/frenet'
+import { vincularEnviosFrenet } from '../services/frenetVinculo'
 
 const router = Router()
 
@@ -15,6 +17,10 @@ const TRACKING_CONCURRENCY = 5
 // Constantes de atraso/recência vivem no notifier (usadas também pela rodada diária)
 
 export async function runTrackingSync(onProgress?: ProgressCallback, systems?: TrackingSystem[]): Promise<{ atualizados: number; erros: number; total: number }> {
+  // antes do rastreio: liga os envios novos da Frenet às notas (código de rastreio no pedido)
+  if (!systems || systems.includes(TrackingSystem.FRENET)) {
+    await vincularEnviosFrenet().catch((err) => console.error('[Frenet] Erro ao ligar envios:', err))
+  }
   const orders = await prisma.order.findMany({
     where: {
       status: { in: [OrderStatus.PENDING, OrderStatus.IN_TRANSIT] },
@@ -71,6 +77,10 @@ export async function runTrackingSync(onProgress?: ProgressCallback, systems?: T
         result = await trackBraspress(cnpj, nf, carrier.trackingIdentifier)
       } else if (carrier.trackingSystem === TrackingSystem.MODULAR) {
         result = await trackModular(cnpj, nf, order.nfKey)
+      } else if (carrier.trackingSystem === TrackingSystem.FRENET) {
+        // sem código ainda (envio não ligado): nada a consultar, e o pedido não é mexido
+        if (!order.trackingCode || !order.frenetServico) return
+        result = await rastrearFrenet(order.orderNumber.split('-')[0] as EmpresaFrenet, order.frenetServico, order.trackingCode)
       } else {
         return
       }
@@ -80,7 +90,8 @@ export async function runTrackingSync(onProgress?: ProgressCallback, systems?: T
 
       // Se a API retornou IN_TRANSIT mas há um evento de entrega no histórico,
       // prevalece DELIVERED — evita regressão por eventos pós-entrega da transportadora.
-      if (novoStatus === OrderStatus.IN_TRANSIT && result.events && result.events.length > 0) {
+      // Na Frenet não: o status já vem do TIPO do evento, e o texto ("Objeto não entregue") enganaria.
+      if (carrier.trackingSystem !== TrackingSystem.FRENET && novoStatus === OrderStatus.IN_TRANSIT && result.events && result.events.length > 0) {
         const deliveredEvent = result.events.find((e) => {
           const t = e.description.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
           return (
@@ -167,6 +178,14 @@ export async function runTrackingSync(onProgress?: ProgressCallback, systems?: T
         await prisma.order.update({ where: { id: order.id }, data: updates })
       }
 
+      // Código ligado a uma nota antiga: o primeiro rastreio não avisa (o cliente receberia "enviado" atrasado).
+      // Registra o evento como já tratado, para os próximos seguirem a regra normal (só entrega e saiu para entrega).
+      if (order.silenciarProximoAviso && !semDados && lastEvent) {
+        // grava o "já tratado" antes de tirar a marca: se a gravação falhar, a marca fica e tenta de novo
+        await registrarSemAviso(order.id, lastEvent)
+        await prisma.order.update({ where: { id: order.id }, data: { silenciarProximoAviso: false } })
+        console.log(`[Tracking] ${order.orderNumber}: primeiro rastreio da Frenet sem aviso ao cliente (nota antiga)`)
+      } else
       // Notifica o cliente se lastTracking mudou (fire-and-forget)
       if (!semDados && lastEvent && lastEvent !== order.lastTracking) {
         const estimatedDelivery = (updates.estimatedDelivery as Date | undefined) ?? order.estimatedDelivery

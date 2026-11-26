@@ -62,6 +62,13 @@ model Order {
   mlVinculoTentadoAt    DateTime?  // última tentativa de casar com uma venda ML
   mlNotaTexto           String?    // último texto gravado na nota da venda ML "combinar entrega" (evita regravar)
   mlNotaFalhouEm        DateTime?  // última falha ao gravar essa nota: a venda espera 24h e não trava a fila
+  // rastreio pela Frenet: código de rastreio, envio e serviço (ex.: JTE_INT) lidos da lista de envios da Frenet
+  trackingCode          String?
+  trackingUrl           String?
+  frenetShipmentId      String?    @unique
+  frenetServico         String?
+  // o próximo rastreio não avisa o cliente (código ligado a uma nota antiga: o aviso chegaria atrasado)
+  silenciarProximoAviso Boolean    @default(false)
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
   statusHistory     StatusHistory[]
@@ -400,6 +407,7 @@ enum TrackingSystem {
   RODONAVES
   BRASPRESS
   MODULAR
+  FRENET // J&T, Correios, Jadlog… enviados pela Frenet: o código vem da lista de envios da Frenet
   NONE
 }
 

@@ -123,6 +123,7 @@ export function CarrierFormModal({ open, onClose, carrier }: Props) {
             <option value="ATUAL_CARGAS">Atual Cargas (Portal)</option>
             <option value="RODONAVES">Rodonaves (API)</option>
             <option value="BRASPRESS">Braspress (API)</option>
+            <option value="FRENET">Frenet (J&amp;T, Correios, Jadlog…)</option>
             <option value="PUPPETEER">Portal Web (automação)</option>
           </select>
         </div>

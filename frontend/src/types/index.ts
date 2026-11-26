@@ -8,7 +8,7 @@ export interface AuthUser {
 }
 
 export type OrderStatus = 'PENDING' | 'IN_TRANSIT' | 'DELIVERED' | 'CANCELLED'
-export type TrackingSystem = 'SSW' | 'SENIOR' | 'PUPPETEER' | 'SAO_MIGUEL' | 'ATUAL_CARGAS' | 'RODONAVES' | 'BRASPRESS' | 'NONE'
+export type TrackingSystem = 'SSW' | 'SENIOR' | 'PUPPETEER' | 'SAO_MIGUEL' | 'ATUAL_CARGAS' | 'RODONAVES' | 'BRASPRESS' | 'MODULAR' | 'FRENET' | 'NONE'
 
 export interface Carrier {
   id: string
@@ -98,6 +98,9 @@ export interface TrackingEvent {
 export interface Order {
   id: string
   orderNumber: string
+  /** rastreio pela Frenet: código e página pública do envio */
+  trackingCode?: string | null
+  trackingUrl?: string | null
   customerName: string
   customerEmail: string | null
   customerPhone: string | null
