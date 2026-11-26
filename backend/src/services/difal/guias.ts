@@ -483,6 +483,8 @@ export async function gerarLoteDasNotas(prisma: PrismaClient, ids: string[], hoj
     return {
       ufFavorecida: n.clienteUf,
       receita: a.codigoReceitaGnre!,
+      // MT exige o detalhamento da receita (erro 213 do portal sem ele, NF 6380 em 25/11/2026)
+      ...(a.detalhamentoReceitaGnre && { detalhamentoReceita: a.detalhamentoReceitaGnre }),
       ...(a.tipoDocOrigemGnre !== SEM_DOCUMENTO_ORIGEM && {
         documentoOrigem: documentoOrigem(n, a.tipoDocOrigemGnre)!,
         tipoDocumentoOrigem: a.tipoDocOrigemGnre,

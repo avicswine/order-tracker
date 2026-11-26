@@ -546,6 +546,9 @@ model DifalAliquota {
   camposExtrasGnre   Json?
   // GnreConfigUF exigePeriodoReferencia: a guia leva referencia.periodo = 0 (mensal, XSD dados_gnre_v2.00)
   exigePeriodoGnre   Boolean  @default(false)
+  // GnreConfigUF exigeDetalhamentoReceita: código do detalhamento da receita (MT 100102: 000055 = DIFAL por operação SEM IE,
+  // que é o nosso caso — cliente com IE paga o próprio DIFAL). Vazio = a UF não exige
+  detalhamentoReceitaGnre String?
 
   atualizadoEm    DateTime @updatedAt
 

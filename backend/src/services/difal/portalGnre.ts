@@ -289,12 +289,15 @@ export function lerConfigUf(xml: string): ConfigUf {
   }
 }
 
-export async function consultarConfigUf(empresa: EmpresaGnre, uf: string): Promise<ConfigUf> {
+export async function consultarConfigUf(empresa: EmpresaGnre, uf: string, receita?: string): Promise<ConfigUf> {
   if (!/^[A-Z]{2}$/.test(uf)) throw new ErroPortalGnre('UF inválida')
+  if (receita !== undefined && !/^\d{6}$/.test(receita)) throw new ErroPortalGnre('receita inválida')
+  // com <receita> o portal devolve também os detalhamentos dela (consulta_config_uf_v1.00.xsd)
   const dados =
     `<TConsultaConfigUf xmlns="${NS_DADOS}">` +
     `<ambiente>${CODIGO_AMBIENTE[ambienteGnre()]}</ambiente>` +
     `<uf>${uf}</uf>` +
+    (receita ? `<receita>${receita}</receita>` : '') +
     `</TConsultaConfigUf>`
   return lerConfigUf(await chamar(empresa, 'configUf', dados))
 }

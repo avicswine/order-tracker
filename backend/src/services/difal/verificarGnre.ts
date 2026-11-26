@@ -134,5 +134,10 @@ caso('envio ML: not_specified é A combinar', rotuloLogistica(undefined, 'not_sp
 caso('envio ML: self_service é Flex', rotuloLogistica('self_service', 'me2') === 'Flex')
 caso('envio ML: desconhecido não é inventado', rotuloLogistica('novo_tipo', 'me2').startsWith('outro'))
 
+// MT exige o detalhamento da receita (000055 = DIFAL por operação sem IE), logo depois da receita (ordem do XSD)
+const xmlMt = montarLoteGnre([{ ...guiaPiaui, ufFavorecida: 'MT', detalhamentoReceita: '000055' }], emitente)
+caso('MT: detalhamentoReceita 000055 logo depois da receita', /<receita>100102<\/receita>\s*<detalhamentoReceita>000055<\/detalhamentoReceita>/.test(xmlMt))
+caso('sem detalhamento configurado, a guia não leva a tag', !xml.includes('<detalhamentoReceita>'))
+
 console.log(falhas === 0 ? '\nTodos os casos conferem.' : `\n${falhas} caso(s) com erro.`)
 process.exit(falhas === 0 ? 0 : 1)
